@@ -20,7 +20,9 @@ INSTALL_HOSTS = ['piston-data.mojang.com', 'piston-meta.mojang.com', 'launcherme
                  'repo.codemc.io', 'repo.codemc.org', 'github.com', 'objects.githubusercontent.com',
                  'raw.githubusercontent.com', 'release-assets.githubusercontent.com', 'api.modrinth.com',
                  'cdn.modrinth.com', 'repo.extendedclip.com', 'nexus.velocitypowered.com']
-TELEMETRY_HOSTS = ['bstats.org', '*.bstats.org']
+# Blocked in every phase, including installation: benchmark servers must never appear in any
+# product's statistics (bStats, Sentry, Connection Guard Cloud).
+TELEMETRY_HOSTS = ['bstats.org', '*.bstats.org', 'sentry.io', '*.sentry.io', 'api.connectionguard.net']
 
 
 class Runtime:
