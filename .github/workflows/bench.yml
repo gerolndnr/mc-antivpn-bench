@@ -1,0 +1,103 @@
+name: benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      family:
+        description: Test family
+        type: choice
+        options: [functional, detection, failure, redis, performance, all]
+        default: functional
+      products:
+        description: Comma-separated product ids (empty = all)
+        default: ''
+      platforms:
+        description: Comma-separated platforms (empty = all)
+        default: ''
+      detection_limit:
+        description: Limit detection subjects (0 = full dataset)
+        default: '0'
+      state_from_run:
+        description: Workflow run id whose recorded provider answers to reuse (empty = start fresh)
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install cryptography==43.0.3 pyyaml==6.0.2 h2==4.1.0
+      - run: PYTHONPATH=harness python -m unittest discover -s tests -v
+
+  bench:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      RUN_ID: ${{ github.run_id }}-${{ inputs.family }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Host description
+        run: |
+          echo "BENCH_HOST_DESCRIPTION=GitHub-hosted $(nproc) vCPU, $(free -g | awk '/Mem/{print $2}') GB, $(lscpu | sed -n 's/Model name: *//p')" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: cache/artifacts
+          key: artifacts-${{ hashFiles('artifacts.lock.json', 'products/modrinth-pins.json') }}
+      - name: Build runtime image
+        run: docker build -t mc-antivpn-bench:ci harness/docker && echo "BENCH_IMAGE=$(docker image inspect mc-antivpn-bench:ci --format '{{.Id}}')" >> "$GITHUB_ENV"
+      - name: Reuse recorded provider answers
+        if: inputs.state_from_run != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/work/state"
+          gh run download "${{ inputs.state_from_run }}" -n interposer-state -D "$RUNNER_TEMP/work/state"
+      - name: Materialize dataset (RIPE Atlas archive)
+        run: |
+          docker run --rm -v "$PWD:/bench" -e PYTHONPATH=/bench/harness --entrypoint python3 mc-antivpn-bench:ci \
+            -m bench.dataset materialize
+      - name: Run
+        env:
+          PROXYCHECK_KEY: ${{ secrets.PROXYCHECK_KEY }}
+          VPNAPI_KEY: ${{ secrets.VPNAPI_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/work"
+          args="run ${{ inputs.family }} --run-id $RUN_ID"
+          [ -n "${{ inputs.products }}" ] && args="$args --products ${{ inputs.products }}"
+          [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
+          docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
+            -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
+            -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" \
+            --entrypoint python3 mc-antivpn-bench:ci -m bench $args
+      - name: Collect state
+        if: always()
+        run: sudo cp "$RUNNER_TEMP/work/state/answers.sqlite" answers.sqlite 2>/dev/null && sudo chmod a+r answers.sqlite || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-public
+          path: results/${{ env.RUN_ID }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-private
+          path: cache/private/runs/${{ env.RUN_ID }}
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interposer-state
+          path: answers.sqlite
+          retention-days: 30

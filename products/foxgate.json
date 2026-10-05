@@ -1,0 +1,28 @@
+{
+  "id": "foxgate",
+  "name": "FoxGate AntiVPN (Free)",
+  "relationship": "Independent third party (IDCTeam / ImZowi).",
+  "license": "All rights reserved (free edition, not redistributed by this benchmark)",
+  "source": null,
+  "listing": "https://modrinth.com/plugin/foxgate",
+  "pins": {"paper": "foxgate-1.2.0-pre10", "folia": "foxgate-1.2.0-pre10", "velocity": "foxgate-1.2.0-pre10", "bungee": "foxgate-1.2.0-pre10"},
+  "previous_pins": {"paper": "foxgate-1.2.0-pre9", "velocity": "foxgate-1.2.0-pre9"},
+  "data_dir": {"paper": "FoxGate", "folia": "FoxGate", "velocity": "FoxGate", "bungee": "FoxGate"},
+  "config": "config.yml",
+  "ready_pattern": "\\[IPR\\] Working with IPRange now",
+  "profiles": {
+    "shipped": {"edits": [], "note": "As downloaded: 12 keyless services, IP range lists, maxFlags 5, blocks on detection."},
+    "enforce": {"edits": [], "note": "Enforces out of the box; no step needed."},
+    "free_keys": {"extends": "enforce",
+                  "edits": [{"file": "services/proxycheck.yml", "set": {"enabled": true, "key": "{canary:proxycheck}"}},
+                            {"file": "services/vpnapi.yml", "set": {"enabled": true, "key": "{canary:vpnapi}"}}],
+                  "note": "Enables the bundled ProxyCheck and VPNAPI service definitions with keys (documented in the service files)."}
+  },
+  "redis": null,
+  "redis_note": "No Redis storage option (SQL databases via HikariCP only). Redis test not applicable.",
+  "commands": {"reload": "foxgate reload", "inspect": ["foxgate"]},
+  "lookup_hosts": ["central.zowi.gay", "blackbox.ipinfo.app", "ip-api.com", "api.ipapi.is", "ip-check.net", "iplocate.io", "api.ipquery.io",
+                   "api.iprisk.info", "marvinmc.dev", "www.rayzs.de", "funkemunky.cc", "api.negativity.fr", "proxycheck.io", "vpnapi.io"],
+  "documented_failure_policy": "Not documented in the listing; services that fail are skipped (observed).",
+  "telemetry": ["own bStats-style metrics (configuration.metrics)", "Sentry error reporting (configuration.sentry)", "self-updater (configuration.updates.automatic) - blocked so the artifact under test cannot change"]
+}

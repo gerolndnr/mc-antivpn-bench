@@ -1,0 +1,75 @@
+{
+  "bungeecord-2102": {
+    "bytes": 26175295,
+    "filename": "BungeeCord-2102.jar",
+    "note": "no distributor checksum; locked at first download",
+    "sha256": "0bf60ecf074978fa934a9ab65fd920f91112311f4d24b4c1ccd769ce74e8675d",
+    "url": "https://hub.spigotmc.org/jenkins/job/BungeeCord/2102/artifact/bootstrap/target/BungeeCord.jar"
+  },
+  "connectionguard-0.4.11": {
+    "bytes": 3503389,
+    "filename": "connection-guard-0.4.11-all.jar",
+    "sha256": "a9de473181e22c683d2f859493f07de5c198b525bf8b66c2b6d98db5fcc3cdbb",
+    "url": "https://cdn.modrinth.com/data/Zaz0XyvF/versions/GDbfvBfL/connection-guard-0.4.11-all.jar"
+  },
+  "connectionguard-0.5.0": {
+    "bytes": 4269593,
+    "filename": "connection-guard-0.5.0-all.jar",
+    "sha256": "172d6e4dc7b925efc8498cab46f28807dba47f20750fbfbdb3c56a64002bb503",
+    "url": "https://cdn.modrinth.com/data/Zaz0XyvF/versions/49uwK8ja/connection-guard-0.5.0-all.jar"
+  },
+  "folia-1.21.11-14": {
+    "bytes": 55082693,
+    "filename": "folia-1.21.11-14.jar",
+    "sha256": "f52c408490a0225611e67907a3ca19f7e6da2c6bc899e715d5f46844e7103c39",
+    "url": "https://fill-data.papermc.io/v1/objects/f52c408490a0225611e67907a3ca19f7e6da2c6bc899e715d5f46844e7103c39/folia-1.21.11-14.jar"
+  },
+  "foxgate-1.2.0-pre10": {
+    "bytes": 844937,
+    "filename": "FoxGate-Free.jar",
+    "sha256": "4e1cb9d94c94d7bf3d6e1110382fbf9a44281afd980d9ba2af43c11cff623021",
+    "url": "https://cdn.modrinth.com/data/KPyk9C50/versions/6EjDbOPt/FoxGate-Free.jar"
+  },
+  "paper-1.21.11-132": {
+    "bytes": 54846016,
+    "filename": "paper-1.21.11-132.jar",
+    "sha256": "5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba",
+    "url": "https://fill-data.papermc.io/v1/objects/5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba/paper-1.21.11-132.jar"
+  },
+  "proxyshield-2.5.1+bungee": {
+    "bytes": 274137,
+    "filename": "ProxyShield-Bungee-2.5.1.jar",
+    "sha256": "ad2bc8b57f707b46bb28f4dfa37d1b3ad6b2146ecf7fc945dd9fbb28068988e2",
+    "url": "https://cdn.modrinth.com/data/nqiuEiMp/versions/gmVzMU9T/ProxyShield-Bungee-2.5.1.jar"
+  },
+  "proxyshield-2.5.1+folia": {
+    "bytes": 282555,
+    "filename": "ProxyShield-Folia-2.5.1.jar",
+    "sha256": "d10ac845c05a4d291c9bfdf96395179088dae2ae34391f569484e629b1289df2",
+    "url": "https://cdn.modrinth.com/data/nqiuEiMp/versions/t5l6UooH/ProxyShield-Folia-2.5.1.jar"
+  },
+  "proxyshield-2.5.1+paper": {
+    "bytes": 282189,
+    "filename": "ProxyShield-Paper-2.5.1.jar",
+    "sha256": "dd61ef863e273a046ed18cf38cd836d7455f744bc6e054f36bdaa6e88766824c",
+    "url": "https://cdn.modrinth.com/data/nqiuEiMp/versions/FDWbPu2O/ProxyShield-Paper-2.5.1.jar"
+  },
+  "proxyshield-2.5.1+velocity": {
+    "bytes": 631583,
+    "filename": "ProxyShield-Velocity-2.5.1.jar",
+    "sha256": "da6bb765ea5885311895779d099063fd451ea075b3c4ee540db5b0e8ae2b1895",
+    "url": "https://cdn.modrinth.com/data/nqiuEiMp/versions/x23xNlqx/ProxyShield-Velocity-2.5.1.jar"
+  },
+  "velocity-3.5.1-615": {
+    "bytes": 18932366,
+    "filename": "velocity-3.5.1-615.jar",
+    "sha256": "b4e3164df5377346854dc6cb9e6a78022b1946ff69e89676313f5f6f1c6f0fb3",
+    "url": "https://fill-data.papermc.io/v1/objects/b4e3164df5377346854dc6cb9e6a78022b1946ff69e89676313f5f6f1c6f0fb3/velocity-3.5.1-615.jar"
+  },
+  "vpnguard-1.2.0": {
+    "bytes": 14000563,
+    "filename": "VPNGuard-1.2.0.jar",
+    "sha256": "5a3dad4a7fda6caf37d63144f9c46f5e02f4b9b87dacab50b1fe6474ecc13726",
+    "url": "https://cdn.modrinth.com/data/66gUDSAJ/versions/d6GShm3y/VPNGuard-1.2.0.jar"
+  }
+}

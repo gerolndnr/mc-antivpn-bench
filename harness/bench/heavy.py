@@ -1,0 +1,456 @@
+"""Detection, failure safety, performance and Redis outage families.
+
+All four run products on the same platform build, with the same subjects, the same
+recorded provider answers and the same fault or latency model. See METHODOLOGY.md
+for the pre-registered decisions each family applies.
+"""
+import asyncio
+import ipaddress
+import json
+import os
+import random
+import ssl
+import statistics
+import subprocess
+import time
+import urllib.parse
+
+from . import mcclient, netguard, products
+from .engine import Backend, Instance, measurement_rules, product_errors
+from .interposer import CATCH_ALL_PORT
+from .scenarios import PRIVATE, blocked, player
+
+DETECTION_PLATFORM = 'velocity'
+SUBJECT_INTERVAL_S = float(os.environ.get('BENCH_SUBJECT_INTERVAL_S', '5'))
+OBSERVE_S = 8.0
+SEED = 20261005
+
+
+def dataset():
+    return [json.loads(line) for line in open(PRIVATE)]
+
+
+def by_cohort(items, cohort, n, offset=0):
+    return [i for i in items if i['cohort'] == cohort][offset:offset + n]
+
+
+class Sampler:
+    """CPU seconds and RSS of one JVM, sampled from /proc once per second."""
+
+    def __init__(self, pid):
+        self.pid, self.samples, self.task = pid, [], None
+        self.ticks = os.sysconf('SC_CLK_TCK')
+
+    def read(self):
+        try:
+            fields = open(f'/proc/{self.pid}/stat').read().rsplit(')', 1)[1].split()
+            cpu = (int(fields[11]) + int(fields[12])) / self.ticks
+            rss = int(open(f'/proc/{self.pid}/statm').read().split()[1]) * os.sysconf('SC_PAGE_SIZE')
+            return time.monotonic(), cpu, rss
+        except (OSError, IndexError, ValueError):
+            return None
+
+    async def run(self):
+        while True:
+            sample = self.read()
+            if sample:
+                self.samples.append(sample)
+            await asyncio.sleep(1.0)
+
+    def start(self):
+        self.task = asyncio.create_task(self.run())
+        return self
+
+    def stop(self):
+        if self.task:
+            self.task.cancel()
+        if len(self.samples) < 2:
+            return {}
+        (t0, c0, _), (t1, c1, _) = self.samples[0], self.samples[-1]
+        return dict(cpu_seconds=round(c1 - c0, 2), wall_seconds=round(t1 - t0, 2),
+                    mean_cpu_cores=round((c1 - c0) / max(t1 - t0, 0.001), 3),
+                    max_rss_mb=round(max(s[2] for s in self.samples) / 2 ** 20, 1))
+
+
+def percentiles(values):
+    values = sorted(v for v in values if v is not None)
+    if not values:
+        return {}
+    pick = lambda q: values[min(len(values) - 1, max(0, int(round(q * (len(values) - 1)))))]
+    return dict(n=len(values), p50=round(pick(0.5), 1), p90=round(pick(0.9), 1), p95=round(pick(0.95), 1),
+                p99=round(pick(0.99), 1), max=round(values[-1], 1), mean=round(statistics.mean(values), 1))
+
+
+def decision_ms(result):
+    """Time from TCP connect to the product's admission decision as the player experiences it."""
+    marks = result.get('marks', {})
+    if result['outcome'] == 'DENY_LOGIN':
+        return marks.get('decided')
+    return marks.get('login_success') if result['outcome'] != 'TIMEOUT' else None
+
+
+# ------------------------------------------------------------------ baselines
+async def baseline_query(host, path, timeout=20):
+    """HTTPS GET through the interposer (canary keys are swapped for real keys there)."""
+    context = ssl.create_default_context(cafile='/work/state/ca/ca.pem')
+    reader, writer = await asyncio.wait_for(asyncio.open_connection('127.0.0.1', CATCH_ALL_PORT, ssl=context,
+                                                                    server_hostname=host), timeout)
+    try:
+        writer.write(f'GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: mc-antivpn-bench-baseline\r\n'
+                     f'Connection: close\r\n\r\n'.encode())
+        await writer.drain()
+        raw = await asyncio.wait_for(reader.read(), timeout)
+    finally:
+        writer.close()
+    head, _, body = raw.partition(b'\r\n\r\n')
+    status = int(head.split(b' ', 2)[1])
+    return status, body
+
+
+async def baselines(subject, canaries):
+    ip = subject['ip']
+    out = {}
+    try:
+        status, body = await baseline_query('proxycheck.io', f'/v2/{urllib.parse.quote(ip)}?vpn=1&asn=1&key='
+                                                              f'{canaries["proxycheck"]}')
+        data = json.loads(body).get(ip, {}) if status == 200 else {}
+        out['proxycheck'] = dict(status=status, decision=None if not data else data.get('proxy') == 'yes',
+                                 type=data.get('type'))
+    except Exception as error:
+        out['proxycheck'] = dict(status=None, decision=None, error=type(error).__name__)
+    try:
+        status, body = await baseline_query('vpnapi.io', f'/api/{urllib.parse.quote(ip)}?key={canaries["vpnapi"]}')
+        security = json.loads(body).get('security') if status == 200 else None
+        out['vpnapi'] = dict(status=status, decision=None if not security else
+                             any(security.get(k) for k in ('vpn', 'proxy', 'tor', 'relay')),
+                             flags=security)
+    except Exception as error:
+        out['vpnapi'] = dict(status=None, decision=None, error=type(error).__name__)
+    return out
+
+
+# ------------------------------------------------------------------ detection
+async def detection(runtime, recorder, canaries, product_ids, profile):
+    items = dataset()
+    rng = random.Random(SEED)
+    order = items[:]
+    rng.shuffle(order)
+    limit = int(os.environ.get('BENCH_DETECTION_LIMIT', '0'))
+    if limit:
+        order = order[:limit]
+    backend = await Backend(DETECTION_PLATFORM).start()
+    instances = []
+    try:
+        for slot, product_id in enumerate(product_ids):
+            instance = Instance(runtime, product_id, DETECTION_PLATFORM, slot=slot, label=f'det-{product_id}')
+            await instance.prepare(profile, canaries)
+            instances.append(instance)
+        runtime.rules(measurement_rules())
+        starts = {}
+        for instance in instances:
+            starts[instance.product_id] = await instance.start()
+        rows, retry = [], []
+
+        async def measure(subject, attempt):
+            mark = runtime.sequence()
+            rotation = product_ids[attempt % len(product_ids):] + product_ids[:attempt % len(product_ids)]
+            results = await asyncio.gather(*[
+                mcclient.admit(i.port, subject['ip'], player(i.product_id), observe_s=OBSERVE_S)
+                for i in sorted(instances, key=lambda i: rotation.index(i.product_id))])
+            base = await baselines(subject, canaries)
+            events = [e for e in runtime.events_since(mark) if e.get('subject_ip') in (subject['ip'],)]
+            provider_errors = sorted({e['host'] for e in events if (e.get('status') or 0) in (429,) or
+                                      (e.get('status') or 0) >= 500 or e.get('error')})
+            row = dict(subject=subject['id'], cohort=subject['cohort'], label=subject['label'], attempt=attempt,
+                       provider_errors=provider_errors, baselines=base, products={})
+            for instance, result in zip(sorted(instances, key=lambda i: rotation.index(i.product_id)), results):
+                row['products'][instance.product_id] = dict(outcome=result['outcome'], blocked=blocked(result['outcome']),
+                                                            reason=(result.get('reason') or '')[:200],
+                                                            decision_ms=decision_ms(result))
+            return row
+
+        for index, subject in enumerate(order):
+            started = time.monotonic()
+            row = await measure(subject, 0)
+            if row['provider_errors']:
+                retry.append(subject)
+            rows.append(row)
+            if index % 25 == 0:
+                print(f'[detection {profile}] {index + 1}/{len(order)}', flush=True)
+            await asyncio.sleep(max(0.0, SUBJECT_INTERVAL_S - (time.monotonic() - started)))
+        if retry:
+            await asyncio.sleep(90)
+            # Product caches would answer a retry from the first (failed) attempt, so retries run
+            # on freshly started instances with the same profile.
+            for instance in instances:
+                await instance.stop()
+            for instance in instances:
+                await instance.prepare(profile, canaries)
+            for instance in instances:
+                await instance.start()
+            for subject in retry:
+                started = time.monotonic()
+                rows.append(await measure(subject, 1))
+                await asyncio.sleep(max(0.0, SUBJECT_INTERVAL_S - (time.monotonic() - started)))
+        record = dict(profile=profile, platform=DETECTION_PLATFORM, starts=starts, subjects=len(order),
+                      retried=len(retry), rows=rows)
+    finally:
+        teardown = {}
+        for instance in instances:
+            if instance.server:
+                teardown[instance.product_id] = await instance.stop()
+                recorder.save('detection', f'{profile}-{instance.product_id}-console',
+                              dict(product=instance.product_id, _console=instance.console(),
+                                   errors=product_errors(instance.console(), instance.adapter, DETECTION_PLATFORM)[:50]))
+        await backend.stop()
+    record['teardown'] = teardown
+    recorder.save('detection', profile, record)
+    return record
+
+
+# ------------------------------------------------------------------ failure safety
+FAULTS = ['timeout', 'http_429', 'malformed', 'incomplete']
+
+
+async def failure(runtime, recorder, canaries, product_ids, platform='velocity'):
+    items = dataset()
+    for product_id in product_ids:
+        adapter = products.adapter(product_id)
+        for fault in ['control'] + FAULTS:
+            subjects = dict(vpn=by_cohort(items, 'commercial_vpn', 1, 3)[0], tor=by_cohort(items, 'tor', 1, 3)[0],
+                            residential=by_cohort(items, 'residential', 1, 3)[0])
+            backend = await Backend(platform).start()
+            instance = Instance(runtime, product_id, platform, label=f'fail-{product_id}-{fault}')
+            record = dict(product=product_id, platform=platform, fault=fault, lookup_hosts=adapter['lookup_hosts'])
+            try:
+                await instance.prepare('enforce', canaries)
+                runtime.rules(measurement_rules())
+                record['start'] = await instance.start()
+                if fault != 'control':
+                    runtime.rules(measurement_rules(extra=[dict(name=f'fault-{fault}', hosts=adapter['lookup_hosts'],
+                                                                action='fault', fault=fault, hold_s=120)]))
+                joins = {}
+                for key, subject in subjects.items():
+                    mark = runtime.sequence()
+                    result = await mcclient.admit(instance.port, subject['ip'], player(product_id),
+                                                  observe_s=OBSERVE_S, deadline_s=60)
+                    calls = [e for e in runtime.events_since(mark) if e.get('host') in adapter['lookup_hosts']]
+                    joins[key] = dict(subject=subject['id'], outcome=result['outcome'], blocked=blocked(result['outcome']),
+                                      decision_ms=decision_ms(result), reason=(result.get('reason') or '')[:160],
+                                      lookup_requests=len(calls))
+                record['during'] = joins
+                runtime.rules(measurement_rules())
+                await asyncio.sleep(2)
+                after = await mcclient.admit(instance.port, subjects['vpn']['ip'], player(product_id), observe_s=OBSERVE_S)
+                record['after_recovery_vpn'] = dict(outcome=after['outcome'], blocked=blocked(after['outcome']),
+                                                    decision_ms=decision_ms(after))
+                record['process_alive'] = instance.server.process.returncode is None
+            except Exception as error:
+                record['harness_error'] = f'{type(error).__name__}: {str(error)[:300]}'
+            finally:
+                runtime.rules(measurement_rules())
+                record['stop'] = await instance.stop() if instance.server else None
+                await backend.stop()
+                console = instance.console()
+                record['product_error_lines'] = len(product_errors(console, adapter, platform))
+                record['_console'] = console
+                record['_egress'] = instance.egress()
+            recorder.save('failure', f'{product_id}-{fault}', record)
+            print(f'[failure] {product_id} {fault}: ' + json.dumps({k: v['outcome'] for k, v in record.get('during', {}).items()}),
+                  flush=True)
+
+
+# ------------------------------------------------------------------ performance
+LATENCY_MODEL = dict(median=120, p95=350)
+
+
+def synthetic_subjects(items, count, seed):
+    """Random host addresses inside the residential cohort's /24 networks.
+
+    Used only under template replay: no lookup about them leaves the container.
+    """
+    rng = random.Random(seed)
+    networks = sorted({str(ipaddress.ip_network(i['ip'] + '/24', strict=False))
+                       for i in items if i['cohort'] == 'residential'})
+    out, seen = [], set()
+    while len(out) < count:
+        network = ipaddress.ip_network(rng.choice(networks))
+        ip = str(network[rng.randint(1, 254)])
+        if ip not in seen:
+            seen.add(ip)
+            out.append(dict(id=f'synthetic-{len(out):04d}', ip=ip, label='non_vpn', cohort='synthetic'))
+    return out
+
+
+def template_rules(adapter, reference_ip):
+    return measurement_rules(extra=[dict(name='template', hosts=adapter['lookup_hosts'], action='template',
+                                         reference_ip=reference_ip, latency_ms=LATENCY_MODEL)],
+                             normalize_quota=False)
+
+
+async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2.0):
+    """Sequential (concurrency=None, rate=None), simultaneous (concurrency) or open-loop at `rate`/s."""
+    if rate:
+        tasks = []
+        for index, subject in enumerate(subjects):
+            tasks.append(asyncio.create_task(mcclient.admit(instance.port, subject['ip'], player('burst'),
+                                                            observe_s=observe_s, deadline_s=60)))
+            await asyncio.sleep(1.0 / rate)
+        return await asyncio.gather(*tasks)
+    if concurrency:
+        return await asyncio.gather(*[mcclient.admit(instance.port, s['ip'], player('stamp'), observe_s=observe_s,
+                                                     deadline_s=60) for s in subjects])
+    return [await mcclient.admit(instance.port, s['ip'], player('seq'), observe_s=observe_s) for s in subjects]
+
+
+def summarize(results, events, lookup_hosts):
+    outcomes = {}
+    for result in results:
+        outcomes[result['outcome']] = outcomes.get(result['outcome'], 0) + 1
+    calls = [e for e in events if e.get('host') in lookup_hosts]
+    per_host = {}
+    for event in calls:
+        per_host[event['host']] = per_host.get(event['host'], 0) + 1
+    return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]),
+                join_ms=percentiles([r.get('marks', {}).get('joined') for r in results]),
+                lookup_requests=len(calls), lookup_requests_per_host=per_host)
+
+
+async def performance(runtime, recorder, canaries, product_ids, platform='velocity', rounds=3):
+    items = dataset()
+    reference = by_cohort(items, 'residential', 1, 0)[0]
+    burst_subjects = synthetic_subjects(items, 1000, SEED)
+    seq_subjects = synthetic_subjects(items, 1100, SEED + 1)[1000:1100]
+    stampede_ip = synthetic_subjects(items, 1101, SEED + 2)[-1]
+    candidates = ['none'] + list(product_ids)
+    for round_index in range(rounds):
+        rotation = candidates[round_index % len(candidates):] + candidates[:round_index % len(candidates)]
+        for product_id in rotation:
+            record = dict(product=product_id, platform=platform, round=round_index, latency_model=LATENCY_MODEL)
+            backend = await Backend(platform).start()
+            if product_id == 'none':
+                adapter = dict(lookup_hosts=[], data_dir={platform: '-'}, id='none', name='none')
+                instance = Instance(runtime, 'connection-guard', platform, label=f'perf-none-{round_index}')
+                await instance.prepare('shipped', canaries)
+                os.remove(os.path.join(instance.directory, 'plugins', instance.jar_name))
+                import shutil
+                shutil.rmtree(instance.data_dir, ignore_errors=True)
+                instance.jar_sha256 = None
+            else:
+                adapter = products.adapter(product_id)
+                instance = Instance(runtime, product_id, platform, label=f'perf-{product_id}-{round_index}')
+                await instance.prepare('enforce', canaries)
+            try:
+                # Reference answers for the template come from one real lookup per product.
+                runtime.rules(measurement_rules())
+                record['start'] = await instance.start()
+                if product_id != 'none':
+                    await mcclient.admit(instance.port, reference['ip'], player('ref'), observe_s=1)
+                runtime.rules(template_rules(adapter, reference['ip']) if product_id != 'none' else measurement_rules())
+                sampler = Sampler(instance.server.process.pid).start()
+                for phase, subjects, kwargs in (
+                        ('cold', seq_subjects[:50], {}),
+                        ('warm', seq_subjects[:50], {}),
+                        ('stampede', [stampede_ip] * 100, dict(concurrency=100)),
+                        ('burst', burst_subjects, dict(rate=50))):
+                    mark = runtime.sequence()
+                    started = time.monotonic()
+                    results = await run_joins(instance, subjects, **kwargs)
+                    phase_record = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'])
+                    phase_record['wall_s'] = round(time.monotonic() - started, 1)
+                    record[phase] = phase_record
+                    print(f'[performance] r{round_index} {product_id} {phase}: {phase_record["outcomes"]} '
+                          f'p50={phase_record["decision_ms"].get("p50")} req={phase_record["lookup_requests"]}', flush=True)
+                record['resources'] = sampler.stop()
+                record['process_alive'] = instance.server.process.returncode is None
+            except Exception as error:
+                record['harness_error'] = f'{type(error).__name__}: {str(error)[:300]}'
+            finally:
+                runtime.rules(measurement_rules())
+                record['stop'] = await instance.stop() if instance.server else None
+                await backend.stop()
+                console = instance.console()
+                if product_id != 'none':
+                    record['product_error_lines'] = len(product_errors(console, adapter, platform))
+                record['_console'] = console
+            recorder.save('performance', f'r{round_index}-{product_id}', record)
+
+
+# ------------------------------------------------------------------ Redis outage
+async def redis_outage(runtime, recorder, canaries, product_ids, platform='velocity'):
+    items = dataset()
+    pool = by_cohort(items, 'residential', 8, 10) + by_cohort(items, 'commercial_vpn', 8, 10)
+    for product_id in product_ids:
+        adapter = products.adapter(product_id)
+        if not adapter.get('redis'):
+            recorder.save('redis', product_id, dict(product=product_id, applicable=False,
+                                                    reason=adapter.get('redis_note')))
+            continue
+        redis = subprocess.Popen(['redis-server', '--port', '6379', '--bind', '127.0.0.1', '--save', '',
+                                  '--appendonly', 'no'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        await asyncio.sleep(1)
+        backend = await Backend(platform).start()
+        instance = Instance(runtime, product_id, platform, label=f'redis-{product_id}')
+        record = dict(product=product_id, platform=platform, steps={})
+        subjects = iter(pool)
+
+        async def step(name):
+            outcome = []
+            for _ in range(2):
+                subject = next(subjects)
+                result = await mcclient.admit(instance.port, subject['ip'], player(product_id), observe_s=4,
+                                              deadline_s=60)
+                outcome.append(dict(subject=subject['id'], label=subject['label'], outcome=result['outcome'],
+                                    blocked=blocked(result['outcome']), decision_ms=decision_ms(result)))
+            mark = len(instance.server.lines)
+            record['steps'][name] = dict(joins=outcome, alive=instance.server.process.returncode is None)
+            return mark
+
+        try:
+            await instance.prepare('enforce', canaries, extra_edits=adapter['redis']['edits'])
+            runtime.rules(measurement_rules())
+            record['start'] = await instance.start()
+            await step('redis_up')
+            netguard.block_port(6379, 'refuse')
+            await step('redis_refused')
+            netguard.block_port(6379, 'blackhole')
+            await step('redis_blackholed')
+            netguard.block_port(6379, 'clear')
+            await asyncio.sleep(3)
+            await step('redis_restored')
+            await instance.stop()
+            netguard.block_port(6379, 'refuse')
+            await instance.prepare('enforce', canaries, extra_edits=adapter['redis']['edits'])
+            record['start_while_down'] = await instance.start()
+            await step('started_while_down')
+        except StopIteration:
+            record['harness_error'] = 'subject pool exhausted'
+        except Exception as error:
+            record['harness_error'] = f'{type(error).__name__}: {str(error)[:300]}'
+        finally:
+            netguard.block_port(6379, 'clear')
+            record['stop'] = await instance.stop() if instance.server else None
+            await backend.stop()
+            redis.terminate()
+            console = instance.console()
+            record['product_error_lines'] = product_errors(console, adapter, platform)[:30]
+            record['_console'] = console
+        recorder.save('redis', product_id, record)
+
+
+async def run(family, runtime, recorder, canaries, product_ids, platforms):
+    keys = bool(os.environ.get('PROXYCHECK_KEY')) and bool(os.environ.get('VPNAPI_KEY'))
+    if family in ('detection', 'all'):
+        await detection(runtime, recorder, canaries, product_ids, 'enforce')
+        if keys:
+            await detection(runtime, recorder, canaries, product_ids, 'free_keys')
+        else:
+            print('[detection] free_keys profile skipped: PROXYCHECK_KEY/VPNAPI_KEY not set', flush=True)
+    if family in ('failure', 'all'):
+        await failure(runtime, recorder, canaries, product_ids)
+    if family in ('redis', 'all'):
+        await redis_outage(runtime, recorder, canaries, product_ids)
+    if family in ('performance', 'all'):
+        for platform in [p for p in ('velocity', 'paper') if p in platforms]:
+            await performance(runtime, recorder, canaries, product_ids, platform=platform,
+                              rounds=int(os.environ.get('BENCH_PERF_ROUNDS', '3')))

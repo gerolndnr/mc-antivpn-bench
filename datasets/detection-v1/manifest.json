@@ -1,0 +1,171 @@
+{
+  "built_at": "2026-10-05T12:36:36+00:00",
+  "counts": {
+    "commercial_vpn": 125,
+    "fresh_vpn": 37,
+    "mobile_cgnat": 100,
+    "proxy": 100,
+    "residential": 150,
+    "residential_v6": 60,
+    "tor": 80,
+    "vpn_v6": 40
+  },
+  "name": "mc-antivpn-bench detection v1",
+  "schema": 1,
+  "seed": 20261005,
+  "sha256_private": "288be4821d641d2e05afc98f0dd0739215f0d98d9fcf7fd49def6670c76ea0dc",
+  "sources": {
+    "ivpn": {
+      "bytes": 75264,
+      "fetched_at": "2026-10-05T11:02:34+00:00",
+      "public": true,
+      "sha256": "7deaeb11f28759a96adf55174545229fd8e01d52e0e1d6d786cbe00d514d1332",
+      "url": "https://api.ivpn.net/v5/servers.json"
+    },
+    "ivpn-cdx": {
+      "bytes": 211,
+      "fetched_at": "2026-10-05T11:03:55+00:00",
+      "public": true,
+      "sha256": "6cb12e5606c7910f87140547dab998ec91c4cbcbbb488d30e2e60f90fd33369d",
+      "url": "https://web.archive.org/cdx/search/cdx?url=api.ivpn.net/v5/servers.json&output=json&fl=timestamp,statuscode&filter=statuscode:200&from=2025"
+    },
+    "ivpn-wayback-20260804185732": {
+      "bytes": 74288,
+      "fetched_at": "2026-10-05T11:03:56+00:00",
+      "public": true,
+      "sha256": "8f9668644e54f6e147369206bc57b57607ad8878d8847ffbcbfcf0218f616325",
+      "url": "https://web.archive.org/web/20260804185732id_/https://api.ivpn.net/v5/servers.json"
+    },
+    "mullvad": {
+      "bytes": 294013,
+      "fetched_at": "2026-10-05T11:02:32+00:00",
+      "public": true,
+      "sha256": "8a065f6014d81e639ade9f334c10e133a70e5313284bf49a63dc124f7d635c52",
+      "url": "https://api.mullvad.net/www/relays/all/"
+    },
+    "mullvad-cdx": {
+      "bytes": 263,
+      "fetched_at": "2026-10-05T11:02:59+00:00",
+      "public": true,
+      "sha256": "995b7004d80c2cca1efc359e0feb9ea7757b9e6f65f2879b2b9b279f9ff97c48",
+      "url": "https://web.archive.org/cdx/search/cdx?url=api.mullvad.net/www/relays/all/&output=json&fl=timestamp,statuscode&filter=statuscode:200&from=2025"
+    },
+    "mullvad-wayback-20260914150948": {
+      "bytes": 292428,
+      "fetched_at": "2026-10-05T11:03:40+00:00",
+      "public": true,
+      "sha256": "395a83c5253a1f5d0d2c05330fe0e7c0c4a5c297792c79ba8286cdd28aeb9791",
+      "url": "https://web.archive.org/web/20260914150948id_/https://api.mullvad.net/www/relays/all/"
+    },
+    "nordvpn": {
+      "bytes": 939784,
+      "fetched_at": "2026-10-05T11:02:33+00:00",
+      "public": true,
+      "sha256": "50bb230678dc3afe3104daacbad05527972e9232e067876e644d5d27899e5d32",
+      "url": "https://api.nordvpn.com/v1/servers?limit=20000&fields%5Bservers.station%5D&fields%5Bservers.created_at%5D&fields%5Bservers.status%5D&fields%5Bservers.hostname%5D&fields%5Bservers.ipv6_station%5D"
+    },
+    "pia": {
+      "bytes": 141791,
+      "fetched_at": "2026-10-05T11:02:33+00:00",
+      "public": true,
+      "sha256": "d253bfd649dd22e5790c613cbc0423fe9299210be65e93baeb58d3db495f4cc6",
+      "url": "https://serverlist.piaservers.net/vpninfo/servers/v6"
+    },
+    "pia-cdx": {
+      "bytes": 497,
+      "fetched_at": "2026-10-05T11:03:07+00:00",
+      "public": true,
+      "sha256": "1e08b0c0a84cba25412499e791819a2eb5bbf05e5d99e71071d0870ced73b6dd",
+      "url": "https://web.archive.org/cdx/search/cdx?url=serverlist.piaservers.net/vpninfo/servers/v6&output=json&fl=timestamp,statuscode&filter=statuscode:200&from=2025"
+    },
+    "pia-wayback-20260916011326": {
+      "bytes": 163300,
+      "fetched_at": "2026-10-05T11:03:42+00:00",
+      "public": true,
+      "sha256": "56b3601202178f5e16098f08878a2c41ac2e89c8f8e11213a3245cde75be8094",
+      "url": "https://web.archive.org/web/20260916011326id_/https://serverlist.piaservers.net/vpninfo/servers/v6"
+    },
+    "proxy-monosans": {
+      "bytes": 39282,
+      "fetched_at": "2026-10-05T11:03:57+00:00",
+      "public": true,
+      "sha256": "51e6039a563a47b43fd87ed3f4c9f531b462ba29725f5366b4c4e22e96f75b96",
+      "url": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt"
+    },
+    "proxy-proxifly": {
+      "bytes": 1307701,
+      "fetched_at": "2026-10-05T11:03:57+00:00",
+      "public": true,
+      "sha256": "6966933f6f1df0011b86c1e9aace25e35fd2dcbac66e382bd10687794b332ad1",
+      "url": "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt"
+    },
+    "proxy-vakhov": {
+      "bytes": 13779,
+      "fetched_at": "2026-10-05T11:03:57+00:00",
+      "public": true,
+      "sha256": "feceac1d7bbef57aa4106158a6141e1e245542e1c679b8606baae5f67b30c6bd",
+      "url": "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxylist.txt"
+    },
+    "ripe-archive-2026-10-04": {
+      "bytes": 47778421,
+      "fetched_at": "2026-10-05T12:35:49+00:00",
+      "public": false,
+      "sha256": "b8f79c7c027a81a8b5085ab7871b62c692d7bb7ee08e8f5a1d1753455af63a0c",
+      "url": "https://atlas.ripe.net/api/v2/probes/archive/?date=2026-10-04&format=json"
+    },
+    "surfshark": {
+      "bytes": 100729,
+      "fetched_at": "2026-10-05T11:02:35+00:00",
+      "note": "cluster host names resolved via DNS at fetch time",
+      "public": true,
+      "sha256": "70f2743b9c6139f15315481d2bba9edffc1fe4e529c5b82afb2a043f0ef57fa2",
+      "url": "https://api.surfshark.com/v4/server/clusters"
+    },
+    "surfshark-dns": {
+      "fetched_at": "2026-10-05T12:36:15+00:00",
+      "public": true,
+      "sha256": "73e47f8eb5e854cd6dddc11330e0719f93f7f389e6fee0408c70003a2e4d512d",
+      "source": "DNS A records"
+    },
+    "tor-bulk": {
+      "bytes": 19626,
+      "fetched_at": "2026-10-05T11:03:57+00:00",
+      "public": true,
+      "sha256": "d03ed59b22d6c6d8d9196052ff1ad54490811dce64d98e66d6b2e22140b8c45c",
+      "url": "https://check.torproject.org/torbulkexitlist"
+    }
+  },
+  "stats": {
+    "candidates": {
+      "commercial_vpn": {
+        "ivpn": 89,
+        "mullvad": 536,
+        "nordvpn": 7169,
+        "pia": 387,
+        "surfshark": 281
+      },
+      "fresh": 160,
+      "mobile": 200,
+      "proxy": 987,
+      "residential": 3583,
+      "residential_v6": 1829
+    },
+    "duplicates_dropped": 0,
+    "fresh": {
+      "ivpn": {
+        "baseline_capture": "20260804185732"
+      },
+      "mullvad": {
+        "baseline_capture": "20260914150948"
+      },
+      "nordvpn": {
+        "rule": "operator created_at within 30 days"
+      },
+      "pia": {
+        "baseline_capture": "20260916011326"
+      }
+    },
+    "residential_conflicts": 2
+  },
+  "total": 692
+}
