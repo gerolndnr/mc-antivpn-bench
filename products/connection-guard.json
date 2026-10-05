@@ -5,26 +5,89 @@
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
-  "pins": {"paper": "connectionguard-0.5.0", "folia": "connectionguard-0.5.0", "velocity": "connectionguard-0.5.0", "bungee": "connectionguard-0.5.0"},
-  "previous_pins": {"paper": "connectionguard-0.4.11", "velocity": "connectionguard-0.4.11"},
-  "data_dir": {"paper": "ConnectionGuard", "folia": "ConnectionGuard", "velocity": "connection-guard", "bungee": "ConnectionGuard"},
+  "pins": {
+    "paper": "connectionguard-0.5.0",
+    "folia": "connectionguard-0.5.0",
+    "velocity": "connectionguard-0.5.0",
+    "bungee": "connectionguard-0.5.0"
+  },
+  "previous_pins": {
+    "paper": "connectionguard-0.4.11",
+    "velocity": "connectionguard-0.4.11"
+  },
+  "data_dir": {
+    "paper": "ConnectionGuard",
+    "folia": "ConnectionGuard",
+    "velocity": "connection-guard",
+    "bungee": "ConnectionGuard"
+  },
   "config": "config.yml",
   "ready_pattern": null,
   "profiles": {
-    "shipped": {"edits": [], "note": "As downloaded. operation.mode is OBSERVE: decisions are logged, nobody is refused."},
-    "enforce": {"edits": [{"file": "config.yml", "set": {"operation.mode": "ENFORCE"}}],
-                "note": "Single documented enforcement switch (config.yml comment and README: OBSERVE first, then ENFORCE)."},
-    "free_keys": {"extends": "enforce",
-                  "edits": [{"file": "config.yml", "set": {"provider.vpn.proxycheck.api-key": "{canary:proxycheck}",
-                                                          "provider.vpn.vpnapi.enabled": true,
-                                                          "provider.vpn.vpnapi.api-key": "{canary:vpnapi}"}}],
-                  "note": "Adds the free ProxyCheck and VPNAPI keys through the product's documented key fields."}
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded. operation.mode is OBSERVE: decisions are logged, nobody is refused."
+    },
+    "enforce": {
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "operation.mode": "ENFORCE"
+          }
+        }
+      ],
+      "note": "Single documented enforcement switch (config.yml comment and README: OBSERVE first, then ENFORCE)."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}",
+            "provider.vpn.vpnapi.enabled": true,
+            "provider.vpn.vpnapi.api-key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "Adds the free ProxyCheck and VPNAPI keys through the product's documented key fields."
+    }
   },
-  "redis": {"edits": [{"file": "config.yml", "set": {"provider.cache.type": "Redis", "provider.cache.redis.hostname": "127.0.0.1",
-                                                     "provider.cache.redis.port": 6379, "provider.cache.redis.password": ""}}],
-            "note": "provider.cache.type: Redis (documented for multi-server networks)."},
-  "commands": {"reload": "cg reload", "inspect": ["cg doctor", "cg providers", "cg stats"]},
-  "lookup_hosts": ["proxycheck.io", "ip-api.com", "vpnapi.io", "iphub.info", "ipqualityscore.com"],
+  "redis": {
+    "edits": [
+      {
+        "file": "config.yml",
+        "set": {
+          "provider.cache.type": "Redis",
+          "provider.cache.redis.hostname": "127.0.0.1",
+          "provider.cache.redis.port": 6379,
+          "provider.cache.redis.password": ""
+        }
+      }
+    ],
+    "note": "provider.cache.type: Redis (documented for multi-server networks)."
+  },
+  "commands": {
+    "reload": "cg reload",
+    "inspect": [
+      "cg doctor",
+      "cg providers",
+      "cg stats"
+    ]
+  },
+  "lookup_hosts": [
+    "proxycheck.io",
+    "ip-api.com",
+    "vpnapi.io",
+    "iphub.info",
+    "ipqualityscore.com"
+  ],
   "documented_failure_policy": "failure-policy.vpn: OPEN and failure-policy.geo: OPEN by default (admit when no provider can decide). lookup.deadline-ms 5000.",
-  "telemetry": ["bStats (fixture-wide off)", "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"]
+  "telemetry": [
+    "bStats (fixture-wide off)",
+    "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"
+  ],
+  "list_sources": [],
+  "list_sources_note": "Lists the shipped configuration downloads (from its generated config); used only for the circularity table."
 }

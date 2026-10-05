@@ -204,6 +204,10 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
                                    errors=product_errors(instance.console(), instance.adapter, DETECTION_PLATFORM)[:50]))
         await backend.stop()
     record['teardown'] = teardown
+    try:
+        record['circularity'] = circularity('/work/state', product_ids)
+    except Exception as error:
+        record['circularity'] = dict(error=f'{type(error).__name__}: {error}')
     recorder.save('detection', profile, record)
     return record
 
@@ -454,3 +458,58 @@ async def run(family, runtime, recorder, canaries, product_ids, platforms):
         for platform in [p for p in ('velocity', 'paper') if p in platforms]:
             await performance(runtime, recorder, canaries, product_ids, platform=platform,
                               rounds=int(os.environ.get('BENCH_PERF_ROUNDS', '3')))
+
+
+# ------------------------------------------------------------------ circularity
+def parse_list(body):
+    networks = []
+    for line in body.decode('utf-8', 'replace').splitlines():
+        token = line.strip().split()[0] if line.strip() else ''
+        if not token or token.startswith(('#', ';', '//')):
+            continue
+        token = token.split('://')[-1]
+        if token.count(':') == 1:  # ip:port
+            token = token.split(':')[0]
+        try:
+            networks.append(ipaddress.ip_network(token, strict=False))
+        except ValueError:
+            continue
+    return networks
+
+
+def circularity(runtime_state_dir, product_ids):
+    """Share of each cohort already contained in the lists a product downloads (counts only)."""
+    from .interposer import Interposer, Request
+    probe = Interposer.__new__(Interposer)
+    probe.secrets = {}
+    import sqlite3
+    db = sqlite3.connect(os.path.join(runtime_state_dir, 'answers.sqlite'))
+    items = dataset()
+    out = {}
+    for product_id in product_ids:
+        sources = products.adapter(product_id).get('list_sources', [])
+        networks, used = [], []
+        for url in sources:
+            parts = urllib.parse.urlsplit(url)
+            request = Request('GET', parts.path + ('?' + parts.query if parts.query else ''), 'HTTP/1.1',
+                              [('Host', parts.hostname)], b'')
+            key = probe.canonical(parts.scheme, parts.hostname, request)[0]
+            row = db.execute('select body from answer where key=?', (key,)).fetchone()
+            if row:
+                parsed = parse_list(row[0])
+                networks += parsed
+                used.append(dict(url=url, entries=len(parsed)))
+            else:
+                used.append(dict(url=url, entries=None, note='not fetched during this run'))
+        v4 = [n for n in networks if n.version == 4]
+        v6 = [n for n in networks if n.version == 6]
+        counts = {}
+        for item in items:
+            address = ipaddress.ip_address(item['ip'])
+            pool = v4 if address.version == 4 else v6
+            hit = any(address in n for n in pool)
+            entry = counts.setdefault(item['cohort'], [0, 0])
+            entry[0] += int(hit)
+            entry[1] += 1
+        out[product_id] = dict(lists=used, cohorts={c: dict(listed=k, n=n) for c, (k, n) in counts.items()})
+    return out

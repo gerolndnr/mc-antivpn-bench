@@ -5,24 +5,91 @@
   "license": "GPL-3.0-only",
   "source": "https://codeberg.org/LucasTHCR/ProxyShield",
   "listing": "https://modrinth.com/plugin/proxyshield",
-  "pins": {"paper": "proxyshield-2.5.1+paper", "folia": "proxyshield-2.5.1+folia", "velocity": "proxyshield-2.5.1+velocity", "bungee": "proxyshield-2.5.1+bungee"},
-  "previous_pins": {"paper": "proxyshield-2.4.1+paper", "velocity": "proxyshield-2.4.1+velocity"},
-  "data_dir": {"paper": "ProxyShield", "folia": "ProxyShield", "velocity": "proxyshield", "bungee": "ProxyShield"},
+  "pins": {
+    "paper": "proxyshield-2.5.1+paper",
+    "folia": "proxyshield-2.5.1+folia",
+    "velocity": "proxyshield-2.5.1+velocity",
+    "bungee": "proxyshield-2.5.1+bungee"
+  },
+  "previous_pins": {
+    "paper": "proxyshield-2.4.1+paper",
+    "velocity": "proxyshield-2.4.1+velocity"
+  },
+  "data_dir": {
+    "paper": "ProxyShield",
+    "folia": "ProxyShield",
+    "velocity": "proxyshield",
+    "bungee": "ProxyShield"
+  },
   "config": "config.yml",
   "ready_pattern": "VPN lists ready",
   "profiles": {
-    "shipped": {"edits": [], "note": "As downloaded: 7 keyless providers in consensus (required-score 1.5), lists, rDNS, heuristics; blocks hosting."},
-    "enforce": {"edits": [], "note": "Enforces out of the box; no step needed."},
-    "free_keys": {"extends": "enforce",
-                  "edits": [{"file": "config.yml", "set": {"api.providers.proxycheck.enabled": true, "api.providers.proxycheck.key": "{canary:proxycheck}",
-                                                          "api.providers.vpnapi.enabled": true, "api.providers.vpnapi.key": "{canary:vpnapi}"}}],
-                  "note": "Enables the documented proxycheck and vpnapi provider entries with keys."}
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded: 7 keyless providers in consensus (required-score 1.5), lists, rDNS, heuristics; blocks hosting."
+    },
+    "enforce": {
+      "edits": [],
+      "note": "Enforces out of the box; no step needed."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "api.providers.proxycheck.enabled": true,
+            "api.providers.proxycheck.key": "{canary:proxycheck}",
+            "api.providers.vpnapi.enabled": true,
+            "api.providers.vpnapi.key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "Enables the documented proxycheck and vpnapi provider entries with keys."
+    }
   },
-  "redis": {"edits": [{"file": "config.yml", "set": {"storage.type": "redis", "storage.redis.host": "127.0.0.1", "storage.redis.port": 6379}}],
-            "note": "storage.type: redis (documented for networks; falls back to file storage when unreachable at start-up)."},
-  "commands": {"reload": "proxyshield reload", "inspect": ["proxyshield providers", "proxyshield status"]},
-  "lookup_hosts": ["ip-api.com", "blackbox.ipinfo.app", "api.iprisk.info", "api.ipquery.io", "api.ipapi.is", "iplocate.io", "freeipapi.com",
-                   "free.freeipapi.com", "proxycheck.io", "vpnapi.io"],
+  "redis": {
+    "edits": [
+      {
+        "file": "config.yml",
+        "set": {
+          "storage.type": "redis",
+          "storage.redis.host": "127.0.0.1",
+          "storage.redis.port": 6379
+        }
+      }
+    ],
+    "note": "storage.type: redis (documented for networks; falls back to file storage when unreachable at start-up)."
+  },
+  "commands": {
+    "reload": "proxyshield reload",
+    "inspect": [
+      "proxyshield providers",
+      "proxyshield status"
+    ]
+  },
+  "lookup_hosts": [
+    "ip-api.com",
+    "blackbox.ipinfo.app",
+    "api.iprisk.info",
+    "api.ipquery.io",
+    "api.ipapi.is",
+    "iplocate.io",
+    "freeipapi.com",
+    "free.freeipapi.com",
+    "proxycheck.io",
+    "vpnapi.io"
+  ],
   "documented_failure_policy": "settings.fail-closed: false (admit when providers fail). api.timeout-seconds 4, total-timeout-seconds 6.",
-  "telemetry": ["bStats (metrics.enabled; fixture-wide off)"]
+  "telemetry": [
+    "bStats (metrics.enabled; fixture-wide off)"
+  ],
+  "list_sources": [
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt",
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv6.txt",
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt",
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv6.txt",
+    "https://check.torproject.org/torbulkexitlist"
+  ],
+  "list_sources_note": "Lists the shipped configuration downloads (from its generated config); used only for the circularity table."
 }

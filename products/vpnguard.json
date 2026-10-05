@@ -5,24 +5,71 @@
   "license": "All rights reserved (not redistributed by this benchmark)",
   "source": null,
   "listing": "https://modrinth.com/plugin/vpnguard",
-  "pins": {"paper": "vpnguard-1.2.0", "folia": "vpnguard-1.2.0", "velocity": "vpnguard-1.2.0", "bungee": "vpnguard-1.2.0"},
-  "previous_pins": {"paper": "vpnguard-1.1.1", "velocity": "vpnguard-1.1.1"},
-  "data_dir": {"paper": "VPNGuard", "folia": "VPNGuard", "velocity": "vpnguard", "bungee": "VPNGuard"},
+  "pins": {
+    "paper": "vpnguard-1.2.0",
+    "folia": "vpnguard-1.2.0",
+    "velocity": "vpnguard-1.2.0",
+    "bungee": "vpnguard-1.2.0"
+  },
+  "previous_pins": {
+    "paper": "vpnguard-1.1.1",
+    "velocity": "vpnguard-1.1.1"
+  },
+  "data_dir": {
+    "paper": "VPNGuard",
+    "folia": "VPNGuard",
+    "velocity": "vpnguard",
+    "bungee": "VPNGuard"
+  },
   "config": "config.yml",
   "ready_pattern": null,
   "profiles": {
-    "shipped": {"edits": [], "note": "As downloaded: join-enforcement.enabled false (checks only on command)."},
-    "enforce": {"edits": [{"file": "config.yml", "set": {"join-enforcement.enabled": true}}],
-                "note": "Documented switch: join-enforcement.enabled (equivalent to /vpnkick on)."},
-    "free_keys": {"extends": "enforce",
-                  "edits": [{"file": "config.yml", "set": {"providers.proxycheck.enabled": true, "providers.proxycheck.key": "{canary:proxycheck}",
-                                                          "providers.vpnapi.enabled": true, "providers.vpnapi.key": "{canary:vpnapi}"}}],
-                  "note": "Enables the documented ProxyCheck and VPNAPI providers with keys."}
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded: join-enforcement.enabled false (checks only on command)."
+    },
+    "enforce": {
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "join-enforcement.enabled": true
+          }
+        }
+      ],
+      "note": "Documented switch: join-enforcement.enabled (equivalent to /vpnkick on)."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "providers.proxycheck.enabled": true,
+            "providers.proxycheck.key": "{canary:proxycheck}",
+            "providers.vpnapi.enabled": true,
+            "providers.vpnapi.key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "Enables the documented ProxyCheck and VPNAPI providers with keys."
+    }
   },
   "redis": null,
   "redis_note": "No Redis option (SQLite only). Redis test not applicable.",
-  "commands": {"reload": "vpnguard reload", "inspect": ["vpnkick status"]},
-  "lookup_hosts": ["ip-api.com", "proxycheck.io", "vpnapi.io"],
+  "commands": {
+    "reload": "vpnguard reload",
+    "inspect": [
+      "vpnkick status"
+    ]
+  },
+  "lookup_hosts": [
+    "ip-api.com",
+    "proxycheck.io",
+    "vpnapi.io"
+  ],
   "documented_failure_policy": "Not documented; timeout 5000 ms, rate-limiting queue (1 lookup per second, queue timeout 10 s).",
-  "telemetry": []
+  "telemetry": [],
+  "list_sources": [],
+  "list_sources_note": "Lists the shipped configuration downloads (from its generated config); used only for the circularity table."
 }

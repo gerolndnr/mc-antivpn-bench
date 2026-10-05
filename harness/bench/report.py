@@ -101,6 +101,24 @@ def detection_tables(records, lines, csv_rows):
         lines.append('\nDecision time on live providers (connect → refusal or Login Success), median / p95 ms: ' +
                      ', '.join(f'{NAMES[p]} {statistics.median(v):.0f} / {sorted(v)[int(0.95 * (len(v) - 1))]:.0f}'
                                for p, v in timings.items() if v) + '.')
+        circ = record.get('circularity') or {}
+        if circ and 'error' not in circ:
+            lines.append('\n**Circularity.** Share of each cohort that is already contained in the lists the product '
+                         'downloads with its shipped configuration (same list content as during the run). A high value means '
+                         'detection on that cohort can come from the same source as the ground truth.\n')
+            listed = [p for p in products if circ.get(p, {}).get('lists')]
+            if listed:
+                lines.append('| Cohort | ' + ' | '.join(NAMES[p] for p in listed) + ' |')
+                lines.append('|---|' + '---|' * len(listed))
+                for cohort in COHORT_ORDER:
+                    cells = []
+                    for product in listed:
+                        entry = circ[product]['cohorts'].get(cohort)
+                        cells.append(pct(entry['listed'], entry['n']) if entry else '—')
+                    lines.append(f'| `{cohort}` | ' + ' | '.join(cells) + ' |')
+            others = [NAMES[p] for p in products if not circ.get(p, {}).get('lists')]
+            if others:
+                lines.append('\nNo downloaded lists in the shipped configuration: ' + ', '.join(others) + '.')
         lines.append(f'\nRaw rows: [`{record["_path"]}`]({record["_path"]}).')
 
 

@@ -205,3 +205,33 @@ class Dataset(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Analysis(unittest.TestCase):
+    def test_wilson_interval(self):
+        from bench import report
+        low, high = report.wilson(45, 50)
+        self.assertAlmostEqual(low, 0.786, places=2)
+        self.assertAlmostEqual(high, 0.957, places=2)
+        self.assertEqual(report.wilson(0, 0), (None, None))
+
+    def test_error_attribution_stays_inside_one_entry(self):
+        adapter = dict(data_dir={'paper': 'ConnectionGuard'}, id='connection-guard', name='Connection Guard')
+        console = '\n'.join([
+            '[12:00:00 ERROR]: [PaperVersionFetcher] Error while parsing version list',
+            'java.net.SocketException: Unexpected end of file',
+            '\tat java.base/sun.net.www.http.HttpClient.parseHTTP(HttpClient.java:735)',
+            '[12:00:01 INFO]: [ConnectionGuard] Enabling ConnectionGuard v0.5.0',
+            '[12:00:02 ERROR]: Error occurred while enabling ConnectionGuard v0.5.0',
+            '\tat com.github.gerolndnr.connectionguard.spigot.Plugin.onEnable(Plugin.java:1)',
+            '[12:00:03 ERROR]: [OtherPlugin] broke',
+        ])
+        hits = engine.product_errors(console, adapter, 'paper')
+        self.assertEqual(len(hits), 1)
+        self.assertIn('enabling ConnectionGuard', hits[0])
+
+    def test_list_parser_accepts_common_formats(self):
+        from bench import heavy
+        nets = heavy.parse_list(b'# comment\n1.2.3.4\n5.6.7.0/24\nsocks5://9.9.9.9:1080\n10.0.0.1:8080\n2001:db8::/32\nbad\n')
+        self.assertEqual([str(n) for n in nets], ['1.2.3.4/32', '5.6.7.0/24', '9.9.9.9/32', '10.0.0.1/32',
+                                                  '2001:db8::/32'])
