@@ -187,6 +187,7 @@ Outcome classes (client-side, per join):
 ### 7.3 Performance (Velocity, then Paper)
 
 - **Profiles.** `enforce` and `free_keys` are run as separate passes. Keyless defaults can carry a product-enforced daily quota (CG counts ProxyCheck's 100 keyless queries per day locally), which ends lookups during a long test. Under template replay no request reaches a real provider, so `free_keys` removes that confound without spending quota.
+- **Provider quotas.** Template replay enforces each provider's published free-tier limit (ip-api 45/min, ProxyCheck 1,000/day with key, VPNAPI 1,000/day, ipapi.is 1,000/day, freeipapi 60/min; list in `heavy.PROVIDER_QUOTAS` with sources) and answers 429 above it, as the real service would. Providers without a published limit are not limited, and the report names them. Without this, a product that fans out to many keyless services would appear to scale without limit in replay.
 - **Latency model.** Lookup APIs are served from **template replay**: each product's own recorded answer for one reference residential subject, with the subject address substituted. The added latency is log-normal, median 120 ms, p95 350 ms, seeded, and identical for every product. No request leaves the container. Subjects are synthetic addresses in the /12 networks around residential cohort addresses, never inside a volunteer's own /24. Published logs mask every address that is not a dataset id.
 - **Phases per round, each on a fresh instance:**
 
@@ -308,6 +309,8 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
 ## Changes before the first published run
+
+- 2026-10-05: performance template replay now emulates published provider quotas (429 above the free limit). The first trial burst replayed unlimited answers for every product except Connection Guard, which enforces its own quota mirror, so the comparison was unequal.
 
 - 2026-10-05: detection gets a `proxycheck_key` headline pass. The first full `enforce` pass showed Connection Guard's shipped 100/day keyless ProxyCheck budget ending lookups after subject ~100 (logged `BUDGET_EXHAUSTED`, then fail-open). That is reported as a capacity finding of the shipped configuration and kept separate from detection quality. Every product receives the same key through its own documented field.
 

@@ -305,10 +305,27 @@ def synthetic_subjects(items, count, seed):
     return out
 
 
+# Documented free-tier limits, emulated during template replay so that no product scales
+# better than the real service would let it (METHODOLOGY 7.3). Hosts without a published
+# free limit are not limited; the report lists them.
+PROVIDER_QUOTAS = {
+    'ip-api.com': dict(limit=45, window_s=60, source='ip-api.com/docs: 45 requests per minute'),
+    'proxycheck.io': dict(limit=1000, window_s=86400, source='proxycheck.io pricing: 1,000 daily queries (free key)'),
+    'vpnapi.io': dict(limit=1000, window_s=86400, source='vpnapi.io pricing: 1,000 requests per day (free)'),
+    'api.ipapi.is': dict(limit=1000, window_s=86400, source='ipapi.is pricing: 1,000 free requests per day'),
+    'free.freeipapi.com': dict(limit=60, window_s=60, source='freeipapi.com: 60 requests per minute (free)'),
+    'freeipapi.com': dict(limit=60, window_s=60, source='freeipapi.com: 60 requests per minute (free)'),
+}
+
+
 def template_rules(adapter, reference_ip):
-    return measurement_rules(extra=[dict(name='template', hosts=adapter['lookup_hosts'], action='template',
-                                         reference_ip=reference_ip, latency_ms=LATENCY_MODEL)],
-                             normalize_quota=False)
+    hosts = adapter['lookup_hosts']
+    extra = [dict(name=f'template-{host}', hosts=[host], action='template', reference_ip=reference_ip,
+                  latency_ms=LATENCY_MODEL, quota=dict(limit=q['limit'], window_s=q['window_s']))
+             for host, q in PROVIDER_QUOTAS.items() if host in hosts]
+    extra.append(dict(name='template', hosts=hosts, action='template', reference_ip=reference_ip,
+                      latency_ms=LATENCY_MODEL))
+    return measurement_rules(extra=extra, normalize_quota=False)
 
 
 async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2.0):

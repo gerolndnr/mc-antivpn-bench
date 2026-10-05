@@ -107,6 +107,11 @@ class Interposer(unittest.TestCase):
         self.assertNotIn(b'If-None-Match', raw)
         self.assertNotIn(b'If-Modified-Since', raw)
 
+    def test_emulated_quota_limits_per_window(self):
+        rule = dict(name='q', quota=dict(limit=2, window_s=60))
+        self.assertEqual([self.proxy.over_quota(rule, 'ip-api.com') for _ in range(3)], [False, False, True])
+        self.assertFalse(self.proxy.over_quota(rule, 'other.host'))
+
     def test_rules_first_match_wins(self):
         self.proxy.configure(dict(default='record', rules=[dict(name='a', hosts=['*.bstats.org'], action='deny')]))
         self.assertEqual(self.proxy.rule_for('x.bstats.org')['action'], 'deny')

@@ -212,6 +212,7 @@ class Interposer:
         self.random = random.Random(1)
         self.sni = {}
         self.key_locks = {}
+        self.quota_hits = {}
         self.upstream_tls = ssl.create_default_context()
         self.lock = threading.Lock()
 
@@ -222,6 +223,21 @@ class Interposer:
         rules.setdefault('replay_latency', 'recorded')
         self.rules = rules
         self.random = random.Random(rules.get('seed', 1))
+
+    def over_quota(self, rule, host):
+        """Emulated provider quota: {'limit': n, 'window_s': s} per host within the rule."""
+        quota = rule.get('quota')
+        if not quota:
+            return False
+        now = time.monotonic()
+        key = (rule.get('name'), host)
+        window = quota['window_s']
+        start, count = self.quota_hits.get(key, (now, 0))
+        if now - start >= window:
+            start, count = now, 0
+        count += 1
+        self.quota_hits[key] = (start, count)
+        return count > quota['limit']
 
     def rule_for(self, host):
         for rule in self.rules['rules']:
@@ -494,6 +510,12 @@ class Interposer:
                     if not keep or not request.keep_alive:
                         return
                     continue
+                if self.over_quota(rule, ctx['host']):
+                    await self.respond(writer, self.fault_answer('http_429'), request.keep_alive)
+                    self.log(**event, status=429, source='quota', served_ms=(time.perf_counter() - ctx['started']) * 1000)
+                    if not request.keep_alive:
+                        return
+                    continue
                 answer, source = await self.decide(ctx, request, scheme, port)
                 if answer is None:
                     answer, source = dict(status=504, reason='Gateway Timeout', headers=[('Content-Type', 'text/plain')],
@@ -586,6 +608,10 @@ class Interposer:
                                                    body=self.INCOMPLETE_BODY), partial=True)
                         return
                     await send(stream_id, self.fault_answer(kind))
+                    return
+                if self.over_quota(rule, ctx['host']):
+                    await send(stream_id, self.fault_answer('http_429'))
+                    self.log(**event, status=429, source='quota', served_ms=(time.perf_counter() - ctx['started']) * 1000)
                     return
                 answer, source = await self.decide(ctx, request, scheme, port)
                 if answer is None:
@@ -731,6 +757,7 @@ class Interposer:
         status, payload = 200, {}
         if request.method == 'PUT' and path == '/rules':
             self.configure(json.loads(request.body or b'{}'))
+            self.quota_hits = {}
             payload = dict(ok=True)
         elif request.method == 'GET' and path == '/rules':
             payload = self.rules
@@ -738,6 +765,7 @@ class Interposer:
             payload = dict(sequence=self.sequence, counters=self.counters)
         elif request.method == 'POST' and path == '/reset':
             self.counters = {}
+            self.quota_hits = {}
             payload = dict(ok=True, sequence=self.sequence)
         elif request.method == 'GET' and path == '/health':
             payload = dict(ok=True)
