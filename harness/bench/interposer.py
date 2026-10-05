@@ -316,6 +316,9 @@ class Interposer:
         raw_target = self.inject(host, target)
         headers = [(k, self.inject(host, v)) for k, v in request.headers
                    if k.lower() not in ('accept-encoding', 'connection', 'keep-alive', 'proxy-connection', 'host', 'x-bench-baseline',
+                                        # Conditional headers are dropped: a recorded 304 must never reach a product
+                                        # that has no cached copy. Every product gets the full body.
+                                        'if-none-match', 'if-modified-since', 'if-match', 'if-unmodified-since', 'if-range',
                                         'content-length', 'transfer-encoding', 'upgrade', 'http2-settings', 'te')]
         body = self.inject(host, request.body.decode('latin-1')).encode('latin-1')
         lines = [f'{request.method} {raw_target} HTTP/1.1', f'Host: {request.header("host") or host}']
@@ -402,7 +405,7 @@ class Interposer:
             answer = await self.forward(scheme, ctx['host'], port, request,
                                         timeout=120 if action == 'passthrough' else 20, rule=rule)
             source = 'upstream'
-            if action == 'record' and answer['status'] < 500 and answer['status'] != 429:
+            if action == 'record' and answer['status'] < 500 and answer['status'] not in (429, 304):
                 self.store.put(ctx['key'], ctx['template_key'], ctx['host'], answer, ctx['subject'])
         if answer is not None and source != 'upstream':
             delay = self.latency(rule, answer.get('upstream_ms'))

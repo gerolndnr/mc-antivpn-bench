@@ -101,6 +101,12 @@ class Interposer(unittest.TestCase):
                                             self.request('/v2/1.2.3.4?vpn=1&key=111111-222222-333333-444444'), rule)
         self.assertEqual(keyed.count(b'key='), 1)
 
+    def test_conditional_headers_never_reach_upstream(self):
+        request = self.request('/list.txt', headers=[('If-None-Match', '"abc"'), ('If-Modified-Since', 'x')])
+        raw = self.proxy.upstream_request('raw.githubusercontent.com', request)
+        self.assertNotIn(b'If-None-Match', raw)
+        self.assertNotIn(b'If-Modified-Since', raw)
+
     def test_rules_first_match_wins(self):
         self.proxy.configure(dict(default='record', rules=[dict(name='a', hosts=['*.bstats.org'], action='deny')]))
         self.assertEqual(self.proxy.rule_for('x.bstats.org')['action'], 'deny')

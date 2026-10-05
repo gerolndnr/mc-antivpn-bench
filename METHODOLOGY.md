@@ -76,7 +76,7 @@ Profiles are data in each adapter. Section 10 explains how to contest them.
 All outbound TCP of the product JVM is redirected by iptables to the **interposer**, an HTTP/1.1 and HTTP/2 TLS terminator with a throwaway CA. That CA is trusted only by the container's JDK.
 
 - **Record once, serve to all.** A request is keyed by method, host, path, sorted query and auth headers, with secrets redacted and the body hashed. The first identical request is forwarded upstream; every later one, from any product, gets the recorded answer. Concurrent identical requests share one upstream call (single flight). Answers with status 429 or ≥ 500 are never recorded, so a transient provider error cannot be frozen into the dataset.
-- **Downloaded lists** (Tor list, X4BNet, proxy lists) follow the same rule. Two products that use the same list see the same list content.
+- **Downloaded lists** (Tor list, X4BNet, proxy lists) follow the same rule. Two products that use the same list see the same list content. Conditional request headers (`If-None-Match`, `If-Modified-Since`) are removed and `304` answers are never recorded, so every product always receives the full list body.
 - **Telemetry, updaters and library downloads are blocked during measurement.** These are bStats, Sentry, CG Cloud, GitHub/Spigot/Modrinth/Paper version APIs and Maven repositories. Libraries are installed in the product's first start (the installed template), and FoxGate's self-updater could otherwise replace the artifact under test. After every case the harness checks that the product JAR's SHA-256 is unchanged and that no new JAR appeared.
 - **Quota normalisation.**
   - *ProxyCheck:* keyless ProxyCheck allows 100 queries per day per egress address. The benchmark sends more lookups in an hour than a typical server sees in days, which would exhaust that quota through benchmark volume rather than product behaviour. For a keyless ProxyCheck request, the interposer attaches the operator's free key upstream. The product's request, cache key and the answer's schema are unchanged; this applies to every product equally.
@@ -301,5 +301,7 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
 ## Changes before the first published run
+
+- 2026-10-05: conditional list requests. A trial run served a recorded `304 Not Modified` to a fresh ProxyShield install without a cached copy, which disabled its list detection (fixture defect, not product behaviour). Conditional headers are now stripped and 304 answers are never recorded. Affected trial results are discarded.
 
 - 2026-10-05: failure safety now re-joins the VPN subject at 2 s **and** 65 s after recovery. The first trial run could not tell a circuit-breaker cooldown from a cached allow; the single "poisoned cache" finding was split into *recovery delay* and *unprotected after recovery (cached)*. This change was made after seeing trial data and before any result was published.
