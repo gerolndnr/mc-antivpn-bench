@@ -148,7 +148,7 @@ class Fairness(unittest.TestCase):
     def test_profiles_resolve_for_every_product(self):
         for product in ('connection-guard', 'foxgate', 'proxyshield', 'vpnguard'):
             adapter = json.load(open(os.path.join(ROOT, 'products', product + '.json')))
-            for profile in ('shipped', 'enforce', 'free_keys'):
+            for profile in ('shipped', 'enforce', 'proxycheck_key', 'free_keys'):
                 engine.profile_edits(adapter, profile)
             self.assertEqual(set(adapter['pins']), {'paper', 'folia', 'velocity', 'bungee'})
 

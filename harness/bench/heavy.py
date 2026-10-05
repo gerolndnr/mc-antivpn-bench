@@ -464,11 +464,15 @@ async def redis_outage(runtime, recorder, canaries, product_ids, platform='veloc
 async def run(family, runtime, recorder, canaries, product_ids, platforms):
     keys = bool(os.environ.get('PROXYCHECK_KEY')) and bool(os.environ.get('VPNAPI_KEY'))
     if family in ('detection', 'all'):
-        await detection(runtime, recorder, canaries, product_ids, 'enforce')
-        if keys:
-            await detection(runtime, recorder, canaries, product_ids, 'free_keys')
-        else:
-            print('[detection] free_keys profile skipped: PROXYCHECK_KEY/VPNAPI_KEY not set', flush=True)
+        profiles = os.environ.get('BENCH_DETECTION_PROFILES') or 'enforce'
+        for profile in profiles.split(','):
+            if profile == 'free_keys' and not keys:
+                print('[detection] free_keys profile skipped: PROXYCHECK_KEY/VPNAPI_KEY not set', flush=True)
+                continue
+            if profile == 'proxycheck_key' and not os.environ.get('PROXYCHECK_KEY'):
+                print('[detection] proxycheck_key profile skipped: PROXYCHECK_KEY not set', flush=True)
+                continue
+            await detection(runtime, recorder, canaries, product_ids, profile)
     if family in ('failure', 'all'):
         await failure(runtime, recorder, canaries, product_ids)
     if family in ('redis', 'all'):

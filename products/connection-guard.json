@@ -39,6 +39,18 @@
       ],
       "note": "Single documented enforcement switch (config.yml comment and README: OBSERVE first, then ENFORCE)."
     },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through the product's documented key field (same key for every product)."
+    },
     "free_keys": {
       "extends": "enforce",
       "edits": [

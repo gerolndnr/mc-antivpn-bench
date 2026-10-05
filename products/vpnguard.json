@@ -39,6 +39,19 @@
       ],
       "note": "Documented switch: join-enforcement.enabled (equivalent to /vpnkick on)."
     },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "providers.proxycheck.enabled": true,
+            "providers.proxycheck.key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through the product's documented key field (same key for every product)."
+    },
     "free_keys": {
       "extends": "enforce",
       "edits": [

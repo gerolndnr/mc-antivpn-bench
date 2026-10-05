@@ -32,6 +32,19 @@
       "edits": [],
       "note": "Enforces out of the box; no step needed."
     },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "api.providers.proxycheck.enabled": true,
+            "api.providers.proxycheck.key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through the product's documented key field (same key for every product)."
+    },
     "free_keys": {
       "extends": "enforce",
       "edits": [

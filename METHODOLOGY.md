@@ -65,6 +65,7 @@ Both can be added through an adapter (section 10).
 | --- | --- | --- |
 | `shipped` | The JAR as downloaded, first start, nothing changed | clean install |
 | `enforce` | `shipped` plus the **one** step the product's own documentation names to make it refuse connections. CG: `operation.mode: ENFORCE`. VPNGuard: `join-enforcement.enabled: true` (= `/vpnkick on`). FoxGate and ProxyShield block out of the box, so no step. | headline detection, false positives, failure safety, performance, Redis, platforms, reload |
+| `proxycheck_key` | `enforce` plus the free ProxyCheck key only, set through each product's documented key field (all four support it) | detection quality per decision |
 | `free_keys` | `enforce` plus a free ProxyCheck key and a free VPNAPI key, set through each product's documented key fields. All four products support both. | second detection pass, secret leakage |
 
 Profiles are data in each adapter. Section 10 explains how to contest them.
@@ -150,7 +151,10 @@ Outcome classes (client-side, per join):
   - ProxyCheck is "blocked" when `proxy == "yes"`.
   - VPNAPI is "blocked" when any of `security.vpn`, `proxy`, `tor` or `relay` is true.
   - Both are queried through the same interposer.
-- **Passes.** `enforce` is the headline. `free_keys` runs only if both keys are configured.
+- **Two questions, two passes.**
+  - **Capacity of the shipped configuration (`enforce`).** Some products limit their own keyless lookups per day (Connection Guard: 100 ProxyCheck queries, counted locally). When that limit ends lookups, the product admits unchecked. The `enforce` pass reports when that happened, as the subject index from which no lookup was made, and the detection rates over all subjects, which then mix both effects.
+  - **Detection quality per decision (`proxycheck_key`).** This is the headline for detection and false positives: every product gets the same free ProxyCheck key, so no product runs out of lookups during the 692 subjects.
+  - `free_keys` adds VPNAPI and runs only if both keys are configured.
 - **Hosting addresses.** Blocking datacenter addresses is a policy choice. The dataset has no hosting cohort, so "blocks hosting" never counts as either detection or false positive.
 
 ### 7.2 Failure safety (Velocity, `enforce`)
@@ -303,6 +307,8 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
 ## Changes before the first published run
+
+- 2026-10-05: detection gets a `proxycheck_key` headline pass. The first full `enforce` pass showed Connection Guard's shipped 100/day keyless ProxyCheck budget ending lookups after subject ~100 (logged `BUDGET_EXHAUSTED`, then fail-open). That is reported as a capacity finding of the shipped configuration and kept separate from detection quality. Every product receives the same key through its own documented field.
 
 - 2026-10-05: performance adds the *subjects checked* metric and a `free_keys` pass, after the first Velocity trial showed CG's local keyless ProxyCheck budget ending lookups mid-burst. Synthetic subjects no longer come from volunteers' /24 networks, and published logs mask all non-dataset addresses.
 

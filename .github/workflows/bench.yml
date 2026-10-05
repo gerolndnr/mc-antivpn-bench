@@ -20,6 +20,9 @@ on:
       detection_limit:
         description: Limit detection subjects (0 = full dataset)
         default: '0'
+      detection_profiles:
+        description: Detection profiles (comma-separated)
+        default: 'enforce'
       perf_profiles:
         description: Performance profiles (comma-separated)
         default: 'enforce'
@@ -82,7 +85,7 @@ jobs:
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
           docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
             -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
-            -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" \
+            -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_DETECTION_PROFILES="${{ inputs.detection_profiles }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Collect state
         if: always()
