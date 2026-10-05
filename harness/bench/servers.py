@@ -131,7 +131,8 @@ class Server:
                     ready.set_result(time.monotonic() - self.started_at)
             log.close()
             if not ready.done():
-                ready.set_exception(RuntimeError(f'{self.name} exited before ready'))
+                tail = ' | '.join(line for _, line in self.lines[-15:])
+                ready.set_exception(RuntimeError(f'{self.name} exited before ready: {tail[-1500:]}'))
         self.reader_task = asyncio.create_task(pump())
         return await asyncio.wait_for(ready, timeout)
 
