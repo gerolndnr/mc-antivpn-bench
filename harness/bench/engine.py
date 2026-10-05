@@ -42,6 +42,11 @@ LIBRARIES = ['repo1.maven.org', 'repo.maven.apache.org', '*.maven.apache.org', '
 UPDATES_AND_LIBRARIES = UPDATES + LIBRARIES
 
 
+def safe_name(name):
+    """Paper refuses to start in a directory whose path contains '!' or '+' (pin keys contain '+')."""
+    return re.sub(r'[^A-Za-z0-9._-]', '_', name)
+
+
 def make_canaries(seed=None):
     """Format-compatible fake keys. Real keys never enter a product configuration."""
     rng = secrets.SystemRandom() if seed is None else __import__('random').Random(seed)
@@ -123,6 +128,10 @@ def apply_edits(data_dir, edits, canaries):
             yaml.safe_dump(document, handle, sort_keys=False, allow_unicode=True)
 
 
+class ProductNotLoaded(Exception):
+    """The product did not load on this platform (a measured result, not a harness error)."""
+
+
 class Instance:
     def __init__(self, runtime, product_id, platform, slot=0, pin_key=None, label=None):
         self.runtime = runtime
@@ -131,7 +140,7 @@ class Instance:
         self.pin_key = pin_key or self.adapter['pins'][platform]
         self.port = PRODUCT_PORT_BASE + slot
         self.slot = slot
-        self.label = label or f'{product_id}-{platform}-{slot}'
+        self.label = safe_name(label or f'{product_id}-{platform}-{slot}')
         self.directory = os.path.join(WORK, 'run', self.label)
         self.server = None
         self.jar_name = products.pins()[self.pin_key]['filename']
@@ -151,7 +160,7 @@ class Instance:
 
     async def installed_template(self, clean=False):
         """First start of the product with open egress; cached per pin and platform."""
-        target = os.path.join(INSTALLED, f'{self.pin_key}-{self.platform}')
+        target = os.path.join(INSTALLED, safe_name(f'{self.pin_key}-{self.platform}'))
         marker = os.path.join(target, '.installed.json')
         if os.path.exists(marker) and not clean:
             return target
@@ -177,6 +186,10 @@ class Instance:
             json.dump(info, handle)
         servers.chown(target)
         return target
+
+    def installed_console(self):
+        path = os.path.join(INSTALLED, safe_name(f'{self.pin_key}-{self.platform}'), 'install-console.log')
+        return open(path).read() if os.path.exists(path) else ''
 
     # -------------------------------------------------------- readiness
     async def quiet(self, server, since_seq, cap=180, quiet_s=5.0):
@@ -205,7 +218,11 @@ class Instance:
             shutil.copy(products.jar(self.pin_key), os.path.join(self.directory, 'plugins', self.jar_name))
         else:
             servers.fresh_copy(await self.installed_template(), self.directory)
-            apply_edits(self.data_dir, profile_edits(self.adapter, profile) + list(extra_edits), canaries)
+            edits = profile_edits(self.adapter, profile) + list(extra_edits)
+            if edits and not os.path.isdir(self.data_dir):
+                # The product never created its data folder on first start: it did not load.
+                raise ProductNotLoaded(self.installed_console())
+            apply_edits(self.data_dir, edits, canaries)
         servers.set_port(self.directory, self.platform, self.port)
         servers.chown(self.directory)
         self.jar_sha256 = sha256_file(os.path.join(self.directory, 'plugins', self.jar_name))

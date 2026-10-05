@@ -13,7 +13,7 @@ import shutil
 import yaml
 
 from . import mcclient, products
-from .engine import Backend, Instance, clean_install_rules, measurement_rules, product_errors, profile_edits
+from .engine import Backend, Instance, ProductNotLoaded, clean_install_rules, measurement_rules, product_errors, profile_edits
 
 PRIVATE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                        'cache', 'private', 'detection-v1.private.jsonl')
@@ -60,16 +60,21 @@ async def with_instance(runtime, product_id, platform, profile, canaries, body, 
         runtime.rules(rules or measurement_rules())
         record['start'] = await instance.start()
         record['result'] = await body(instance)
+    except ProductNotLoaded as error:
+        record['not_loaded'] = True
+        record['load_failure'] = True
+        record['_install_console'] = str(error)
     except Exception as error:
         record['harness_error'] = f'{type(error).__name__}: {str(error)[:300]}'
     finally:
         record['stop'] = await instance.stop() if instance.server else None
         if backend:
             await backend.stop()
-        console = instance.console()
+        console = instance.console() or record.pop('_install_console', '')
+        record.pop('_install_console', None)
         record['product_error_lines'] = product_errors(console, instance.adapter, platform)[:40]
         name = re.escape(instance.adapter['data_dir'][platform])
-        record['load_failure'] = bool(re.search(r"(Could not load plugin|Error loading plugin|Couldn't pass \w+ to)"
+        record['load_failure'] = record.get('load_failure') or bool(re.search(r"(Could not load plugin|Error loading plugin|Couldn't pass \w+ to)"
                                                 r"[^\n]*(" + name + '|' + re.escape(instance.jar_name) + ')',
                                                 console, re.I))
         record['egress_hosts'] = sorted({e.get('host') or '?' for e in instance.egress()})
