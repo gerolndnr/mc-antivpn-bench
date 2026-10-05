@@ -28,6 +28,17 @@ ALL_PRODUCTS = ['connection-guard', 'foxgate', 'proxyshield', 'vpnguard']
 ALL_PLATFORMS = ['paper', 'folia', 'velocity', 'bungee']
 
 
+def address_forms(ip):
+    """Every spelling an address appears in: canonical, exploded, and Java's (no leading zeros, all groups)."""
+    import ipaddress
+    address = ipaddress.ip_address(ip)
+    if address.version == 4:
+        return [ip]
+    groups = address.exploded.split(':')
+    return sorted({ip, address.compressed, address.exploded, ':'.join(g.lstrip('0') or '0' for g in groups)},
+                  key=len, reverse=True)
+
+
 def _mask(candidate, replacement):
     """Mask a real, non-loopback address; leave timestamps, versions and loopback alone."""
     import ipaddress
@@ -53,7 +64,8 @@ class Recorder:
         if os.path.exists(scenarios.PRIVATE):
             for line in open(scenarios.PRIVATE):
                 item = json.loads(line)
-                self.subject_map[item['ip']] = f'<{item["id"]}>'
+                for form in address_forms(item['ip']):
+                    self.subject_map[form] = f'<{item["id"]}>'
         self._sorted = sorted(self.subject_map, key=len, reverse=True)
 
     def redact(self, text):

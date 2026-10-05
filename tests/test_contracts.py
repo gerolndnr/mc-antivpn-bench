@@ -251,6 +251,10 @@ class Publication(unittest.TestCase):
         text = recorder.redact('[14:29:23 INFO] 203.0.113.5 joined; 95.43.29.52:1 /[2a02:6ea0::7]:2 127.0.0.1 1.21.11')
         self.assertEqual(text, '[14:29:23 INFO] <tor-0001> joined; <ip>:1 /[<ip6>]:2 127.0.0.1 1.21.11')
 
+    def test_java_ipv6_spelling_maps_to_subject_id(self):
+        from bench.__main__ import address_forms
+        self.assertIn('2a02:6ea0:2901:0:0:0:0:7', address_forms('2a02:6ea0:2901::7'))
+
     def test_synthetic_subjects_avoid_volunteer_networks(self):
         from bench import heavy
         items = [dict(cohort='residential', ip=f'84.{i}.10.20') for i in range(20)]
