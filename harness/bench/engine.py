@@ -32,7 +32,7 @@ BACKEND_PORT = 25601
 TELEMETRY = ['bstats.org', '*.bstats.org', 'sentry.io', '*.sentry.io', 'api.connectionguard.net']
 UPDATES_AND_LIBRARIES = ['api.github.com', 'github.com', 'objects.githubusercontent.com',
                          'release-assets.githubusercontent.com', 'hub.spigotmc.org', 'api.spiget.org',
-                         'www.spigotmc.org', 'fill.papermc.io', 'api.papermc.io', 'api.modrinth.com', 'cdn.modrinth.com',
+                         'www.spigotmc.org', 'api.modrinth.com', 'cdn.modrinth.com',
                          'repo1.maven.org', 'repo.maven.apache.org', '*.maven.apache.org', 'repo.papermc.io',
                          'repo.okaeri.cloud', 'jitpack.io', 'piston-data.mojang.com', 'piston-meta.mojang.com',
                          'launchermeta.mojang.com', 'libraries.minecraft.net', 'api.minecraftservices.com',
@@ -64,6 +64,13 @@ def measurement_rules(extra=None, default='record', normalize_quota=True):
         rules.append(dict(name='proxycheck-quota', hosts=['proxycheck.io'], action=default,
                           add_query_if_missing=dict(key='proxycheck')))
     return dict(default=default, rules=rules, replay_latency='recorded', seed=1)
+
+
+def clean_install_rules():
+    """A first start legitimately downloads libraries (and may check for updates)."""
+    return dict(default='record', replay_latency='recorded', seed=1, rules=[
+        dict(name='telemetry', hosts=TELEMETRY, action='deny'),
+        dict(name='updates-and-libraries', hosts=UPDATES_AND_LIBRARIES, action='passthrough')])
 
 
 def sha256_file(path):
@@ -244,18 +251,34 @@ class Backend:
             await self.server.stop()
 
 
-ERROR_LINE = re.compile(r'(\bERROR\b|\bSEVERE\b|Exception|\tat [a-z])')
+ERROR_START = re.compile(r'(\[[0-9:]+ (ERROR|SEVERE)\]|\bERROR\]|\bSEVERE\]|^\S*Exception\b)')
+CONTINUATION = re.compile(r'^(\s+at |\s*Caused by:|\s+\.\.\. \d+ more|\s*Suppressed:|[\w.$]+(Exception|Error)(:|$))')
+PLATFORM_LOGGERS = ('PaperVersionFetcher', 'Error obtaining version information')
 
 
 def product_errors(console, adapter, platform):
-    """Console error lines plausibly attributable to the product (by logger tag or package)."""
-    tags = {adapter['data_dir'][platform], adapter['id'], adapter['name'].split()[0]}
-    hits = []
+    """ERROR/SEVERE entries attributed to the product.
+
+    An entry is the log line plus its stack-trace continuation lines. It is attributed
+    when the product's logger tag, plugin name or a class from its package appears in
+    that entry (never in neighbouring entries). Known platform-internal loggers are
+    excluded.
+    """
+    tags = {t.lower() for t in (adapter['data_dir'][platform], adapter['id'], adapter['name'].split()[0],
+                                 *adapter.get('packages', [])) if t}
     lines = console.splitlines()
-    for index, line in enumerate(lines):
-        if not ERROR_LINE.search(line) or line.lstrip().startswith('at '):
+    hits, index = [], 0
+    while index < len(lines):
+        line = lines[index]
+        if ERROR_START.search(line) and not any(p in line for p in PLATFORM_LOGGERS):
+            entry = [line]
+            index += 1
+            while index < len(lines) and CONTINUATION.match(lines[index]):
+                entry.append(lines[index])
+                index += 1
+            text = '\n'.join(entry).lower()
+            if any(tag in text for tag in tags):
+                hits.append(line[:300])
             continue
-        window = ' '.join(lines[index:index + 12]).lower()
-        if any(tag.lower() in window for tag in tags if tag):
-            hits.append(line[:300])
+        index += 1
     return hits

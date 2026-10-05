@@ -13,7 +13,7 @@ import shutil
 import yaml
 
 from . import mcclient, products
-from .engine import Backend, Instance, measurement_rules, product_errors, profile_edits
+from .engine import Backend, Instance, clean_install_rules, measurement_rules, product_errors, profile_edits
 
 PRIVATE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                        'cache', 'private', 'detection-v1.private.jsonl')
@@ -48,7 +48,7 @@ async def join(instance, subject, observe_s=OBSERVE_S):
 
 
 async def with_instance(runtime, product_id, platform, profile, canaries, body, *, extra_edits=(), clean=False,
-                        pin_key=None, label=None, keep=False):
+                        pin_key=None, label=None, keep=False, rules=None):
     """Run body(instance) between a fresh prepare/start and stop; always records teardown."""
     backend = None
     if platform in ('velocity', 'bungee'):
@@ -57,7 +57,7 @@ async def with_instance(runtime, product_id, platform, profile, canaries, body, 
     record = dict(product=product_id, platform=platform, profile=profile, pin=instance.pin_key)
     try:
         await instance.prepare(profile, canaries, extra_edits=extra_edits, clean_install=clean)
-        runtime.rules(measurement_rules())
+        runtime.rules(rules or measurement_rules())
         record['start'] = await instance.start()
         record['result'] = await body(instance)
     except Exception as error:
@@ -95,14 +95,16 @@ async def clean_install(runtime, product_id, platform, canaries, cases):
         return dict(data_dir_created=os.path.isdir(data_dir), generated=generated[:40],
                     joins=[await join(instance, subject) for subject in cases])
     return await with_instance(runtime, product_id, platform, 'shipped', canaries, body, clean=True,
-                               label=f'clean-{product_id}-{platform}')
+                               label=f'clean-{product_id}-{platform}', rules=clean_install_rules())
 
 
+# One operator-changed integer per product; the first path that exists in the *previous*
+# release's generated config is used and bumped by one.
 UPGRADE_MARKERS = {
-    'connection-guard': ('config.yml', 'lookup.http-timeout-ms', 2600),
-    'foxgate': ('config.yml', 'antivpn.timeout', 2100),
-    'proxyshield': ('config.yml', 'api.timeout-seconds', 5),
-    'vpnguard': ('config.yml', 'timeout', 5100),
+    'connection-guard': ['lookup.http-timeout-ms', 'provider.cache.expiration.vpn', 'required-positive-flags'],
+    'foxgate': ['antivpn.timeout', 'antivpn.maxFlags'],
+    'proxyshield': ['api.timeout-seconds', 'api.cache-minutes'],
+    'vpnguard': ['timeout', 'cache-ttl-hours'],
 }
 
 
@@ -129,10 +131,12 @@ async def upgrade(runtime, product_id, platform, canaries, cases):
     except Exception as error:
         record['harness_error'] = f'previous release could not be installed: {error}'
         return record
-    file, dotted, value = UPGRADE_MARKERS[product_id]
-    path = os.path.join(old.data_dir, file)
+    path = os.path.join(old.data_dir, adapter['config'])
     document = yaml.safe_load(open(path)) or {}
-    marker_set = read_path(document, dotted) is not None
+    dotted = next((p for p in UPGRADE_MARKERS[product_id] if isinstance(read_path(document, p), int)
+                   and not isinstance(read_path(document, p), bool)), None)
+    marker_set = dotted is not None
+    value = read_path(document, dotted) + 1 if marker_set else None
     if marker_set:
         node = document
         keys = dotted.split('.')
@@ -188,7 +192,7 @@ async def invalid_reload(runtime, product_id, platform, canaries, positives, neg
         out['after_positive'] = await join(instance, positives[1])
         out['after_negative'] = await join(instance, negative)
         out['process_alive'] = instance.server.process.returncode is None
-        out['error_reported'] = any(re.search(r'(?i)(error|invalid|failed|could not|exception|yaml)', line)
+        out['error_reported'] = any(re.search(r'(?i)(error|invalid|failed|could not|exception|yaml|reject)', line)
                                     for _, line in instance.server.lines[mark:])
         with open(config, 'w') as handle:
             handle.write(original)
