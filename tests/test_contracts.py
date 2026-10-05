@@ -241,3 +241,19 @@ class Analysis(unittest.TestCase):
         nets = heavy.parse_list(b'# comment\n1.2.3.4\n5.6.7.0/24\nsocks5://9.9.9.9:1080\n10.0.0.1:8080\n2001:db8::/32\nbad\n')
         self.assertEqual([str(n) for n in nets], ['1.2.3.4/32', '5.6.7.0/24', '9.9.9.9/32', '10.0.0.1/32',
                                                   '2001:db8::/32'])
+
+
+class Publication(unittest.TestCase):
+    def test_public_logs_mask_addresses_but_not_timestamps(self):
+        from bench.__main__ import Recorder
+        recorder = Recorder.__new__(Recorder)
+        recorder.subject_map, recorder._sorted = {'203.0.113.5': '<tor-0001>'}, ['203.0.113.5']
+        text = recorder.redact('[14:29:23 INFO] 203.0.113.5 joined; 95.43.29.52:1 /[2a02:6ea0::7]:2 127.0.0.1 1.21.11')
+        self.assertEqual(text, '[14:29:23 INFO] <tor-0001> joined; <ip>:1 /[<ip6>]:2 127.0.0.1 1.21.11')
+
+    def test_synthetic_subjects_avoid_volunteer_networks(self):
+        from bench import heavy
+        items = [dict(cohort='residential', ip=f'84.{i}.10.20') for i in range(20)]
+        own = {dataset.slash24(i['ip']) for i in items}
+        for subject in heavy.synthetic_subjects(items, 200, 1):
+            self.assertNotIn(dataset.slash24(subject['ip']), own)

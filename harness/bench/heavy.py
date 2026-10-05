@@ -279,20 +279,22 @@ LATENCY_MODEL = dict(median=120, p95=350)
 
 
 def synthetic_subjects(items, count, seed):
-    """Random host addresses inside the residential cohort's /24 networks.
+    """Random addresses in the /12 networks around residential cohort addresses.
 
-    Used only under template replay: no lookup about them leaves the container.
+    Never inside a volunteer's own /24, and used only under template replay, so no
+    lookup about them reaches a real provider.
     """
     rng = random.Random(seed)
-    networks = sorted({str(ipaddress.ip_network(i['ip'] + '/24', strict=False))
-                       for i in items if i['cohort'] == 'residential'})
+    homes = sorted(i['ip'] for i in items if i['cohort'] == 'residential')
+    own = {str(ipaddress.ip_network(ip + '/24', strict=False)) for ip in homes}
     out, seen = [], set()
     while len(out) < count:
-        network = ipaddress.ip_network(rng.choice(networks))
-        ip = str(network[rng.randint(1, 254)])
-        if ip not in seen:
-            seen.add(ip)
-            out.append(dict(id=f'synthetic-{len(out):04d}', ip=ip, label='non_vpn', cohort='synthetic'))
+        network = ipaddress.ip_network(rng.choice(homes) + '/12', strict=False)
+        ip = network[rng.randint(256, network.num_addresses - 257)]
+        if str(ipaddress.ip_network(f'{ip}/24', strict=False)) in own or not ip.is_global or str(ip) in seen:
+            continue
+        seen.add(str(ip))
+        out.append(dict(id=f'synthetic-{len(out):04d}', ip=str(ip), label='non_vpn', cohort='synthetic'))
     return out
 
 
@@ -317,7 +319,7 @@ async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2
     return [await mcclient.admit(instance.port, s['ip'], player('seq'), observe_s=observe_s) for s in subjects]
 
 
-def summarize(results, events, lookup_hosts):
+def summarize(results, events, lookup_hosts, subjects=None):
     outcomes = {}
     for result in results:
         outcomes[result['outcome']] = outcomes.get(result['outcome'], 0) + 1
@@ -325,12 +327,15 @@ def summarize(results, events, lookup_hosts):
     per_host = {}
     for event in calls:
         per_host[event['host']] = per_host.get(event['host'], 0) + 1
+    distinct = {s['ip'] for s in subjects or []}
+    looked_up = {e.get('subject_ip') for e in calls if e.get('subject_ip')} & distinct
     return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]),
+                distinct_subjects=len(distinct), subjects_with_lookup=len(looked_up),
                 join_ms=percentiles([r.get('marks', {}).get('joined') for r in results]),
                 lookup_requests=len(calls), lookup_requests_per_host=per_host)
 
 
-async def performance(runtime, recorder, canaries, product_ids, platform='velocity', rounds=3):
+async def performance(runtime, recorder, canaries, product_ids, platform='velocity', rounds=3, profile='enforce'):
     items = dataset()
     reference = by_cohort(items, 'residential', 1, 0)[0]
     burst_subjects = synthetic_subjects(items, 1000, SEED)
@@ -340,7 +345,8 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
     for round_index in range(rounds):
         rotation = candidates[round_index % len(candidates):] + candidates[:round_index % len(candidates)]
         for product_id in rotation:
-            record = dict(product=product_id, platform=platform, round=round_index, latency_model=LATENCY_MODEL)
+            record = dict(product=product_id, platform=platform, round=round_index, latency_model=LATENCY_MODEL,
+                          profile=profile)
             backend = await Backend(platform).start() if platform in ('velocity', 'bungee') else None
             if product_id == 'none':
                 adapter = dict(lookup_hosts=[], data_dir={platform: '-'}, id='none', name='none')
@@ -353,7 +359,7 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
             else:
                 adapter = products.adapter(product_id)
                 instance = Instance(runtime, product_id, platform, label=f'perf-{product_id}-{round_index}')
-                await instance.prepare('enforce', canaries)
+                await instance.prepare(profile, canaries)
             try:
                 # Reference answers for the template come from one real lookup per product.
                 runtime.rules(measurement_rules())
@@ -370,7 +376,7 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                     mark = runtime.sequence()
                     started = time.monotonic()
                     results = await run_joins(instance, subjects, **kwargs)
-                    phase_record = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'])
+                    phase_record = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'], subjects)
                     phase_record['wall_s'] = round(time.monotonic() - started, 1)
                     record[phase] = phase_record
                     print(f'[performance] r{round_index} {product_id} {phase}: {phase_record["outcomes"]} '
@@ -388,7 +394,7 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                 if product_id != 'none':
                     record['product_error_lines'] = len(product_errors(console, adapter, platform))
                 record['_console'] = console
-            recorder.save('performance', f'r{round_index}-{product_id}', record)
+            recorder.save('performance', f'{platform}-{profile}-r{round_index}-{product_id}', record)
 
 
 # ------------------------------------------------------------------ Redis outage
@@ -469,8 +475,9 @@ async def run(family, runtime, recorder, canaries, product_ids, platforms):
         await redis_outage(runtime, recorder, canaries, product_ids)
     if family in ('performance', 'all'):
         for platform in [p for p in ('velocity', 'paper') if p in platforms]:
-            await performance(runtime, recorder, canaries, product_ids, platform=platform,
-                              rounds=int(os.environ.get('BENCH_PERF_ROUNDS', '3')))
+            for profile in os.environ.get('BENCH_PERF_PROFILES', 'enforce').split(','):
+                await performance(runtime, recorder, canaries, product_ids, platform=platform,
+                                  rounds=int(os.environ.get('BENCH_PERF_ROUNDS', '3')), profile=profile)
 
 
 # ------------------------------------------------------------------ circularity

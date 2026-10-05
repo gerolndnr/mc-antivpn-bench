@@ -181,7 +181,8 @@ Outcome classes (client-side, per join):
 
 ### 7.3 Performance (Velocity, then Paper)
 
-- **Latency model.** Lookup APIs are served from **template replay**: each product's own recorded answer for one reference residential subject, with the subject address substituted. The added latency is log-normal, median 120 ms, p95 350 ms, seeded, and identical for every product. No request leaves the container. Subjects are synthetic addresses inside the residential cohort's /24 networks.
+- **Profiles.** `enforce` and `free_keys` are run as separate passes. Keyless defaults can carry a product-enforced daily quota (CG counts ProxyCheck's 100 keyless queries per day locally), which ends lookups during a long test. Under template replay no request reaches a real provider, so `free_keys` removes that confound without spending quota.
+- **Latency model.** Lookup APIs are served from **template replay**: each product's own recorded answer for one reference residential subject, with the subject address substituted. The added latency is log-normal, median 120 ms, p95 350 ms, seeded, and identical for every product. No request leaves the container. Subjects are synthetic addresses in the /12 networks around residential cohort addresses, never inside a volunteer's own /24. Published logs mask every address that is not a dataset id.
 - **Phases per round, each on a fresh instance:**
 
   | Phase | What happens |
@@ -194,6 +195,7 @@ Outcome classes (client-side, per join):
 - **Rounds.** 3 rounds, with the product order rotated per round. A **no-product baseline** runs in every round, so platform cost is separated from product cost.
 - **Metrics.**
   - decision-time percentiles
+  - **subjects checked:** distinct burst subjects for which at least one lookup request was made. A product that admits players *without* checking them is fast for the wrong reason; this column makes that visible.
   - outcome counts, so a burst result with errors cannot win
   - lookup requests in total and per host (coalescing and caching)
   - JVM CPU seconds and peak RSS
@@ -301,6 +303,8 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
 ## Changes before the first published run
+
+- 2026-10-05: performance adds the *subjects checked* metric and a `free_keys` pass, after the first Velocity trial showed CG's local keyless ProxyCheck budget ending lookups mid-burst. Synthetic subjects no longer come from volunteers' /24 networks, and published logs mask all non-dataset addresses.
 
 - 2026-10-05: conditional list requests. A trial run served a recorded `304 Not Modified` to a fresh ProxyShield install without a cached copy, which disabled its list detection (fixture defect, not product behaviour). Conditional headers are now stripped and 304 answers are never recorded. Affected trial results are discarded.
 

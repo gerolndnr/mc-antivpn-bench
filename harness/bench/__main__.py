@@ -22,8 +22,24 @@ import time
 from . import artifacts, engine, products, scenarios
 
 ROOT = artifacts.ROOT
+IPV4_ANY = __import__('re').compile(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])')
+IPV6_ANY = __import__('re').compile(r'(?<![\w:])(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{0,4}(?![\w:])')
 ALL_PRODUCTS = ['connection-guard', 'foxgate', 'proxyshield', 'vpnguard']
 ALL_PLATFORMS = ['paper', 'folia', 'velocity', 'bungee']
+
+
+def _mask(candidate, replacement):
+    """Mask a real, non-loopback address; leave timestamps, versions and loopback alone."""
+    import ipaddress
+    try:
+        address = ipaddress.ip_address(candidate)
+    except ValueError:
+        return candidate
+    if address.is_loopback or address.is_unspecified or (address.version == 4 and candidate.count('.') != 3):
+        return candidate
+    if address.version == 6 and candidate.count(':') < 2:
+        return candidate
+    return replacement
 
 
 class Recorder:
@@ -41,11 +57,12 @@ class Recorder:
         self._sorted = sorted(self.subject_map, key=len, reverse=True)
 
     def redact(self, text):
+        """Dataset addresses become their ids; every other non-loopback address becomes <ip>."""
         for ip in self._sorted:
             if ip in text:
                 text = text.replace(ip, self.subject_map[ip])
-        # IPv6 as printed by Java (uncompressed, bracketed) is handled by the dataset
-        # address in canonical form only; raw logs stay private regardless.
+        text = IPV4_ANY.sub(lambda m: _mask(m.group(0), '<ip>'), text)
+        text = IPV6_ANY.sub(lambda m: _mask(m.group(0), '<ip6>'), text)
         return text
 
     def save(self, family, name, record):

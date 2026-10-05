@@ -260,14 +260,14 @@ def performance_table(records, lines, csv_rows):
         return
     by = {}
     for record in records:
-        by.setdefault((record['platform'], record['product']), []).append(record)
+        by.setdefault((record['platform'] + ' / ' + record.get('profile', 'enforce'), record['product']), []).append(record)
     for platform in sorted({p for p, _ in by}):
         lines.append(f'\n### Performance — {platform} (template replay, provider latency median 120 / p95 350 ms)\n')
         lines.append('Median over rounds; brackets: min–max of the per-round value. Decision time in ms; '
                      '"req" = lookup requests that reached the (simulated) providers.\n')
         lines.append('| Product | Cold p50 | Cold p95 | Warm p50 / req | Stampede (100× one IP) req / outcomes | '
-                     'Burst 1,000 @ 50/s p50 / p99 | Burst outcomes | CPU s | Peak RSS MB |')
-        lines.append('|---|---|---|---|---|---|---|---|---|')
+                     'Burst 1,000 @ 50/s p50 / p99 | Burst outcomes | Burst subjects checked | CPU s | Peak RSS MB |')
+        lines.append('|---|---|---|---|---|---|---|---|---|---|')
         for product in ['none'] + PRODUCTS:
             rounds = by.get((platform, product))
             if not rounds:
@@ -292,19 +292,22 @@ def performance_table(records, lines, csv_rows):
                     for key, value in ((r.get(phase) or {}).get('outcomes') or {}).items():
                         merged[key] = merged.get(key, 0) + value
                 return ', '.join(f'{k} {v}' for k, v in sorted(merged.items())) or '—'
+            checked = [f"{(r.get('burst') or {}).get('subjects_with_lookup')}/{(r.get('burst') or {}).get('distinct_subjects')}"
+                       for r in rounds if (r.get('burst') or {}).get('distinct_subjects')]
+            checked_text = ', '.join(checked) or 'not recorded'
             cpu = [r['resources']['cpu_seconds'] for r in rounds if (r.get('resources') or {}).get('cpu_seconds')]
             rss = [r['resources']['max_rss_mb'] for r in rounds if (r.get('resources') or {}).get('max_rss_mb')]
             lines.append(f'| {NAMES[product]} | {agg("cold", "decision_ms", "p50")} | {agg("cold", "decision_ms", "p95")} | '
                          f'{agg("warm", "decision_ms", "p50")} / {agg("warm", "lookup_requests")} | '
                          f'{agg("stampede", "lookup_requests")} / {outcomes("stampede")} | '
                          f'{agg("burst", "decision_ms", "p50")} / {agg("burst", "decision_ms", "p99")} | '
-                         f'{outcomes("burst")} | {statistics.median(cpu):.0f} | {statistics.median(rss):.0f} |'
+                         f'{outcomes("burst")} | {checked_text} | {statistics.median(cpu):.0f} | {statistics.median(rss):.0f} |'
                          if cpu and rss else
                          f'| {NAMES[product]} | {agg("cold", "decision_ms", "p50")} | {agg("cold", "decision_ms", "p95")} | '
                          f'{agg("warm", "decision_ms", "p50")} / {agg("warm", "lookup_requests")} | '
                          f'{agg("stampede", "lookup_requests")} / {outcomes("stampede")} | '
                          f'{agg("burst", "decision_ms", "p50")} / {agg("burst", "decision_ms", "p99")} | '
-                         f'{outcomes("burst")} | — | — |')
+                         f'{outcomes("burst")} | {checked_text} | — | — |')
             for r in rounds:
                 for phase in ('cold', 'warm', 'stampede', 'burst'):
                     data = r.get(phase) or {}
