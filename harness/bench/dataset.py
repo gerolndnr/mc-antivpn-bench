@@ -48,6 +48,22 @@ EXCLUDE_TAGS = {'datacentre', 'datacenter', 'data-center', 'core', 'vps', 'cloud
                 'anchor', 'vpn', 'tor', 'academic', 'office', 'business'}
 
 
+def fetch_with_retries(url, attempts=5):
+    """Large archive responses occasionally break mid-transfer; retry with backoff."""
+    import http.client
+    import time
+    for attempt in range(attempts):
+        try:
+            request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+            with urllib.request.urlopen(request, timeout=300) as response:
+                return response.read()
+        except (OSError, http.client.HTTPException, ValueError) as error:
+            if attempt == attempts - 1:
+                raise
+            print(f'fetch failed ({type(error).__name__}), retrying: {url}', file=sys.stderr)
+            time.sleep(5 * (attempt + 1))
+
+
 class Sources:
     """Fetches raw snapshots once, keeps them in the git-ignored cache, records provenance."""
 
@@ -66,9 +82,7 @@ class Sources:
             with open(meta_path) as handle:
                 meta = json.load(handle)
         else:
-            request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-            with urllib.request.urlopen(request, timeout=180) as response:
-                data = response.read()
+            data = fetch_with_retries(url)
             if data[:2] == b'\x1f\x8b':  # archive captures keep the original content encoding
                 data = gzip.decompress(data)
             meta = dict(url=url, fetched_at=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
