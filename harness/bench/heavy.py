@@ -96,7 +96,7 @@ async def baseline_query(host, path, timeout=20):
     reader, writer = await asyncio.wait_for(asyncio.open_connection('127.0.0.1', CATCH_ALL_PORT, ssl=context,
                                                                     server_hostname=host), timeout)
     try:
-        writer.write(f'GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: mc-antivpn-bench-baseline\r\n'
+        writer.write(f'GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: mc-antivpn-bench-baseline\r\nX-Bench-Baseline: 1\r\n'
                      f'Connection: close\r\n\r\n'.encode())
         await writer.drain()
         raw = await asyncio.wait_for(reader.read(), timeout)
@@ -158,7 +158,8 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
                 mcclient.admit(i.port, subject['ip'], player(i.product_id), observe_s=OBSERVE_S)
                 for i in sorted(instances, key=lambda i: rotation.index(i.product_id))])
             base = await baselines(subject, canaries)
-            events = [e for e in runtime.events_since(mark) if e.get('subject_ip') in (subject['ip'],)]
+            events = [e for e in runtime.events_since(mark) if e.get('subject_ip') == subject['ip']
+                      and not e.get('baseline')]
             provider_errors = sorted({e['host'] for e in events if (e.get('status') or 0) in (429,) or
                                       (e.get('status') or 0) >= 500 or e.get('error')})
             row = dict(subject=subject['id'], cohort=subject['cohort'], label=subject['label'], attempt=attempt,

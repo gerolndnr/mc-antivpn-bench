@@ -315,7 +315,7 @@ class Interposer:
                 target += ('&' if '?' in target else '?') + urllib.parse.urlencode({param: value})
         raw_target = self.inject(host, target)
         headers = [(k, self.inject(host, v)) for k, v in request.headers
-                   if k.lower() not in ('accept-encoding', 'connection', 'keep-alive', 'proxy-connection', 'host',
+                   if k.lower() not in ('accept-encoding', 'connection', 'keep-alive', 'proxy-connection', 'host', 'x-bench-baseline',
                                         'content-length', 'transfer-encoding', 'upgrade', 'http2-settings', 'te')]
         body = self.inject(host, request.body.decode('latin-1')).encode('latin-1')
         lines = [f'{request.method} {raw_target} HTTP/1.1', f'Host: {request.header("host") or host}']
@@ -369,6 +369,7 @@ class Interposer:
         rule = self.rule_for(host)
         key, template_key, subject = self.canonical(scheme, host, request)
         event = dict(conn=conn_id, scheme=scheme, host=host, port=port, method=request.method,
+                     baseline=bool(request.header('x-bench-baseline')),
                      version=request.version, target=self.redact(request.target)[:400], subject_ip=subject,
                      action=rule.get('action', 'deny'), rule=rule.get('name'), leaks=leaks)
         return dict(host=host, rule=rule, action=event['action'], key=key, template_key=template_key,
@@ -646,6 +647,9 @@ class Interposer:
                 original = socket.inet_ntop(socket.AF_INET6, packed[8:24])
             except OSError:
                 original, port = None, None
+        if port == CATCH_ALL_PORT:
+            # Not redirected: a direct client (baseline queries). Host comes from SNI/Host header.
+            original, port = None, None
         conn.setblocking(False)
         readable = loop.create_future()
         loop.add_reader(conn.fileno(), lambda: readable.done() or readable.set_result(True))
