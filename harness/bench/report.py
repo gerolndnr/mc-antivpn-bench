@@ -20,7 +20,8 @@ POSITIVE = {'commercial_vpn', 'fresh_vpn', 'vpn_v6', 'tor', 'proxy'}
 NAMES = {'connection-guard': 'Connection Guard 0.5.0', 'foxgate': 'FoxGate 1.2.0-pre10',
          'proxyshield': 'ProxyShield 2.5.1', 'vpnguard': 'VPNGuard 1.2.0', 'proxycheck': 'ProxyCheck API',
          'vpnapi': 'VPNAPI API', 'none': 'no product (platform only)'}
-PRODUCTS = ['connection-guard', 'foxgate', 'proxyshield', 'vpnguard']
+PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard']
+NAMES['connection-guard-candidate'] = 'Connection Guard 0.5.2-SNAPSHOT (unreleased candidate)'
 
 
 def wilson(k, n, z=1.96):

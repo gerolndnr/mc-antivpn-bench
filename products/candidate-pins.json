@@ -1,0 +1,28 @@
+{
+  "connectionguard-candidate-f9b94c4-b3c895c3e906": {
+    "project": "connectionguard",
+    "version": "0.5.2-SNAPSHOT",
+    "version_type": "candidate",
+    "release_status": "unreleased",
+    "filename": "connection-guard-0.5.2-SNAPSHOT-all.jar",
+    "sha256": "b3c895c3e90696d40dd071814988d74b8e324a2c31a55829c69aa9a660a73717",
+    "sha512": "a7a9de8e0ea8410b37f7625250c59d6e3ff5f6e9e090812184fbaa53aaf754061f1895a4e8409d4d0d33bc246a992d47252ccc8d8f1899762b696b2161739bd0",
+    "size": 4309074,
+    "source_commit": "f9b94c45f61e23560927929d8be14836c73659fb",
+    "source_tree": "366eecbbf85d31b39a0922e1c490790ecd80a142",
+    "artifact": "cache/candidates/b3c895c3e90696d40dd071814988d74b8e324a2c31a55829c69aa9a660a73717.jar"
+  },
+  "connectionguard-candidate-05ae8c3-17d70ac8c42d": {
+    "project": "connectionguard",
+    "version": "0.5.2-SNAPSHOT",
+    "version_type": "candidate",
+    "release_status": "unreleased",
+    "filename": "connection-guard-0.5.2-SNAPSHOT-all.jar",
+    "sha256": "17d70ac8c42dfdb2aae5b1885a1d75545d47c94173714895d4660b0fc30573c8",
+    "sha512": "da81093d65a7a9ab726e5aae37a4ae1d1c849bfbe36fa56a576d2dff0ba3ddbf130d116754dd8513d7bcd65311f1c3498bdfc16b20913970e756d3852f6a6269",
+    "size": 4309306,
+    "source_commit": "05ae8c3155cecb60251ac799a750dca9b5f22684",
+    "source_tree": "bf0fc354547f88aed65baa5e2509d91864d6f055",
+    "artifact": "cache/candidates/17d70ac8c42dfdb2aae5b1885a1d75545d47c94173714895d4660b0fc30573c8.jar"
+  }
+}

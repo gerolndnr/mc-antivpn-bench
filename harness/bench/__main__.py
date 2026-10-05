@@ -113,6 +113,8 @@ def environment(canaries):
         started=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         bench_commit=commit, bench_tree_dirty=bool(dirty), java=java, python=sys.version.split()[0],
         kernel=host_platform.release(), cpus=os.cpu_count(),
+        backend_heap=__import__("bench.servers", fromlist=["HEAP"]).HEAP, tor_refresh_disabled=os.environ.get("CONNECTIONGUARD_TOR_REFRESH") == "false",
+        read_only_templates_root=os.environ.get('BENCH_READ_ONLY_TEMPLATES_ROOT'),
         memory_kb=int(open('/proc/meminfo').read().split()[1]) if os.path.exists('/proc/meminfo') else None,
         image=os.environ.get('BENCH_IMAGE'), host=os.environ.get('BENCH_HOST_DESCRIPTION'),
         keys_present=dict(proxycheck=bool(os.environ.get('PROXYCHECK_KEY')),
@@ -147,13 +149,14 @@ async def prebuild_templates(runtime, platforms):
     """Build every platform template once, with install egress (vanilla jar download)."""
     from . import servers
     runtime.install_mode()
-    needed = [('paper', 'standalone')] + [('folia', 'standalone')] * ('folia' in platforms)
-    needed += [('paper', f'{p}-backend') for p in ('velocity', 'bungee')]
+    needed = [(p, 'standalone') for p in ('paper', 'folia') if p in platforms]
+    needed += [('paper', f'{p}-backend') for p in ('velocity', 'bungee') if p in platforms]
     for platform, mode in needed:
         await servers.build_paper_template(platform, mode, engine.PRODUCT_PORT_BASE if mode == 'standalone'
                                            else engine.BACKEND_PORT)
     for proxy in ('velocity', 'bungee'):
-        await servers.build_proxy_template(proxy, engine.PRODUCT_PORT_BASE, engine.BACKEND_PORT)
+        if proxy in platforms:
+            await servers.build_proxy_template(proxy, engine.PRODUCT_PORT_BASE, engine.BACKEND_PORT)
     runtime.rules(engine.measurement_rules())
 
 
@@ -174,7 +177,11 @@ async def main_run(args):
     product_ids = args.products.split(',') if args.products else ALL_PRODUCTS
     platforms = args.platforms.split(',') if args.platforms else ALL_PLATFORMS
     manifest = dict(run_id=run_id, family=args.family, products=product_ids, platforms=platforms,
-                    environment=environment(canaries))
+                    environment=environment(canaries),
+                    product_adapters={p: products.adapter(p) for p in product_ids},
+                    harness_sha256={os.path.relpath(os.path.join(base, f), ROOT): hashlib.sha256(open(os.path.join(base, f), 'rb').read()).hexdigest()
+                                    for base, _, files in os.walk(os.path.join(ROOT, 'harness', 'bench'))
+                                    for f in sorted(files) if f.endswith('.py')})
     open(os.path.join(recorder.public, 'manifest.json'), 'w').write(json.dumps(manifest, indent=2, default=str))
     started = time.monotonic()
     try:

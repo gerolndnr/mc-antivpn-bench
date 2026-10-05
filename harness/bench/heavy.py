@@ -90,11 +90,11 @@ def decision_ms(result):
 
 
 # ------------------------------------------------------------------ baselines
-async def baseline_query(host, path, timeout=20):
+async def baseline_query(host, path, timeout=20, scheme='https'):
     """HTTPS GET through the interposer (canary keys are swapped for real keys there)."""
-    context = ssl.create_default_context(cafile='/work/state/ca/ca.pem')
+    context = ssl.create_default_context(cafile='/work/state/ca/ca.pem') if scheme == 'https' else None
     reader, writer = await asyncio.wait_for(asyncio.open_connection('127.0.0.1', CATCH_ALL_PORT, ssl=context,
-                                                                    server_hostname=host), timeout)
+                                                                    server_hostname=host if context else None), timeout)
     try:
         writer.write(f'GET {path} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: mc-antivpn-bench-baseline\r\nX-Bench-Baseline: 1\r\n'
                      f'Connection: close\r\n\r\n'.encode())
@@ -318,11 +318,14 @@ PROVIDER_QUOTAS = {
 }
 
 
-def template_rules(adapter, reference_ip):
+def template_rules(adapter, reference_ip, profile="enforce"):
     hosts = adapter['lookup_hosts']
+    quotas = dict(PROVIDER_QUOTAS)
+    if profile in ('enforce', 'shipped'):
+        quotas.update(adapter.get('template_quotas', {}))
     extra = [dict(name=f'template-{host}', hosts=[host], action='template', reference_ip=reference_ip,
                   latency_ms=LATENCY_MODEL, quota=dict(limit=q['limit'], window_s=q['window_s']))
-             for host, q in PROVIDER_QUOTAS.items() if host in hosts]
+             for host, q in quotas.items() if host in hosts]
     extra.append(dict(name='template', hosts=hosts, action='template', reference_ip=reference_ip,
                       latency_ms=LATENCY_MODEL))
     return measurement_rules(extra=extra, normalize_quota=False)
@@ -359,6 +362,26 @@ def summarize(results, events, lookup_hosts, subjects=None):
                 lookup_requests=len(calls), lookup_requests_per_host=per_host)
 
 
+def cg_provider_successes(lines):
+    """Only built-in VPN counters, never a guess from HTTP attempts or allowed joins."""
+    import re
+    counts = {}
+    for line in lines:
+        found = re.search(r'(ProxyCheck|IP-API|IpQueryVpnProvider#\d+): attempts=\d+ successes=(\d+)', line)
+        if found: counts[found[1]] = int(found[2])
+    return sum(counts.values()) if counts else None
+
+
+def candidate_counter_is_valid(instance):
+    import yaml
+    config = yaml.safe_load(open(os.path.join(instance.data_dir, 'config.yml')))
+    provider = config['provider']
+    return (provider['vpn-strategy'] == 'FAILOVER' and provider['geo']['service'] == 'Disabled'
+            and not provider['vpn'].get('local', {}).get('enabled', False)
+            and not config['integrations']['providers']['enabled']
+            and all(not v.get('enabled', False) for k, v in provider['vpn'].items() if k not in ('proxycheck', 'ipquery', 'ip-api') and isinstance(v, dict)))
+
+
 async def performance(runtime, recorder, canaries, product_ids, platform='velocity', rounds=3, profile='enforce'):
     items = dataset()
     reference = by_cohort(items, 'residential', 1, 0)[0]
@@ -390,18 +413,33 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                 record['start'] = await instance.start()
                 if product_id != 'none':
                     await mcclient.admit(instance.port, reference['ip'], player('ref'), observe_s=1)
-                runtime.rules(template_rules(adapter, reference['ip']) if product_id != 'none' else measurement_rules())
+                record['backup_template_seeds'] = []
+                if product_id != 'none':
+                    for seed in adapter.get('template_seed_requests', []):
+                        status, _ = await baseline_query(seed['host'], seed['path'].replace('{IP}', reference['ip']), scheme=seed['scheme'])
+                        record['backup_template_seeds'].append(dict(host=seed['host'], status=status))
+                        if status != 200:
+                            raise RuntimeError('Backup reference template unavailable; performance cannot be attributed to a complete failover chain')
+                runtime.rules(template_rules(adapter, reference['ip'], profile) if product_id != 'none' else measurement_rules())
                 sampler = Sampler(instance.server.process.pid).start()
                 for phase, subjects, kwargs in (
                         ('cold', seq_subjects[:50], {}),
                         ('warm', seq_subjects[:50], {}),
                         ('stampede', [stampede_ip] * 100, dict(concurrency=100)),
                         ('burst', burst_subjects, dict(rate=50))):
+                    counter_enabled = adapter.get('experimental', False) and candidate_counter_is_valid(instance)
+                    before = cg_provider_successes(await instance.command('cg providers', settle=0.3)) if counter_enabled else None
                     mark = runtime.sequence()
                     started = time.monotonic()
                     results = await run_joins(instance, subjects, **kwargs)
                     phase_record = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'], subjects)
                     phase_record['wall_s'] = round(time.monotonic() - started, 1)
+                    if counter_enabled:
+                        after = cg_provider_successes(await instance.command('cg providers', settle=0.3))
+                        if before is not None and after is not None:
+                            phase_record['completed_provider_verdicts_lower_bound'] = max(0, after - before)
+                            phase_record['completed_check_evidence'] = 'built-in VPN success delta, FAILOVER only, no geo/local/extensions; cached and local Tor verdicts excluded'
+                    # HTTP subject coverage remains a separate attempt count, never concrete-check coverage.
                     record[phase] = phase_record
                     print(f'[performance] r{round_index} {product_id} {phase}: {phase_record["outcomes"]} '
                           f'p50={phase_record["decision_ms"].get("p50")} req={phase_record["lookup_requests"]}', flush=True)
@@ -555,6 +593,15 @@ def circularity(runtime_state_dir, product_ids):
             parsed = parse_list(body)
             networks += parsed
             used.append(dict(url=url, entries=len(parsed), origin=origin))
+        for resource in products.adapter(product_id).get('bundled_lists', []):
+            if resource != 'tor-exits.txt':
+                raise ValueError('Unreviewed bundled list resource')
+            import zipfile, hashlib
+            pin_key = products.adapter(product_id)['pins']['velocity']
+            with zipfile.ZipFile(products.jar(pin_key)) as archive:
+                body = archive.read(resource)
+            parsed = parse_list(body); networks += parsed
+            used.append(dict(resource=resource, entries=len(parsed), origin='exact pinned JAR', sha256=hashlib.sha256(body).hexdigest()))
         v4 = [n for n in networks if n.version == 4]
         v6 = [n for n in networks if n.version == 6]
         counts = {}

@@ -1,0 +1,129 @@
+{
+  "id": "connection-guard-candidate",
+  "name": "Connection Guard 0.5.2-SNAPSHOT (unreleased candidate)",
+  "relationship": "Maintained by the authors of this benchmark. Conflict of interest; see METHODOLOGY.md section 1.",
+  "license": "MIT",
+  "source": "https://github.com/gerolndnr/connection-guard",
+  "listing": "https://modrinth.com/plugin/connectionguard",
+  "pins": {
+    "paper": "connectionguard-candidate-05ae8c3-17d70ac8c42d",
+    "folia": "connectionguard-candidate-05ae8c3-17d70ac8c42d",
+    "velocity": "connectionguard-candidate-05ae8c3-17d70ac8c42d",
+    "bungee": "connectionguard-candidate-05ae8c3-17d70ac8c42d"
+  },
+  "previous_pins": {
+    "paper": "connectionguard-0.4.11",
+    "velocity": "connectionguard-0.4.11"
+  },
+  "data_dir": {
+    "paper": "ConnectionGuard",
+    "folia": "ConnectionGuard",
+    "velocity": "connection-guard",
+    "bungee": "ConnectionGuard"
+  },
+  "config": "config.yml",
+  "ready_pattern": null,
+  "profiles": {
+    "shipped": {
+      "edits": [],
+      "note": "Unreleased candidate: fresh install ENFORCE, ProxyCheck v3 \u2192 IPQuery \u2192 IP-API, geo disabled; existing files preserve their modes."
+    },
+    "enforce": {
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "operation.mode": "ENFORCE"
+          }
+        }
+      ],
+      "note": "Same ENFORCE switch and unchanged shipped candidate failover. Existing public stable adapter remains unchanged."
+    },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through the product's documented key field (same key for every product)."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}",
+            "provider.vpn.vpnapi.enabled": true,
+            "provider.vpn.vpnapi.api-key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "Adds the free ProxyCheck and VPNAPI keys through the product's documented key fields."
+    }
+  },
+  "redis": {
+    "edits": [
+      {
+        "file": "config.yml",
+        "set": {
+          "provider.cache.type": "Redis",
+          "provider.cache.redis.hostname": "127.0.0.1",
+          "provider.cache.redis.port": 6379,
+          "provider.cache.redis.password": ""
+        }
+      }
+    ],
+    "note": "provider.cache.type: Redis (documented for multi-server networks)."
+  },
+  "commands": {
+    "reload": "cg reload",
+    "inspect": [
+      "cg doctor",
+      "cg providers",
+      "cg stats"
+    ]
+  },
+  "lookup_hosts": [
+    "proxycheck.io",
+    "ip-api.com",
+    "vpnapi.io",
+    "iphub.info",
+    "ipqualityscore.com",
+    "api.ipquery.io"
+  ],
+  "documented_failure_policy": "failure-policy.vpn: OPEN and failure-policy.geo: OPEN by default (admit when no provider can decide). lookup.deadline-ms 5000.",
+  "telemetry": [
+    "bStats (fixture-wide off)",
+    "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"
+  ],
+  "list_sources": [],
+  "list_sources_note": "Tor bulk snapshot embedded in the pinned JAR. Circularity counts read these exact bytes; fixture refresh is disabled.",
+  "experimental": true,
+  "template_seed_requests": [
+    {
+      "host": "api.ipquery.io",
+      "scheme": "https",
+      "path": "/{IP}"
+    },
+    {
+      "host": "ip-api.com",
+      "scheme": "http",
+      "path": "/json/{IP}?fields=status,message,proxy,hosting,as,isp,countryCode"
+    }
+  ],
+  "template_quotas": {
+    "proxycheck.io": {
+      "limit": 100,
+      "window_s": 86400,
+      "source": "Keyless ProxyCheck shipped candidate local cap: 100/day"
+    }
+  },
+  "bundled_lists": [
+    "tor-exits.txt"
+  ]
+}

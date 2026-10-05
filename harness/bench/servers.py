@@ -50,7 +50,7 @@ READY = {
     'paper': re.compile(r'Done \(\d'), 'folia': re.compile(r'Done \(\d'),
     'velocity': re.compile(r'Done \(\d'), 'bungee': re.compile(r'Listening on /'),
 }
-HEAP = {'paper': '1G', 'folia': '1G', 'velocity': '512M', 'bungee': '512M'}
+HEAP = {'paper': os.environ.get('BENCH_BACKEND_HEAP', '1G'), 'folia': os.environ.get('BENCH_BACKEND_HEAP', '1G'), 'velocity': '512M', 'bungee': '512M'}
 JVM_FLAGS = ['-XX:+UseG1GC', '-Dfile.encoding=UTF-8', '-Dterminal.jline=false', '-Dterminal.ansi=false',
              '-Djline.terminal=jline.UnsupportedTerminal', '-Dpaper.playerconnection.keepalive=60',
              '-DIReallyKnowWhatIAmDoingISwear=true']
@@ -329,8 +329,20 @@ def fresh_copy(template, destination):
                     ignore=lambda directory, names: [n for n in names if directory == template and n in shared])
     for name in shared:
         source = os.path.join(template, name)
-        subprocess.run(['chown', '-R', '0:0', source], check=True)
-        subprocess.run(['chmod', '-R', 'a+rX,go-w', source], check=True)
+        # An explicitly declared, pre-verified read-only cache belongs to another
+        # run. Never change its ownership or permissions through a template link.
+        read_only = os.environ.get('BENCH_READ_ONLY_TEMPLATES_ROOT')
+        if read_only:
+            from pathlib import Path
+            root = Path(read_only)
+            if not root.is_absolute() or root.resolve() == Path('/'):
+                raise ValueError('Read-only template root must be an explicit absolute subtree')
+            external = Path(source).resolve().is_relative_to(root.resolve())
+        else:
+            external = False
+        if not external:
+            subprocess.run(['chown', '-R', '0:0', source], check=True)
+            subprocess.run(['chmod', '-R', 'a+rX,go-w', source], check=True)
         os.symlink(source, os.path.join(destination, name))
     try:
         os.remove(os.path.join(destination, '.template-ready'))
