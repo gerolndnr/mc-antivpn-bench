@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Nightly detection chunks for the proxycheck_key profile: one chunk per UTC day keeps all
+    # products' ProxyCheck lookups under one free key's daily quota (see METHODOLOGY 7.1).
+    - cron: '20 0 * * *'
   workflow_dispatch:
     inputs:
       family:
@@ -20,6 +24,9 @@ on:
       detection_limit:
         description: Limit detection subjects (0 = full dataset)
         default: '0'
+      detection_chunk:
+        description: Detection chunk k/n (empty = all subjects)
+        default: ''
       detection_profiles:
         description: Detection profiles (comma-separated)
         default: 'enforce'
@@ -46,14 +53,28 @@ jobs:
       - run: PYTHONPATH=harness python -m unittest discover -s tests -v
 
   bench:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     needs: contracts
     runs-on: ubuntu-latest
     timeout-minutes: 350
     env:
-      RUN_ID: ${{ github.run_id }}-${{ inputs.family }}
+      RUN_ID: ${{ github.run_id }}-${{ inputs.family || 'detection' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Nightly chunk
+        id: nightly
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            k=$(( ( $(date -u +%s) - $(date -u -d 2026-10-06 +%s) ) / 86400 ))
+            if [ "$k" -lt 0 ] || [ "$k" -gt 3 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+            echo "family=detection" >> "$GITHUB_OUTPUT"
+            echo "chunk=$k/4" >> "$GITHUB_OUTPUT"
+            echo "profiles=proxycheck_key" >> "$GITHUB_OUTPUT"
+          else
+            echo "family=${{ inputs.family }}" >> "$GITHUB_OUTPUT"
+            echo "chunk=${{ inputs.detection_chunk }}" >> "$GITHUB_OUTPUT"
+            echo "profiles=${{ inputs.detection_profiles }}" >> "$GITHUB_OUTPUT"
+          fi
       - name: Host description
         run: |
           echo "BENCH_HOST_DESCRIPTION=GitHub-hosted $(nproc) vCPU, $(free -g | awk '/Mem/{print $2}') GB, $(lscpu | sed -n 's/Model name: *//p')" >> "$GITHUB_ENV"
@@ -80,12 +101,13 @@ jobs:
           VPNAPI_KEY: ${{ secrets.VPNAPI_KEY }}
         run: |
           mkdir -p "$RUNNER_TEMP/work"
-          args="run ${{ inputs.family }} --run-id $RUN_ID"
+          [ "${{ steps.nightly.outputs.skip }}" = "true" ] && exit 0
+          args="run ${{ steps.nightly.outputs.family }} --run-id $RUN_ID"
           [ -n "${{ inputs.products }}" ] && args="$args --products ${{ inputs.products }}"
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
           docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
             -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
-            -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_DETECTION_PROFILES="${{ inputs.detection_profiles }}" \
+            -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Collect state
         if: always()

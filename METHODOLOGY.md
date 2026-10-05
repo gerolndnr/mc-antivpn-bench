@@ -155,6 +155,7 @@ Outcome classes (client-side, per join):
   - **Capacity of the shipped configuration (`enforce`).** Some products limit their own keyless lookups per day (Connection Guard: 100 ProxyCheck queries, counted locally). When that limit ends lookups, the product admits unchecked. The `enforce` pass reports when that happened, as the subject index from which no lookup was made, and the detection rates over all subjects, which then mix both effects.
   - **Detection quality per decision (`proxycheck_key`).** This is the headline for detection and false positives: every product gets the same free ProxyCheck key, so no product runs out of lookups during the 692 subjects.
   - `free_keys` adds VPNAPI and runs only if both keys are configured.
+  - **Quota-safe chunks.** All products share one free ProxyCheck key (1,000 queries per day) and query it in different formats, about 5 queries per subject. The `proxycheck_key` pass therefore runs in 4 nightly chunks (stable hash of the subject id, cohorts mixed), each after the key's daily reset. Within a subject every product is still measured in the same second; across chunks, provider data may drift by up to 3 days, which the report states.
 - **Hosting addresses.** Blocking datacenter addresses is a policy choice. The dataset has no hosting cohort, so "blocks hosting" never counts as either detection or false positive.
 
 ### 7.2 Failure safety (Velocity, `enforce`)

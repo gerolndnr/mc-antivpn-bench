@@ -138,9 +138,16 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
     rng = random.Random(SEED)
     order = items[:]
     rng.shuffle(order)
-    limit = int(os.environ.get('BENCH_DETECTION_LIMIT', '0'))
+    limit = int(os.environ.get('BENCH_DETECTION_LIMIT') or '0')
     if limit:
         order = order[:limit]
+    chunk = os.environ.get('BENCH_DETECTION_CHUNK', '')
+    if chunk:
+        # k/n: a stable, cohort-mixed share of the dataset, so one free key's daily quota covers
+        # every product's lookups for that night's subjects (METHODOLOGY 7.1).
+        k, n = (int(x) for x in chunk.split('/'))
+        import hashlib
+        order = [s for s in order if int(hashlib.sha256(s['id'].encode()).hexdigest(), 16) % n == k]
     backend = await Backend(DETECTION_PLATFORM).start()
     instances = []
     try:
@@ -197,7 +204,7 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
                 rows.append(await measure(subject, 1))
                 await asyncio.sleep(max(0.0, SUBJECT_INTERVAL_S - (time.monotonic() - started)))
         record = dict(profile=profile, platform=DETECTION_PLATFORM, starts=starts, subjects=len(order),
-                      retried=len(retry), rows=rows)
+                      retried=len(retry), rows=rows, chunk=chunk or None)
     finally:
         teardown = {}
         for instance in instances:
@@ -212,7 +219,7 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
         record['circularity'] = circularity('/work/state', product_ids)
     except Exception as error:
         record['circularity'] = dict(error=f'{type(error).__name__}: {error}')
-    recorder.save('detection', profile, record)
+    recorder.save('detection', profile + (f'-chunk{chunk.replace("/", "of")}' if chunk else ''), record)
     return record
 
 
@@ -479,9 +486,9 @@ async def run(family, runtime, recorder, canaries, product_ids, platforms):
         await redis_outage(runtime, recorder, canaries, product_ids)
     if family in ('performance', 'all'):
         for platform in [p for p in ('velocity', 'paper') if p in platforms]:
-            for profile in os.environ.get('BENCH_PERF_PROFILES', 'enforce').split(','):
+            for profile in (os.environ.get('BENCH_PERF_PROFILES') or 'enforce').split(','):
                 await performance(runtime, recorder, canaries, product_ids, platform=platform,
-                                  rounds=int(os.environ.get('BENCH_PERF_ROUNDS', '3')), profile=profile)
+                                  rounds=int(os.environ.get('BENCH_PERF_ROUNDS') or '3'), profile=profile)
 
 
 # ------------------------------------------------------------------ circularity

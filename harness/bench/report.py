@@ -67,8 +67,35 @@ def headline_rows(record):
     return list(final.values())
 
 
-def detection_tables(records, lines, csv_rows):
+def merge_chunks(records):
+    """Nightly chunks of one profile form one measurement; rows are disjoint by subject."""
+    merged = {}
     for record in records:
+        if 'rows' not in record:
+            continue
+        key = record['profile']
+        if key not in merged:
+            merged[key] = dict(record, rows=list(record['rows']), chunks=[record.get('chunk')],
+                               _paths=[record['_path']])
+        else:
+            target = merged[key]
+            target['rows'] += record['rows']
+            target['subjects'] += record['subjects']
+            target['retried'] += record['retried']
+            target['chunks'].append(record.get('chunk'))
+            target['_paths'].append(record['_path'])
+            for product, entry in (record.get('circularity') or {}).items():
+                target.setdefault('circularity', {})
+                if product in target['circularity'] and 'cohorts' in entry:
+                    for cohort, value in entry['cohorts'].items():
+                        old = target['circularity'][product]['cohorts'].get(cohort)
+                        if old:
+                            old['listed'] = max(old['listed'], value['listed'])
+    return list(merged.values())
+
+
+def detection_tables(records, lines, csv_rows):
+    for record in merge_chunks(records):
         if 'rows' not in record:
             continue
         rows = headline_rows(record)
@@ -126,7 +153,10 @@ def detection_tables(records, lines, csv_rows):
             others = [NAMES[p] for p in products if not circ.get(p, {}).get('lists')]
             if others:
                 lines.append('\nNo downloaded lists in the shipped configuration: ' + ', '.join(others) + '.')
-        lines.append(f'\nRaw rows: [`{record["_path"]}`]({record["_path"]}).')
+        if len(record.get('chunks') or []) > 1:
+            lines.append(f'\nMeasured in {len(record["chunks"])} nightly chunks ({", ".join(c or "all" for c in record["chunks"])}); '
+                         'within each subject all products were measured in the same second.')
+        lines.append('\nRaw rows: ' + ', '.join(f'[`{p}`]({p})' for p in record.get('_paths', [record['_path']])) + '.')
 
 
 # --------------------------------------------------------------- functional
