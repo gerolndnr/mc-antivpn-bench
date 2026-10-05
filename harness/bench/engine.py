@@ -30,13 +30,16 @@ BACKEND_PORT = 25601
 
 # Measurement-phase egress policy, identical for every product.
 TELEMETRY = ['bstats.org', '*.bstats.org', 'sentry.io', '*.sentry.io', 'api.connectionguard.net']
-UPDATES_AND_LIBRARIES = ['api.github.com', 'github.com', 'objects.githubusercontent.com',
-                         'release-assets.githubusercontent.com', 'hub.spigotmc.org', 'api.spiget.org',
-                         'www.spigotmc.org', 'api.modrinth.com', 'cdn.modrinth.com',
-                         'repo1.maven.org', 'repo.maven.apache.org', '*.maven.apache.org', 'repo.papermc.io',
-                         'repo.okaeri.cloud', 'jitpack.io', 'piston-data.mojang.com', 'piston-meta.mojang.com',
-                         'launchermeta.mojang.com', 'libraries.minecraft.net', 'api.minecraftservices.com',
-                         'sessionserver.mojang.com']
+# Self-updaters and version checks could change the artifact under test: blocked.
+UPDATES = ['api.github.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com',
+           'hub.spigotmc.org', 'api.spiget.org', 'www.spigotmc.org', 'api.modrinth.com', 'cdn.modrinth.com',
+           'piston-data.mojang.com', 'piston-meta.mojang.com', 'launchermeta.mojang.com', 'libraries.minecraft.net',
+           'api.minecraftservices.com', 'sessionserver.mojang.com']
+# Runtime library downloads (e.g. a Redis client loaded only when Redis is configured) are normal
+# product behaviour on a server with internet access: streamed through, never recorded.
+LIBRARIES = ['repo1.maven.org', 'repo.maven.apache.org', '*.maven.apache.org', 'repo.papermc.io', 'repo.okaeri.cloud',
+             'jitpack.io', 'repo.codemc.io', 'oss.sonatype.org', 's01.oss.sonatype.org']
+UPDATES_AND_LIBRARIES = UPDATES + LIBRARIES
 
 
 def make_canaries(seed=None):
@@ -54,7 +57,8 @@ def secrets_spec(canaries):
 
 def measurement_rules(extra=None, default='record', normalize_quota=True):
     rules = [dict(name='telemetry', hosts=TELEMETRY, action='deny'),
-             dict(name='updates-and-libraries', hosts=UPDATES_AND_LIBRARIES, action='deny')]
+             dict(name='updates', hosts=UPDATES, action='deny'),
+             dict(name='libraries', hosts=LIBRARIES, action='passthrough')]
     rules += list(extra or [])
     if normalize_quota:
         # Keyless ProxyCheck allows 100 queries/day per egress address. The benchmark sends
@@ -133,6 +137,7 @@ class Instance:
         self.jar_name = products.pins()[self.pin_key]['filename']
         self.jar_sha256 = None
         self.mark = None
+        self.history = []
 
     @property
     def data_dir(self):
@@ -207,7 +212,10 @@ class Instance:
         return self
 
     async def start(self, cap=180):
-        self.mark = self.runtime.sequence()
+        if self.server:
+            self.history.append(self.server.log_text())
+        if self.mark is None:
+            self.mark = self.runtime.sequence()
         self.server = servers.Server(self.platform, self.directory, self.port, name=self.label)
         started = time.monotonic()
         platform_ready = await self.server.start(timeout=300)
@@ -229,7 +237,9 @@ class Instance:
         return self.runtime.events_since(self.mark or 0)
 
     def console(self):
-        return self.server.log_text() if self.server else ''
+        """Console of every start in this case, separated by a marker line."""
+        parts = self.history + ([self.server.log_text()] if self.server else [])
+        return '\n----- mc-antivpn-bench: server restarted -----\n'.join(parts)
 
 
 class Backend:

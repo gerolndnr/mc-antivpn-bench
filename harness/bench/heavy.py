@@ -383,7 +383,8 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
 # ------------------------------------------------------------------ Redis outage
 async def redis_outage(runtime, recorder, canaries, product_ids, platform='velocity'):
     items = dataset()
-    pool = by_cohort(items, 'residential', 8, 10) + by_cohort(items, 'commercial_vpn', 8, 10)
+    residential, vpn = by_cohort(items, 'residential', 8, 10), by_cohort(items, 'commercial_vpn', 8, 10)
+    pool = [s for pair in zip(residential, vpn) for s in pair]  # every step: one residential, one VPN
     for product_id in product_ids:
         adapter = products.adapter(product_id)
         if not adapter.get('redis'):
@@ -405,7 +406,8 @@ async def redis_outage(runtime, recorder, canaries, product_ids, platform='veloc
                 result = await mcclient.admit(instance.port, subject['ip'], player(product_id), observe_s=4,
                                               deadline_s=60)
                 outcome.append(dict(subject=subject['id'], label=subject['label'], outcome=result['outcome'],
-                                    blocked=blocked(result['outcome']), decision_ms=decision_ms(result)))
+                                    blocked=blocked(result['outcome']), decision_ms=decision_ms(result),
+                                    reason=(result.get('reason') or '')[:160]))
             mark = len(instance.server.lines)
             record['steps'][name] = dict(joins=outcome, alive=instance.server.process.returncode is None)
             return mark
