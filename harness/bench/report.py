@@ -46,6 +46,13 @@ def load(directories, family):
             with open(path) as handle:
                 record = json.load(handle)
             record['_path'] = os.path.relpath(path, os.path.dirname(directories[0]))
+            console = path[:-5] + '.console.log'
+            if os.path.exists(console) and record.get('product') in PRODUCTS and record.get('platform'):
+                # Recompute with the current attribution rules (METHODOLOGY 7.7).
+                from .engine import product_errors
+                from .products import adapter
+                record['product_error_lines'] = product_errors(open(console).read(), adapter(record['product']),
+                                                               record['platform'])
             out.append(record)
     return out
 

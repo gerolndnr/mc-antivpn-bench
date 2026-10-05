@@ -232,6 +232,7 @@ class Analysis(unittest.TestCase):
             '\tat com.github.gerolndnr.connectionguard.spigot.Plugin.onEnable(Plugin.java:1)',
             '[12:00:03 ERROR]: [OtherPlugin] broke',
         ])
+        console += '\n[12:00:04 ERROR]: Failed to request yggdrasil public key\n\tat sun.net.www.protocol.http.HttpURLConnection.getInputStream(X.java:1)'
         hits = engine.product_errors(console, adapter, 'paper')
         self.assertEqual(len(hits), 1)
         self.assertIn('enabling ConnectionGuard', hits[0])

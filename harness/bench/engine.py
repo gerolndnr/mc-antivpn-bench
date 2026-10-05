@@ -280,7 +280,7 @@ class Backend:
 
 ERROR_START = re.compile(r'(\[[0-9:]+ (ERROR|SEVERE)\]|\bERROR\]|\bSEVERE\]|^\S*Exception\b)')
 CONTINUATION = re.compile(r'^(\s+at |\s*Caused by:|\s+\.\.\. \d+ more|\s*Suppressed:|[\w.$]+(Exception|Error)(:|$))')
-PLATFORM_LOGGERS = ('PaperVersionFetcher', 'Error obtaining version information')
+PLATFORM_LOGGERS = ('PaperVersionFetcher', 'Error obtaining version information', 'yggdrasil')
 
 
 def product_errors(console, adapter, platform):
@@ -291,8 +291,9 @@ def product_errors(console, adapter, platform):
     that entry (never in neighbouring entries). Known platform-internal loggers are
     excluded.
     """
-    tags = {t.lower() for t in (adapter['data_dir'][platform], adapter['id'], adapter['name'].split()[0],
-                                 *adapter.get('packages', [])) if t}
+    # Only unambiguous tags: generic words such as "Connection" would match HttpURLConnection.
+    tags = {t.lower() for t in (adapter['data_dir'][platform], adapter['id'], adapter['name'].replace(' ', ''),
+                                 *adapter.get('packages', [])) if t and len(t) >= 6}
     lines = console.splitlines()
     hits, index = [], 0
     while index < len(lines):
