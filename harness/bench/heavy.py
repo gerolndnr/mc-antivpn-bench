@@ -118,6 +118,9 @@ async def baselines(subject, canaries):
                                  type=data.get('type'))
     except Exception as error:
         out['proxycheck'] = dict(status=None, decision=None, error=type(error).__name__)
+    if not os.environ.get('VPNAPI_KEY'):
+        out['vpnapi'] = dict(status=None, decision=None, error='not measured: VPNAPI_KEY not configured')
+        return out
     try:
         status, body = await baseline_query('vpnapi.io', f'/api/{urllib.parse.quote(ip)}?key={canaries["vpnapi"]}')
         security = json.loads(body).get('security') if status == 200 else None
