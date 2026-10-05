@@ -114,6 +114,20 @@ async def functional(runtime, recorder, canaries, product_ids, platforms):
                           await scenarios.secret_leakage(runtime, product_id, platform, canaries, cases[:3]))
 
 
+async def prebuild_templates(runtime, platforms):
+    """Build every platform template once, with install egress (vanilla jar download)."""
+    from . import servers
+    runtime.install_mode()
+    needed = [('paper', 'standalone')] + [('folia', 'standalone')] * ('folia' in platforms)
+    needed += [('paper', f'{p}-backend') for p in ('velocity', 'bungee')]
+    for platform, mode in needed:
+        await servers.build_paper_template(platform, mode, engine.PRODUCT_PORT_BASE if mode == 'standalone'
+                                           else engine.BACKEND_PORT)
+    for proxy in ('velocity', 'bungee'):
+        await servers.build_proxy_template(proxy, engine.PRODUCT_PORT_BASE, engine.BACKEND_PORT)
+    runtime.rules(engine.measurement_rules())
+
+
 async def main_run(args):
     from .runtime import Runtime
     run_id = args.run_id or datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
@@ -135,6 +149,7 @@ async def main_run(args):
     open(os.path.join(recorder.public, 'manifest.json'), 'w').write(json.dumps(manifest, indent=2, default=str))
     started = time.monotonic()
     try:
+        await prebuild_templates(runtime, platforms)
         if args.family in ('functional', 'all'):
             await functional(runtime, recorder, canaries, product_ids, platforms)
         if args.family in ('failure', 'performance', 'redis', 'detection', 'all'):
