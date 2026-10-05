@@ -214,7 +214,7 @@ def failure_table(records, lines, csv_rows):
     lines.append('\n### Failure safety (lookup APIs faulted, lists intact; Velocity, `enforce`)\n')
     lines.append('Outcome for (VPN, Tor, residential) during the fault; decision time of the residential join; '
                  'VPN join after recovery. Findings follow METHODOLOGY 7.2.\n')
-    lines.append('| Product | Fault | During (VPN, Tor, res.) | Res. decision ms | Lookup requests | After recovery (VPN) | '
+    lines.append('| Product | Fault | During (VPN, Tor, res.) | Res. decision ms | Lookup requests | VPN after recovery (2 s / 65 s) | '
                  'Findings |')
     lines.append('|---|---|---|---|---|---|---|')
     control = {r['product']: r for r in records if r['fault'] == 'control'}
@@ -230,8 +230,13 @@ def failure_table(records, lines, csv_rows):
             findings.append('hang')
         base = control.get(record['product'], {})
         if record['fault'] != 'control' and base.get('during'):
-            if base['during']['vpn']['blocked'] and not record.get('after_recovery_vpn', {}).get('blocked'):
-                findings.append('poisoned cache')
+            early, late = record.get('after_recovery_vpn', {}), record.get('after_recovery_vpn_65s', {})
+            if base['during']['vpn']['blocked'] and not early.get('blocked'):
+                if late and not late.get('blocked'):
+                    findings.append('unprotected 65 s after recovery' + (' (cached: no lookup)'
+                                                                         if late.get('lookup_requests') == 0 else ''))
+                else:
+                    findings.append('recovery delay (admitted 2 s after recovery, blocked at 65 s)')
             base_calls = sum(j['lookup_requests'] for j in base['during'].values()) or 1
             calls = sum(j['lookup_requests'] for j in during.values())
             if calls > 3 * base_calls:
@@ -241,7 +246,8 @@ def failure_table(records, lines, csv_rows):
         lines.append(f'| {NAMES.get(record["product"])} | {record["fault"]} | '
                      f'{", ".join(during[k]["outcome"] for k in ("vpn", "tor", "residential") if k in during)} | '
                      f'{"—" if res_ms is None else f"{res_ms:.0f}"} | {sum(j["lookup_requests"] for j in during.values())} | '
-                     f'{record.get("after_recovery_vpn", {}).get("outcome", "—")} | {", ".join(findings) or "—"} |')
+                     f'{record.get("after_recovery_vpn", {}).get("outcome", "—")} / '
+                     f'{record.get("after_recovery_vpn_65s", {}).get("outcome", "—")} | {", ".join(findings) or "—"} |')
         csv_rows.append(dict(product=record['product'], fault=record['fault'],
                              vpn=during.get('vpn', {}).get('outcome'), tor=during.get('tor', {}).get('outcome'),
                              residential=during.get('residential', {}).get('outcome'), residential_ms=res_ms,

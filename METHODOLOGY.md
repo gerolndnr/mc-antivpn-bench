@@ -165,7 +165,7 @@ Outcome classes (client-side, per join):
   | `incomplete` | 200, then the connection closes mid-body |
 
   A `control` case without a fault runs for each product.
-- **Joins.** One commercial-VPN subject, one Tor subject and one residential subject join during the fault. After the fault is cleared, the VPN subject joins again.
+- **Joins.** One commercial-VPN subject, one Tor subject and one residential subject join during the fault. After the fault is cleared, the VPN subject joins again after 2 s and after 65 s, with the lookup requests of each join recorded.
 - **Recorded:**
   - outcome
   - decision time
@@ -175,7 +175,8 @@ Outcome classes (client-side, per join):
 - **Pre-registered findings.** Descriptive, not a score:
   - **Hang:** decision time > 10 s, or `TIMEOUT`.
   - **Policy:** fail-open or fail-closed, compared with the product's documented policy (`documented_failure_policy` in the adapter). Neither is "wrong"; *undocumented* behaviour is the finding.
-  - **Poisoned cache:** after recovery the VPN subject is admitted, but the same product blocked it in `control`.
+  - **Recovery delay:** the VPN subject is admitted 2 s after recovery but blocked at 65 s, although the same product blocked it in `control` (a circuit breaker or cooldown still active).
+  - **Unprotected after recovery:** still admitted at 65 s. If that join made no lookup request at all, it is marked *cached*: an allow decided during the outage was stored.
   - **Retry storm:** lookup requests per join more than 3× the control.
 
 ### 7.3 Performance (Velocity, then Paper)
@@ -298,3 +299,7 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 **Adding a product.** Add an adapter and the pins. The product must be publicly downloadable; a commercial product needs a licence that permits benchmarking.
 
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
+
+## Changes before the first published run
+
+- 2026-10-05: failure safety now re-joins the VPN subject at 2 s **and** 65 s after recovery. The first trial run could not tell a circuit-breaker cooldown from a cached allow; the single "poisoned cache" finding was split into *recovery delay* and *unprotected after recovery (cached)*. This change was made after seeing trial data and before any result was published.

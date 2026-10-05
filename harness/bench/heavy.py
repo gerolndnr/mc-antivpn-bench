@@ -244,10 +244,16 @@ async def failure(runtime, recorder, canaries, product_ids, platform='velocity')
                                       lookup_requests=len(calls))
                 record['during'] = joins
                 runtime.rules(measurement_rules())
-                await asyncio.sleep(2)
-                after = await mcclient.admit(instance.port, subjects['vpn']['ip'], player(product_id), observe_s=OBSERVE_S)
-                record['after_recovery_vpn'] = dict(outcome=after['outcome'], blocked=blocked(after['outcome']),
-                                                    decision_ms=decision_ms(after))
+                # Two re-joins of the VPN subject: 2 s after recovery (circuit breakers may still be open)
+                # and 65 s after (any cooldown should have passed; a cached allow would still be served).
+                for key, wait in (('after_recovery_vpn', 2), ('after_recovery_vpn_65s', 63)):
+                    await asyncio.sleep(wait)
+                    mark = runtime.sequence()
+                    after = await mcclient.admit(instance.port, subjects['vpn']['ip'], player(product_id),
+                                                 observe_s=OBSERVE_S)
+                    calls = [e for e in runtime.events_since(mark) if e.get('host') in adapter['lookup_hosts']]
+                    record[key] = dict(outcome=after['outcome'], blocked=blocked(after['outcome']),
+                                       decision_ms=decision_ms(after), lookup_requests=len(calls))
                 record['process_alive'] = instance.server.process.returncode is None
             except Exception as error:
                 record['harness_error'] = f'{type(error).__name__}: {str(error)[:300]}'
