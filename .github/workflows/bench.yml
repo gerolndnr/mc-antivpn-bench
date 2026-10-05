@@ -83,7 +83,15 @@ jobs:
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Collect state
         if: always()
-        run: sudo cp "$RUNNER_TEMP/work/state/answers.sqlite" answers.sqlite 2>/dev/null && sudo chmod a+r answers.sqlite || true
+        run: |
+          sudo cp "$RUNNER_TEMP/work/state/answers.sqlite" answers.sqlite 2>/dev/null && sudo chmod a+r answers.sqlite || true
+          mkdir -p interposer-logs && sudo sh -c "cp $RUNNER_TEMP/work/state/*.jsonl $RUNNER_TEMP/work/state/interposer.log interposer-logs/ 2>/dev/null; chmod -R a+r interposer-logs" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interposer-logs
+          path: interposer-logs
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: always()
         with:
