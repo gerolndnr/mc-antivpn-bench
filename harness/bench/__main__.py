@@ -23,7 +23,7 @@ from . import artifacts, engine, products, scenarios
 
 ROOT = artifacts.ROOT
 IPV4_ANY = __import__('re').compile(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])')
-IPV6_ANY = __import__('re').compile(r'(?<![\w:])(?:[0-9a-fA-F]{1,4}:){2,7}[0-9a-fA-F]{0,4}(?![\w:])')
+IPV6_ANY = __import__('re').compile(r'(?<![\w:])[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}(?![\w:])')
 ALL_PRODUCTS = ['connection-guard', 'foxgate', 'proxyshield', 'vpnguard']
 ALL_PLATFORMS = ['paper', 'folia', 'velocity', 'bungee']
 
