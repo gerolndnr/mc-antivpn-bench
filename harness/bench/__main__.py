@@ -103,15 +103,27 @@ class Recorder:
 def environment(canaries):
     def run(*command):
         try:
-            return subprocess.run(command, capture_output=True, text=True, timeout=20).stdout.strip()
+            result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+            return result.stdout.strip() if result.returncode == 0 else None
         except Exception:
             return None
     java = subprocess.run(['java', '-version'], capture_output=True, text=True).stderr.strip().splitlines()
-    commit = run('git', '-C', ROOT, 'rev-parse', 'HEAD')
-    dirty = run('git', '-C', ROOT, 'status', '--porcelain')
+    git_commit = run('git', '-C', ROOT, 'rev-parse', 'HEAD')
+    commit = git_commit or os.environ.get('BENCH_SOURCE_COMMIT')
+    if commit and not __import__('re').fullmatch('[a-f0-9]{40}', commit):
+        raise ValueError('Invalid benchmark source commit')
+    if git_commit:
+        state = run('git', '-C', ROOT, 'status', '--porcelain')
+        dirty = bool(state) if state is not None else None
+    else:
+        state = os.environ.get('BENCH_SOURCE_DIRTY')
+        if state not in (None,'0','1'):raise ValueError('Invalid explicit benchmark dirty state')
+        dirty = None if state is None else state == '1'
     return dict(
         started=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
-        bench_commit=commit, bench_tree_dirty=bool(dirty), java=java, python=sys.version.split()[0],
+        bench_commit=commit, bench_tree_dirty=dirty,
+        bench_source_origin='local-git' if git_commit else 'explicit-launcher' if commit else 'unavailable',
+        java=java, python=sys.version.split()[0],
         kernel=host_platform.release(), cpus=os.cpu_count(),
         backend_heap=__import__("bench.servers", fromlist=["HEAP"]).HEAP, tor_refresh_disabled=os.environ.get("CONNECTIONGUARD_TOR_REFRESH") == "false",
         read_only_templates_root=os.environ.get('BENCH_READ_ONLY_TEMPLATES_ROOT'),

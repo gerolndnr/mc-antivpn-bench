@@ -1,9 +1,9 @@
 import hashlib,tempfile,unittest
 from pathlib import Path
-from unittest.mock import patch,AsyncMock,MagicMock,call
+from unittest.mock import patch,AsyncMock,MagicMock
 from bench import artifacts,products,heavy,servers
 from bench.__main__ import ALL_PRODUCTS
-from bench.__main__ import prebuild_templates
+from bench.__main__ import prebuild_templates,environment
 from bench import candidate_gate
 
 class AcceptanceContracts(unittest.TestCase):
@@ -56,6 +56,13 @@ class SelectedTemplateContracts(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(proxy.await_args.args[0],'velocity')
 
 class CandidateContracts(unittest.TestCase):
+    def test_missing_container_git_provenance_is_never_reported_as_clean(self):
+        import os,subprocess
+        with patch.dict(os.environ,{},clear=True),patch('bench.__main__.subprocess.run',return_value=subprocess.CompletedProcess([],1,stdout='',stderr='unavailable')):
+            result=environment({})
+            self.assertIsNone(result['bench_commit']);self.assertIsNone(result['bench_tree_dirty'])
+            self.assertEqual(result['bench_source_origin'],'unavailable')
+
     def test_published_baseline_and_default_selection_are_preserved(self):
         self.assertNotIn('connection-guard-candidate',ALL_PRODUCTS)
         self.assertEqual(set(products.adapter('connection-guard')['pins'].values()),{'connectionguard-0.5.0'})
