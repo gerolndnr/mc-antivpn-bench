@@ -504,12 +504,18 @@ def circularity(runtime_state_dir, product_ids):
                               [('Host', parts.hostname)], b'')
             key = probe.canonical(parts.scheme, parts.hostname, request)[0]
             row = db.execute('select body from answer where key=?', (key,)).fetchone()
-            if row:
-                parsed = parse_list(row[0])
-                networks += parsed
-                used.append(dict(url=url, entries=len(parsed)))
-            else:
-                used.append(dict(url=url, entries=None, note='not fetched during this run'))
+            body, origin = (row[0], 'recorded during run') if row else (None, None)
+            if body is None:
+                # Products with a disk cache read lists loaded at install time; fetch the same URL once now.
+                try:
+                    from .dataset import fetch_with_retries
+                    body, origin = fetch_with_retries(url, attempts=3), 'fetched at analysis time'
+                except Exception as error:
+                    used.append(dict(url=url, entries=None, note=f'unavailable: {type(error).__name__}'))
+                    continue
+            parsed = parse_list(body)
+            networks += parsed
+            used.append(dict(url=url, entries=len(parsed), origin=origin))
         v4 = [n for n in networks if n.version == 4]
         v6 = [n for n in networks if n.version == 6]
         counts = {}
@@ -520,5 +526,8 @@ def circularity(runtime_state_dir, product_ids):
             entry = counts.setdefault(item['cohort'], [0, 0])
             entry[0] += int(hit)
             entry[1] += 1
+        if not networks:
+            out[product_id] = dict(lists=used, cohorts={}, note='no list content available')
+            continue
         out[product_id] = dict(lists=used, cohorts={c: dict(listed=k, n=n) for c, (k, n) in counts.items()})
     return out
