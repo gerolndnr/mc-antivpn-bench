@@ -341,7 +341,7 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
         rotation = candidates[round_index % len(candidates):] + candidates[:round_index % len(candidates)]
         for product_id in rotation:
             record = dict(product=product_id, platform=platform, round=round_index, latency_model=LATENCY_MODEL)
-            backend = await Backend(platform).start()
+            backend = await Backend(platform).start() if platform in ('velocity', 'bungee') else None
             if product_id == 'none':
                 adapter = dict(lookup_hosts=[], data_dir={platform: '-'}, id='none', name='none')
                 instance = Instance(runtime, 'connection-guard', platform, label=f'perf-none-{round_index}')
@@ -382,7 +382,8 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
             finally:
                 runtime.rules(measurement_rules())
                 record['stop'] = await instance.stop() if instance.server else None
-                await backend.stop()
+                if backend:
+                    await backend.stop()
                 console = instance.console()
                 if product_id != 'none':
                     record['product_error_lines'] = len(product_errors(console, adapter, platform))
