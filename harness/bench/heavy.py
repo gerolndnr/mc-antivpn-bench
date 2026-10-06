@@ -8,6 +8,7 @@ import asyncio
 import ipaddress
 import json
 import os
+import shutil
 import random
 import ssl
 import statistics
@@ -318,14 +319,66 @@ PROVIDER_QUOTAS = {
 }
 
 
-def template_rules(adapter, reference_ip):
+def template_rules(adapter, reference_ip, references=None):
+    """One template rule per lookup host. `references` maps a host to the subject whose recorded answer is its
+    template (see record_references); hosts without one use `reference_ip`."""
     hosts = adapter['lookup_hosts']
-    extra = [dict(name=f'template-{host}', hosts=[host], action='template', reference_ip=reference_ip,
-                  latency_ms=LATENCY_MODEL, quota=dict(limit=q['limit'], window_s=q['window_s']))
-             for host, q in PROVIDER_QUOTAS.items() if host in hosts]
+    references = references or {}
+    extra = []
+    for host in hosts:
+        rule = dict(name=f'template-{host}', hosts=[host], action='template', reference_ip=references.get(host, reference_ip),
+                    latency_ms=LATENCY_MODEL)
+        if host in PROVIDER_QUOTAS:
+            rule['quota'] = dict(limit=PROVIDER_QUOTAS[host]['limit'], window_s=PROVIDER_QUOTAS[host]['window_s'])
+        extra.append(rule)
     extra.append(dict(name='template', hosts=hosts, action='template', reference_ip=reference_ip,
                       latency_ms=LATENCY_MODEL))
     return measurement_rules(extra=extra, normalize_quota=False)
+
+
+async def record_references(runtime, product_id, platform, profile, canaries, adapter, reference, spares, label):
+    """Records a template answer for every lookup host the product actually uses.
+
+    A product that asks its services one after another (failover) only asks a fallback when the services before it
+    fail, so one reference join records the first service only, and the template for the others would be missing.
+    On a throwaway instance (its circuits and budgets never reach the measured one), the reference joins once
+    normally, then once per still unrecorded host with every other lookup host answering 503. Hosts the product
+    never asks stay without a template, as before."""
+    hosts = adapter['lookup_hosts']
+    instance = Instance(runtime, product_id, platform, label=label)
+    references = {}
+    try:
+        await instance.prepare(profile, canaries)
+        runtime.rules(measurement_rules())
+        await instance.start()
+
+        def answered(mark, ip):
+            return {e.get('host') for e in runtime.events_since(mark)
+                    if e.get('host') in hosts and e.get('subject_ip') == ip and (e.get('status') or 0) == 200}
+
+        mark = runtime.sequence()
+        await mcclient.admit(instance.port, reference['ip'], player('ref'), observe_s=1)
+        for host in answered(mark, reference['ip']):
+            references[host] = reference['ip']
+        spare = iter(spares)
+        for host in hosts:
+            if host in references:
+                continue
+            subject = next(spare, None)
+            if subject is None:
+                break
+            others = [h for h in hosts if h != host]
+            runtime.rules(measurement_rules(extra=[dict(name='reference-fallback', hosts=others, action='fault', fault='http_503')]))
+            mark = runtime.sequence()
+            await mcclient.admit(instance.port, subject['ip'], player('ref'), observe_s=1)
+            if host in answered(mark, subject['ip']):
+                references[host] = subject['ip']
+    finally:
+        runtime.rules(measurement_rules())
+        if instance.server:
+            await instance.stop()
+        shutil.rmtree(instance.directory, ignore_errors=True)
+    return references
 
 
 async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2.0):
@@ -385,12 +438,19 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                 instance = Instance(runtime, product_id, platform, label=f'perf-{product_id}-{round_index}')
                 await instance.prepare(profile, canaries)
             try:
-                # Reference answers for the template come from one real lookup per product.
+                # Reference answers for the templates: one real lookup per service the product uses.
+                references = {}
+                if product_id != 'none':
+                    references = await record_references(runtime, product_id, platform, profile, canaries, adapter, reference,
+                                                         by_cohort(items, 'residential', len(adapter['lookup_hosts']), 1),
+                                                         label=f'perf-ref-{product_id}-{round_index}')
+                    record['template_references'] = {h: ('reference' if ip == reference['ip'] else 'fallback-reference')
+                                                     for h, ip in references.items()}
                 runtime.rules(measurement_rules())
                 record['start'] = await instance.start()
                 if product_id != 'none':
                     await mcclient.admit(instance.port, reference['ip'], player('ref'), observe_s=1)
-                runtime.rules(template_rules(adapter, reference['ip']) if product_id != 'none' else measurement_rules())
+                runtime.rules(template_rules(adapter, reference['ip'], references) if product_id != 'none' else measurement_rules())
                 sampler = Sampler(instance.server.process.pid).start()
                 for phase, subjects, kwargs in (
                         ('cold', seq_subjects[:50], {}),

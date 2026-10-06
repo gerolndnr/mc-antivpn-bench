@@ -144,6 +144,17 @@ class Interposer(unittest.TestCase):
 
 
 class Fairness(unittest.TestCase):
+    def test_fallback_services_get_their_own_template_reference(self):
+        from bench import heavy
+        adapter = dict(lookup_hosts=['proxycheck.io', 'api.ipquery.io', 'ip-api.com'])
+        rules = heavy.template_rules(adapter, '192.0.2.1', {'api.ipquery.io': '192.0.2.2'})['rules']
+        by_name = {r['name']: r for r in rules}
+        self.assertEqual(by_name['template-api.ipquery.io']['reference_ip'], '192.0.2.2')
+        self.assertEqual(by_name['template-proxycheck.io']['reference_ip'], '192.0.2.1')
+        # Published free-tier quotas still apply to their host.
+        self.assertIn('quota', by_name['template-ip-api.com'])
+        self.assertNotIn('quota', by_name['template-api.ipquery.io'])
+
     def test_measurement_rules_block_telemetry_and_updates_for_everyone(self):
         rules = engine.measurement_rules()
         hosts = {h for rule in rules['rules'] if rule['action'] == 'deny' for h in rule['hosts']}

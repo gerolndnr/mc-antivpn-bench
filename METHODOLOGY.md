@@ -310,6 +310,7 @@ The adapters for products without public source code are written from their publ
 
 ## Changes before the first published run
 
+- **2026-10-06, performance templates for failover chains.** A product that asks its services one after another only asks a fallback when the services before it fail, so the single reference join recorded the first service only and every fallback request in template replay got "no recorded answer". The reference is now recorded on a throwaway instance once normally and once per still unrecorded lookup host with the other hosts answering 503; each host replays its own reference answer. Products that ask all services at once are unaffected. Burst results of failover products measured before this change are not valid.
 - 2026-10-05: performance template replay now emulates published provider quotas (429 above the free limit). The first trial burst replayed unlimited answers for every product except Connection Guard, which enforces its own quota mirror, so the comparison was unequal.
 
 - 2026-10-05: detection gets a `proxycheck_key` headline pass. The first full `enforce` pass showed Connection Guard's shipped 100/day keyless ProxyCheck budget ending lookups after subject ~100 (logged `BUDGET_EXHAUSTED`, then fail-open). That is reported as a capacity finding of the shipped configuration and kept separate from detection quality. Every product receives the same key through its own documented field.
