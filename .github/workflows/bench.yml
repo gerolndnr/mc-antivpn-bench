@@ -68,7 +68,7 @@ jobs:
         id: nightly
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            k=$(( ( $(date -u +%s) - $(date -u -d 2026-10-06 +%s) ) / 86400 ))
+            k=$(( ( $(date -u +%s) - $(date -u -d 2026-10-07 +%s) ) / 86400 ))
             if [ "$k" -lt 0 ] || [ "$k" -gt 3 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
             echo "family=detection" >> "$GITHUB_OUTPUT"
             echo "chunk=$k/4" >> "$GITHUB_OUTPUT"

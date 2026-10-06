@@ -1,15 +1,15 @@
 {
   "id": "connection-guard-candidate",
-  "name": "Connection Guard 0.5.2 candidate (PR #75 42e1594)",
+  "name": "Connection Guard 0.6.0 candidate (c4b67eb)",
   "relationship": "Unreleased candidate of Connection Guard, measured to accept or reject the change. Same adapter as the stable release; not a public product.",
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
   "pins": {
-    "paper": "connectionguard-0.5.2-candidate-42e1594",
-    "folia": "connectionguard-0.5.2-candidate-42e1594",
-    "velocity": "connectionguard-0.5.2-candidate-42e1594",
-    "bungee": "connectionguard-0.5.2-candidate-42e1594"
+    "paper": "connectionguard-0.6.0-candidate-c4b67eb",
+    "folia": "connectionguard-0.6.0-candidate-c4b67eb",
+    "velocity": "connectionguard-0.6.0-candidate-c4b67eb",
+    "bungee": "connectionguard-0.6.0-candidate-c4b67eb"
   },
   "previous_pins": {
     "paper": "connectionguard-0.5.0",
@@ -99,7 +99,7 @@
     "proxycheck.io",
     "vpnapi.io"
   ],
-  "documented_failure_policy": "failure-policy.vpn: OPEN; FAILOVER ProxyCheck -> Blackbox -> ip-check -> zowi -> IPQuery -> IP-API; bundled Tor list and signed Connection Guard Intel lists checked locally first (config.yml, docs/PROVIDER_RESILIENCE.md).",
+  "documented_failure_policy": "failure-policy.vpn: OPEN; FAILOVER ProxyCheck -> Blackbox -> zowi -> IPQuery -> IP-API (ip-check.net off by default); bundled Tor list and signed Connection Guard Intel lists checked locally first (config.yml, docs/PROVIDER_RESILIENCE.md, docs/RELEASE_0_6_0.md).",
   "telemetry": [
     "bStats (fixture-wide off)",
     "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"

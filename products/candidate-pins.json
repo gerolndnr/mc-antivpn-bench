@@ -88,5 +88,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.6.0-candidate-c4b67eb": {
+    "project": "connectionguard",
+    "version": "0.6.0",
+    "path": "candidates/connection-guard-0.6.0-c4b67eb.jar",
+    "sha256": "8ba9534abde294eeb830aed848c5014e03409213aed514719abb6c63d6e9b2c2",
+    "filename": "connection-guard-0.6.0-all.jar",
+    "source": "gerolndnr/connection-guard 0.6.0 release candidate: PR #75 head c4b67eb0962f75d218ffdd339f4ea2392119dade (squash-merged as master 180cebe, identical tree), CI run 37536644169 artifact",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }

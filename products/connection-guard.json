@@ -6,14 +6,14 @@
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
   "pins": {
-    "paper": "connectionguard-0.5.0",
-    "folia": "connectionguard-0.5.0",
-    "velocity": "connectionguard-0.5.0",
-    "bungee": "connectionguard-0.5.0"
+    "paper": "connectionguard-0.5.1",
+    "folia": "connectionguard-0.5.1",
+    "velocity": "connectionguard-0.5.1",
+    "bungee": "connectionguard-0.5.1"
   },
   "previous_pins": {
-    "paper": "connectionguard-0.4.11",
-    "velocity": "connectionguard-0.4.11"
+    "paper": "connectionguard-0.5.0",
+    "velocity": "connectionguard-0.5.0"
   },
   "data_dir": {
     "paper": "ConnectionGuard",
