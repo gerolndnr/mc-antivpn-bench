@@ -24,7 +24,8 @@ from . import artifacts, engine, products, scenarios
 ROOT = artifacts.ROOT
 IPV4_ANY = __import__('re').compile(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])')
 IPV6_ANY = __import__('re').compile(r'(?<![\w:])[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}(?![\w:])')
-ALL_PRODUCTS = ['connection-guard', 'foxgate', 'proxyshield', 'vpnguard']
+# The candidate stays in the default set while its pull request is open.
+ALL_PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard']
 ALL_PLATFORMS = ['paper', 'folia', 'velocity', 'bungee']
 
 

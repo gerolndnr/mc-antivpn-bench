@@ -17,10 +17,10 @@ import statistics
 COHORT_ORDER = ['commercial_vpn', 'fresh_vpn', 'vpn_v6', 'tor', 'proxy', 'residential', 'mobile_cgnat',
                 'residential_v6']
 POSITIVE = {'commercial_vpn', 'fresh_vpn', 'vpn_v6', 'tor', 'proxy'}
-NAMES = {'connection-guard': 'Connection Guard 0.5.0', 'foxgate': 'FoxGate 1.2.0-pre10',
+NAMES = {'connection-guard': 'Connection Guard 0.5.0', 'connection-guard-candidate': 'CG 0.5.2 candidate (PR #75)', 'foxgate': 'FoxGate 1.2.0-pre10',
          'proxyshield': 'ProxyShield 2.5.1', 'vpnguard': 'VPNGuard 1.2.0', 'proxycheck': 'ProxyCheck API',
          'vpnapi': 'VPNAPI API', 'none': 'no product (platform only)'}
-PRODUCTS = ['connection-guard', 'foxgate', 'proxyshield', 'vpnguard']
+PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard']
 
 
 def wilson(k, n, z=1.96):

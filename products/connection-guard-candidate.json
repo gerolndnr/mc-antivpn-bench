@@ -1,0 +1,106 @@
+{
+  "id": "connection-guard-candidate",
+  "name": "Connection Guard 0.5.2 candidate (PR #75)",
+  "relationship": "Unreleased candidate of Connection Guard, measured to accept or reject the change. Same adapter as the stable release; not a public product.",
+  "license": "MIT",
+  "source": "https://github.com/gerolndnr/connection-guard",
+  "listing": "https://modrinth.com/plugin/connectionguard",
+  "pins": {
+    "paper": "connectionguard-0.5.2-candidate-05ae8c3",
+    "folia": "connectionguard-0.5.2-candidate-05ae8c3",
+    "velocity": "connectionguard-0.5.2-candidate-05ae8c3",
+    "bungee": "connectionguard-0.5.2-candidate-05ae8c3"
+  },
+  "previous_pins": {
+    "paper": "connectionguard-0.5.0",
+    "velocity": "connectionguard-0.5.0"
+  },
+  "data_dir": {
+    "paper": "ConnectionGuard",
+    "folia": "ConnectionGuard",
+    "velocity": "connection-guard",
+    "bungee": "ConnectionGuard"
+  },
+  "config": "config.yml",
+  "ready_pattern": null,
+  "profiles": {
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded. operation.mode is OBSERVE: decisions are logged, nobody is refused."
+    },
+    "enforce": {
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "operation.mode": "ENFORCE"
+          }
+        }
+      ],
+      "note": "Single documented enforcement switch (config.yml comment and README: OBSERVE first, then ENFORCE)."
+    },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through the product's documented key field (same key for every product)."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}",
+            "provider.vpn.vpnapi.enabled": true,
+            "provider.vpn.vpnapi.api-key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "Adds the free ProxyCheck and VPNAPI keys through the product's documented key fields."
+    }
+  },
+  "redis": {
+    "edits": [
+      {
+        "file": "config.yml",
+        "set": {
+          "provider.cache.type": "Redis",
+          "provider.cache.redis.hostname": "127.0.0.1",
+          "provider.cache.redis.port": 6379,
+          "provider.cache.redis.password": ""
+        }
+      }
+    ],
+    "note": "provider.cache.type: Redis (documented for multi-server networks)."
+  },
+  "commands": {
+    "reload": "cg reload",
+    "inspect": [
+      "cg doctor",
+      "cg providers",
+      "cg stats"
+    ]
+  },
+  "lookup_hosts": [
+    "api.ipquery.io",
+    "ip-api.com",
+    "iphub.info",
+    "ipqualityscore.com",
+    "proxycheck.io",
+    "vpnapi.io"
+  ],
+  "documented_failure_policy": "failure-policy.vpn: OPEN; FAILOVER ProxyCheck -> IPQuery -> IP-API; bundled Tor list checked locally first (docs/PROVIDER_RESILIENCE.md).",
+  "telemetry": [
+    "bStats (fixture-wide off)",
+    "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"
+  ],
+  "list_sources": [],
+  "list_sources_note": "Lists the shipped configuration downloads (from its generated config); used only for the circularity table."
+}

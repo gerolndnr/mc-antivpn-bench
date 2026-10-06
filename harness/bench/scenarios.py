@@ -107,6 +107,7 @@ async def clean_install(runtime, product_id, platform, canaries, cases):
 # release's generated config is used and bumped by one.
 UPGRADE_MARKERS = {
     'connection-guard': ['lookup.http-timeout-ms', 'provider.cache.expiration.vpn', 'required-positive-flags'],
+    'connection-guard-candidate': ['lookup.http-timeout-ms', 'provider.cache.expiration.vpn', 'required-positive-flags'],
     'foxgate': ['antivpn.timeout', 'antivpn.maxFlags'],
     'proxyshield': ['api.timeout-seconds', 'api.cache-minutes'],
     'vpnguard': ['timeout', 'cache-ttl-hours'],

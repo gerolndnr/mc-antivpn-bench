@@ -1,0 +1,20 @@
+{
+  "connectionguard-0.5.2-candidate-05ae8c3": {
+    "project": "connectionguard",
+    "version": "0.5.2-SNAPSHOT",
+    "path": "candidates/connection-guard-0.5.2-SNAPSHOT-05ae8c3.jar",
+    "sha256": "17d70ac8c42dfdb2aae5b1885a1d75545d47c94173714895d4660b0fc30573c8",
+    "filename": "connection-guard-0.5.2-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #75 head 05ae8c3155cecb60251ac799a750dca9b5f22684, CI run 37387870204 artifact",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
+  }
+}
