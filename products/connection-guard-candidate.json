@@ -1,15 +1,15 @@
 {
   "id": "connection-guard-candidate",
-  "name": "Connection Guard 0.5.2 candidate (PR #75 0cf4aa8)",
+  "name": "Connection Guard 0.5.2 candidate (PR #75 c8b5201)",
   "relationship": "Unreleased candidate of Connection Guard, measured to accept or reject the change. Same adapter as the stable release; not a public product.",
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
   "pins": {
-    "paper": "connectionguard-0.5.2-candidate-0cf4aa8",
-    "folia": "connectionguard-0.5.2-candidate-0cf4aa8",
-    "velocity": "connectionguard-0.5.2-candidate-0cf4aa8",
-    "bungee": "connectionguard-0.5.2-candidate-0cf4aa8"
+    "paper": "connectionguard-0.5.2-candidate-c8b5201",
+    "folia": "connectionguard-0.5.2-candidate-c8b5201",
+    "velocity": "connectionguard-0.5.2-candidate-c8b5201",
+    "bungee": "connectionguard-0.5.2-candidate-c8b5201"
   },
   "previous_pins": {
     "paper": "connectionguard-0.5.0",
@@ -90,17 +90,23 @@
   },
   "lookup_hosts": [
     "api.ipquery.io",
+    "api.zowi.gay",
+    "blackbox.ipinfo.app",
     "ip-api.com",
+    "ip-check.net",
     "iphub.info",
     "ipqualityscore.com",
     "proxycheck.io",
     "vpnapi.io"
   ],
-  "documented_failure_policy": "failure-policy.vpn: OPEN; FAILOVER ProxyCheck -> IPQuery -> IP-API; bundled Tor list checked locally first (docs/PROVIDER_RESILIENCE.md).",
+  "documented_failure_policy": "failure-policy.vpn: OPEN; FAILOVER ProxyCheck -> Blackbox -> ip-check -> zowi -> IPQuery -> IP-API; bundled Tor list and signed Connection Guard Intel lists checked locally first (config.yml, docs/PROVIDER_RESILIENCE.md).",
   "telemetry": [
     "bStats (fixture-wide off)",
     "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"
   ],
-  "list_sources": [],
-  "list_sources_note": "Lists the shipped configuration downloads (from its generated config); used only for the circularity table."
+  "list_sources": [
+    "https://intel.connectionguard.net/vpn.txt",
+    "https://intel.connectionguard.net/tor.txt"
+  ],
+  "list_sources_note": "Connection Guard Intel lists the shipped configuration downloads (relay.txt and hosting.txt never decide on their own). Intel is built from the same operator server lists as this dataset's VPN labels: its coverage here is circular (see the circularity table)."
 }

@@ -52,5 +52,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.5.2-candidate-c8b5201": {
+    "project": "connectionguard",
+    "version": "0.5.2-SNAPSHOT",
+    "path": "candidates/connection-guard-0.5.2-SNAPSHOT-c8b5201.jar",
+    "sha256": "be5b1cd3d7d25f324e7dd43100ca2a5f342cd9463e4de7ab745fd7a2ec2d4bea",
+    "filename": "connection-guard-0.5.2-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #75 head c8b520133949eb985d82a7dec2a50a9232602ea2 (keyless Blackbox/ip-check/zowi, signed Connection Guard Intel), CI run 37507321222 artifact (merge ref 389cd8d)",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }
