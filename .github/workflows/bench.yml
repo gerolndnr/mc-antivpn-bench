@@ -33,6 +33,9 @@ on:
       perf_profiles:
         description: Performance profiles (comma-separated)
         default: 'enforce'
+      perf_rounds:
+        description: Performance rounds (3 for a published result, 1 for a quick check)
+        default: '3'
       state_from_run:
         description: Workflow run id whose recorded provider answers to reuse (empty = start fresh)
         default: ''
@@ -107,7 +110,7 @@ jobs:
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
           docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
             -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
-            -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
+            -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_PERF_ROUNDS="${{ inputs.perf_rounds || '3' }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Collect state
         if: always()

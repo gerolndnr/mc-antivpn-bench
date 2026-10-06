@@ -34,5 +34,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.5.2-candidate-0cf4aa8": {
+    "project": "connectionguard",
+    "version": "0.5.2-SNAPSHOT",
+    "path": "candidates/connection-guard-0.5.2-SNAPSHOT-0cf4aa8.jar",
+    "sha256": "c07fa622a9481f3655b610f82ef3d701d139c77f9af16f518e33091663984426",
+    "filename": "connection-guard-0.5.2-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #75 head 0cf4aa80465b11f3742fbeb1fb26127a42dcf01f (ProxyCheck v2 vpn=1 signal), CI run 37485118577 artifact",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }
