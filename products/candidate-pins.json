@@ -70,5 +70,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.5.2-candidate-42e1594": {
+    "project": "connectionguard",
+    "version": "0.5.2-SNAPSHOT",
+    "path": "candidates/connection-guard-0.5.2-SNAPSHOT-42e1594.jar",
+    "sha256": "68e0e38c13dce147554447583686278900212bcd01cfa32d256952895486db3c",
+    "filename": "connection-guard-0.5.2-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #75 head 42e1594f141be74f369f8ebd627d1baf01eb0cc9 (bounded timeout attempts, Intel off the start path), CI run 37523966135 artifact (merge ref 13057dd)",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }
