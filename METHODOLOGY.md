@@ -310,6 +310,7 @@ The adapters for products without public source code are written from their publ
 
 ## Changes before the first published run
 
+- **2026-10-06, private CI artifacts encrypted.** Before the repository went public, unmasked results, egress logs and recorded provider answers were uploaded as plain workflow artifacts. They are now encrypted with a repository secret (docs/KEYS.md), and the earlier ones were deleted.
 - **2026-10-06, performance templates for failover chains.** A product that asks its services one after another only asks a fallback when the services before it fail, so the single reference join recorded the first service only and every fallback request in template replay got "no recorded answer". The reference is now recorded on a throwaway instance once normally and once per still unrecorded lookup host with the other hosts answering 503; each host replays its own reference answer. Products that ask all services at once are unaffected. Burst results of failover products measured before this change are not valid.
 - 2026-10-05: performance template replay now emulates published provider quotas (429 above the free limit). The first trial burst replayed unlimited answers for every product except Connection Guard, which enforces its own quota mirror, so the comparison was unequal.
 

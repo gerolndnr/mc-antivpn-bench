@@ -19,3 +19,22 @@ gh secret set VPNAPI_KEY -R gerolndnr/mc-antivpn-bench
 For local runs, put the keys in `.env` (git-ignored) and pass `--env-file .env` to `docker run`.
 
 The keys are passed only to the interposer process. Product configurations receive canaries, and logs and results redact both the canary and the real value. A full detection pass uses about 692 queries per provider.
+
+## Private artifacts (`ARTIFACT_KEY`)
+
+Every run uploads `results-public` in the clear. Three artifacts can contain volunteers' addresses and are encrypted before upload: `results-private` (unmasked results), `interposer-logs` (egress log) and `interposer-state` (recorded provider answers, reused with `state_from_run`). Without the `ARTIFACT_KEY` secret they are not uploaded at all.
+
+Create the secret once in your own terminal. The value is generated and never printed:
+
+```sh
+openssl rand -base64 48 | tr -d '\n' > ~/.mc-antivpn-bench-artifact-key && chmod 600 ~/.mc-antivpn-bench-artifact-key
+gh secret set ARTIFACT_KEY -R gerolndnr/mc-antivpn-bench < ~/.mc-antivpn-bench-artifact-key
+```
+
+To read one locally:
+
+```sh
+gh run download <run-id> -R gerolndnr/mc-antivpn-bench -n results-private -D private-<run-id>
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:$HOME/.mc-antivpn-bench-artifact-key \
+  -in private-<run-id>/results-private.tgz.enc | tar xzf - -C private-<run-id>
+```

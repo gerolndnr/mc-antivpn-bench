@@ -91,9 +91,12 @@ jobs:
         if: inputs.state_from_run != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          mkdir -p "$RUNNER_TEMP/work/state"
-          gh run download "${{ inputs.state_from_run }}" -n interposer-state -D "$RUNNER_TEMP/work/state"
+          mkdir -p "$RUNNER_TEMP/work/state" "$RUNNER_TEMP/sealed"
+          gh run download "${{ inputs.state_from_run }}" -n interposer-state -D "$RUNNER_TEMP/sealed"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:ARTIFACT_KEY -in "$RUNNER_TEMP/sealed/interposer-state.tgz.enc" \
+            | tar xzf - -C "$RUNNER_TEMP/work/state"
       - name: Materialize dataset (RIPE Atlas archive)
         run: |
           docker run --rm -v "$PWD:/bench" -e PYTHONPATH=/bench/harness --entrypoint python3 mc-antivpn-bench:ci \
@@ -112,17 +115,25 @@ jobs:
             -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
             -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_PERF_ROUNDS="${{ inputs.perf_rounds || '3' }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
-      - name: Collect state
+      # This repository is public, and anyone signed in to GitHub can download a public repository's artifacts.
+      # Everything that can hold a volunteer's address (unmasked results, egress logs, recorded answers) is
+      # encrypted with ARTIFACT_KEY before upload; without the secret it is not uploaded at all. Decrypting:
+      # docs/KEYS.md.
+      - name: Seal private artifacts
         if: always()
+        env:
+          ARTIFACT_KEY: ${{ secrets.ARTIFACT_KEY }}
         run: |
-          sudo cp "$RUNNER_TEMP/work/state/answers.sqlite" answers.sqlite 2>/dev/null && sudo chmod a+r answers.sqlite || true
-          mkdir -p interposer-logs && sudo sh -c "cp $RUNNER_TEMP/work/state/*.jsonl $RUNNER_TEMP/work/state/interposer.log interposer-logs/ 2>/dev/null; chmod -R a+r interposer-logs" || true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: interposer-logs
-          path: interposer-logs
-          retention-days: 7
+          if [ -z "$ARTIFACT_KEY" ]; then echo "::warning::ARTIFACT_KEY is not set: private artifacts are not uploaded"; exit 0; fi
+          mkdir -p sealed
+          seal() { sudo tar czf - -C "$1" . | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:ARTIFACT_KEY -out "sealed/$2.tgz.enc"; }
+          sudo mkdir -p state-pick logs-pick
+          sudo cp "$RUNNER_TEMP/work/state/answers.sqlite" state-pick/ 2>/dev/null || true
+          sudo sh -c "cp $RUNNER_TEMP/work/state/*.jsonl $RUNNER_TEMP/work/state/interposer.log logs-pick/ 2>/dev/null" || true
+          seal state-pick interposer-state
+          seal logs-pick interposer-logs
+          [ -d "cache/private/runs/$RUN_ID" ] && seal "cache/private/runs/$RUN_ID" results-private || true
+          ls -la sealed
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -131,12 +142,21 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
+          name: interposer-logs
+          path: sealed/interposer-logs.tgz.enc
+          if-no-files-found: ignore
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
           name: results-private
-          path: cache/private/runs/${{ env.RUN_ID }}
+          path: sealed/results-private.tgz.enc
+          if-no-files-found: ignore
           retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: interposer-state
-          path: answers.sqlite
+          path: sealed/interposer-state.tgz.enc
+          if-no-files-found: ignore
           retention-days: 30
