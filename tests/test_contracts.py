@@ -362,6 +362,14 @@ class Providers(unittest.TestCase):
 class Overview(unittest.TestCase):
     """bench.overview: draws from public results only, newest version per plugin, no addresses."""
 
+    def test_overview_accent_follows_the_shown_value(self):
+        from bench import overview
+        self.assertEqual(overview.fmt_ms(2.04), '2.0 ms')
+        self.assertEqual(overview.fmt_ms(1.6), '1.6 ms')
+        self.assertEqual(overview.fmt_ms(287.0), '287 ms')
+        self.assertEqual(overview.best({'a': 2.0, 'b': 1.6, 'c': 1.62}, True, overview.fmt_ms), {'b', 'c'})
+        self.assertEqual(overview.best({'a': 2.0, 'b': 1.6}, True, overview.fmt_ms), {'b'})
+
     def test_overview_from_minimal_results(self):
         from bench import overview
         with tempfile.TemporaryDirectory() as tmp:

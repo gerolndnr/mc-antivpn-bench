@@ -302,9 +302,10 @@ def fmt_ms(v):
         return '30 s'
     if v >= 1000:
         return f'{v / 1000:.1f} s'.replace('.0 s', ' s')
-    if v < 1:
-        return '< 0.1 ms' if v < 0.1 else f'{v:.1f} ms'
-    return f'{v:.0f} ms'
+    if v < 0.1:
+        return '< 0.1 ms'
+    # One decimal under 10 ms: a repeat join of 2.0 ms against 1.6 ms must not both read "2 ms".
+    return f'{v:.1f} ms' if v < 10 else f'{v:.0f} ms'
 
 
 def num(v):
@@ -314,11 +315,15 @@ def num(v):
 MARK = {True: '<span class="ok" aria-label="pass"></span>', False: '<span class="bad" aria-label="fail"></span>', None: '<span class="na">–</span>'}
 
 
-def best(values, low=True):
+def best(values, low=True, shown=None):
+    """The keys with the best value. With `shown` (the cell format), every key whose cell reads like the best one
+    counts, so two cells that show the same number never differ in accent."""
     vals = [v for v in values.values() if v is not None]
     if not vals:
         return set()
     target = min(vals) if low else max(vals)
+    if shown:
+        return {k for k, v in values.items() if v is not None and shown(v) == shown(target)}
     return {k for k, v in values.items() if v == target}
 
 
@@ -509,7 +514,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             if all(v is None for v in vals.values()):
                 continue
             hide = {pid for pid in cols if key in timed and after_join(pid)}
-            w = best({pid: v for pid, v in vals.items() if pid not in hide}, low)
+            w = best({pid: v for pid, v in vals.items() if pid not in hide}, low, f)
             body.append(('', [td(esc(label))] + [td(AFTER if pid in hide else f(vals[pid]), 'best' if pid in w else '') for pid in cols]))
         card_b = table_card('Everyday joins', 'Same simulated services, same delays and free-tier limits for every plugin.',
                             [''] + [names[pid] for pid in cols], body, ['30%'] + [f'{70 / max(1, len(cols)):.2f}%'] * len(cols))
@@ -579,7 +584,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         if any(v is not None for v in home.values()):
             # Fastest home login only among plugins that still refuse VPN and Tor during the timeout: letting
             # everyone in at once is quick, not good.
-            w = best({pid: v for pid, v in home.items() if (fail[pid].get('timeout') or {}).get('ok') and not after_join(pid)}, True)
+            w = best({pid: v for pid, v in home.items() if (fail[pid].get('timeout') or {}).get('ok') and not after_join(pid)}, True, fmt_ms)
             body.append(('total', [td('Home login while timing out')] +
                          [td(AFTER if after_join(pid) else fmt_ms(home[pid]), 'best' if pid in w else '') for pid in cols]))
         cards.append(table_card('When detection services fail', 'VPN and Tor still refused while every service fails this way.',
@@ -642,7 +647,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         # request leaving the server and no daily limit.
         useful = {s for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2 and s not in down}
         speed = {s: v['ms_p50'] for s, v in services if s in useful}
-        wc, wr, ws = best(caught, False), best(refused, True), best(speed, True)
+        wc, wr, ws = best(caught, False), best(refused, True), best(speed, True, fmt_ms)
         wa = {s for s, v in services if s in useful and v.get('local')}
         ws_ = best(scores, False)
         tags = lambda s, v: ''.join(f' <span class="frac">{t}</span>' for t in (
