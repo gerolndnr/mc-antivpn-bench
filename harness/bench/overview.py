@@ -513,7 +513,9 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             body.append(('', [td(esc(label))] + [td(MARK[fail[pid][fid]['ok']] if fid in fail[pid] else MARK[None]) for pid in cols]))
         home = {pid: (fail[pid].get('timeout') or {}).get('home_ms') for pid in cols}
         if any(v is not None for v in home.values()):
-            w = best(home, True)
+            # Fastest home login only among plugins that still refuse VPN and Tor during the timeout: letting
+            # everyone in at once is quick, not good.
+            w = best({pid: v for pid, v in home.items() if (fail[pid].get('timeout') or {}).get('ok')}, True)
             body.append(('total', [td('Home login while timing out')] + [td(fmt_ms(home[pid]), 'best' if pid in w else '') for pid in cols]))
         cards.append(table_card('When detection services fail', 'VPN and Tor still refused while every service fails this way.',
                                 [''] + [names[pid] for pid in cols], body, ['34%'] + [f'{66 / max(1, len(cols)):.2f}%'] * len(cols)))
@@ -530,7 +532,12 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             body.append(('', [td('<span class="na">– not measured in this run</span>')] + [td('') for _ in cols]))
         cards.append(table_card('Redis outage', 'Correct decisions in under 10 s while the shared cache is down.',
                                 [''] + [names[pid] for pid in cols], body, ['28%'] + [f'{72 / max(1, len(cols)):.2f}%'] * len(cols)))
-    place(cards, ' '.join(['1fr'] * len(cards)))
+    # Side by side up to four plugins; with more, the columns get too narrow for the names, so each card takes a row.
+    if len(products) <= 4:
+        place(cards, ' '.join(['1fr'] * len(cards)))
+    else:
+        for card in cards:
+            place([card], '1fr')
 
     # Platforms and release quality
     if func:
