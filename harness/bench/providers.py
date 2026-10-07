@@ -296,12 +296,14 @@ def run_service(service, items, sleep=time.sleep, fetch=None):
         used += 1
         if rec.get('error') == 'rate_limited':
             limited += 1
-            sleep(60)  # back off once, then ask again
+            sleep(60 if limited <= 5 else 10)  # back off, then ask again; later limits wait less so a run ends
             rec, raw = query(service, item, key, fetch)
             used += 1
         streak = streak + 1 if rec.get('error') == 'rate_limited' else 0
         out.append(rec)
         raws.append(dict(service=service.id, id=item['id'], body=raw))
+        if len(out) % 100 == 0:
+            print(f'[providers] {service.id}: {len(out)}/{len(items)} ({limited} rate limits)', flush=True)
         sleep(max(0.0, service.interval * (2 if limited > 3 else 1) - (time.monotonic() - started)))
     return out, raws
 
