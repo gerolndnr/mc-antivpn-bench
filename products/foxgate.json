@@ -75,6 +75,7 @@
     ]
   },
   "lookup_hosts": [
+    "api.zowi.gay",
     "central.zowi.gay",
     "blackbox.ipinfo.app",
     "ip-api.com",
@@ -98,6 +99,7 @@
   ],
   "list_sources": [
     "https://check.torproject.org/torbulkexitlist",
+    "https://central.zowi.gay/tors",
     "https://tcpshield.com/blocklist.txt",
     "https://cinsscore.com/list/ci-badguys.txt",
     "https://blocklist.greensnow.co/greensnow.txt",
@@ -111,5 +113,6 @@
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks4.txt",
     "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/socks5.txt"
   ],
-  "list_sources_note": "Lists the shipped configuration downloads (from its generated config); used only for the circularity table."
+  "list_sources_note": "Lists the shipped configuration downloads (from its generated config); used only for the circularity table. central.zowi.gay/tors is FoxGate's Tor list with other providers, also used when the Tor Project is down (author, 7 Oct 2026).",
+  "lookup_hosts_note": "api.zowi.gay (one GET per player address) was missing until 7 Oct 2026: runs before that sent FoxGate's zowi lookups to the live service in the performance family and left them unfaulted in the failure family."
 }

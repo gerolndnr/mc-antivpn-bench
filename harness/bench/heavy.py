@@ -250,10 +250,14 @@ async def failure(runtime, recorder, canaries, product_ids, platform='velocity')
                     mark = runtime.sequence()
                     result = await mcclient.admit(instance.port, subject['ip'], player(product_id),
                                                   observe_s=OBSERVE_S, deadline_s=60)
-                    calls = [e for e in runtime.events_since(mark) if e.get('host') in adapter['lookup_hosts']]
+                    events = runtime.events_since(mark)
+                    calls = [e for e in events if e.get('host') in adapter['lookup_hosts']]
                     joins[key] = dict(subject=subject['id'], outcome=result['outcome'], blocked=blocked(result['outcome']),
                                       decision_ms=decision_ms(result), reason=(result.get('reason') or '')[:160],
                                       lookup_requests=len(calls))
+                    unlisted = unlisted_lookups(events, adapter['lookup_hosts'], {subject['ip']})
+                    if unlisted and fault != 'control':
+                        raise RuntimeError(f'unlisted lookup hosts {unlisted} were not faulted: add them to the adapter')
                 record['during'] = joins
                 runtime.rules(measurement_rules())
                 # Two re-joins of the VPN subject: 2 s after recovery (circuit breakers may still be open)
@@ -409,7 +413,18 @@ def summarize(results, events, lookup_hosts, subjects=None):
     return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]),
                 distinct_subjects=len(distinct), subjects_with_lookup=len(looked_up),
                 join_ms=percentiles([r.get('marks', {}).get('joined') for r in results]),
-                lookup_requests=len(calls), lookup_requests_per_host=per_host)
+                lookup_requests=len(calls), lookup_requests_per_host=per_host,
+                unlisted_lookups=unlisted_lookups(events, lookup_hosts, distinct))
+
+
+def unlisted_lookups(events, lookup_hosts, subject_ips):
+    """Requests about a subject's address to a host the adapter does not list. Such a host is neither simulated in
+    the performance family nor faulted in the failure family, so the measurement would not be like for like."""
+    out = {}
+    for e in events:
+        if e.get('subject_ip') in subject_ips and e.get('host') not in lookup_hosts:
+            out[e['host']] = out.get(e['host'], 0) + 1
+    return out
 
 
 async def performance(runtime, recorder, canaries, product_ids, platform='velocity', rounds=3, profile='enforce'):
@@ -463,6 +478,9 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                     phase_record = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'], subjects)
                     phase_record['wall_s'] = round(time.monotonic() - started, 1)
                     record[phase] = phase_record
+                    if phase_record['unlisted_lookups'] and product_id != 'none':
+                        # Better no number than a number from live services the others did not face.
+                        raise RuntimeError(f'unlisted lookup hosts {phase_record["unlisted_lookups"]}: add them to the adapter')
                     print(f'[performance] r{round_index} {product_id} {phase}: {phase_record["outcomes"]} '
                           f'p50={phase_record["decision_ms"].get("p50")} req={phase_record["lookup_requests"]}', flush=True)
                 record['resources'] = sampler.stop()

@@ -412,3 +412,20 @@ class ProviderQuota(unittest.TestCase):
         rec, _ = p.query(service, dict(id='s', ip='192.0.2.1', cohort='x', label='vpn'), '',
                          fetch=lambda url, headers: (200, b'{"status":"denied","message":"1,000 free queries exhausted. Daily limit reached."}'))
         self.assertEqual(rec['error'], 'rate_limited')
+
+
+class UnlistedLookups(unittest.TestCase):
+    def test_lookup_to_an_unlisted_host_is_caught(self):
+        from bench import heavy
+        events = [dict(host='api.zowi.gay', subject_ip='198.51.100.7'), dict(host='blackbox.ipinfo.app', subject_ip='198.51.100.7'),
+                  dict(host='central.zowi.gay', subject_ip=None)]
+        self.assertEqual(heavy.unlisted_lookups(events, ['blackbox.ipinfo.app', 'central.zowi.gay'], {'198.51.100.7'}), {'api.zowi.gay': 1})
+
+    def test_adapters_list_their_own_lookup_services(self):
+        # Hosts each product is known to ask about a player's address (from published egress logs).
+        known = {'foxgate': ['api.zowi.gay', 'blackbox.ipinfo.app', 'ip-api.com'],
+                 'connection-guard-candidate': ['api.zowi.gay', 'blackbox.ipinfo.app', 'api.ipquery.io', 'proxycheck.io']}
+        for product, hosts in known.items():
+            adapter = json.load(open(os.path.join(ROOT, 'products', product + '.json')))
+            for host in hosts:
+                self.assertIn(host, adapter['lookup_hosts'], f'{product}: {host}')
