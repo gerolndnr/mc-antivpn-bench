@@ -447,3 +447,15 @@ class IntelProxyStep(unittest.TestCase):
         items = [dict(id='px', ip='45.90.28.7', label='proxy', cohort='proxy')]
         self.assertEqual(p.simulate(['intel'], {}, items, lists), {'px': (False, None)})
         self.assertEqual(p.simulate(['intel', 'intel-proxy'], {}, items, lists), {'px': (True, 'intel-proxy')})
+
+
+class IntelAsService(unittest.TestCase):
+    def test_intel_reads_like_a_service(self):
+        from bench import providers as p
+        lists = p.Lists(dict(vpn='45.90.28.0/24\n', tor='', relay='104.28.0.0/16\n', hosting='45.90.29.0/24\n', proxy='45.90.30.7\n'))
+        items = [dict(id=i, ip=ip, label='x', cohort='x') for i, ip in
+                 (('vpn', '45.90.28.7'), ('proxy', '45.90.30.7'), ('relay', '104.28.200.15'), ('dc', '45.90.29.1'), ('none', '8.8.4.4'))]
+        got = {r['id']: r['verdict'] for r in p.intel_answers(lists, items)}
+        self.assertEqual(got, dict(vpn='positive', proxy='positive', relay='negative', dc='unknown', none='unknown'))
+        summary = p.summarize(p.intel_answers(lists, items), items)
+        self.assertTrue(summary['cg-intel']['own'] and summary['cg-intel']['local'])

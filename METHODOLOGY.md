@@ -286,7 +286,8 @@ No plugin and no server: the harness sends every dataset address straight to eac
   - Each chain runs twice: with one day's quota for every service, and with services whose daily quota is below the dataset size *used up*, as on a busy server.
   - A replay is not a plugin measurement: it leaves out caching, timeouts and concurrency, which the other families measure.
 - **Terms.** Each service's terms as checked on 7 October 2026 are printed next to its numbers. A good result does not make a service suitable as a default; the report says when terms are missing or restrict commercial use.
-- **Conflict of interest.** Connection Guard's author wrote this family, and Connection Guard Intel comes from the same author. Intel is only used inside the chain replays, never ranked as a service: its lists are built from the same operator lists that label the VPN cohorts (6, circularity).
+- **Connection Guard Intel** is measured as a service too (`cg-intel`): its published lists, checked locally like a plugin does, with no lookup and no quota. VPN, Tor or proxy list → `positive`; relay → `negative`; hosting alone or no list → `unknown`. The lists are fetched once at the end of the run, with their `as_of` recorded.
+- **Conflict of interest.** Connection Guard's author wrote this family, and Connection Guard Intel comes from the same author; it is marked as such in every table. Its VPN and Tor lists are built from the same operator lists and Tor list that label the VPN and Tor cohorts (6, circularity), so those rows show coverage, not how well it finds unknown servers. Its proxy list uses none of the three lists the proxy cohort was built from.
 
 ## 8. What will and will not be claimed
 

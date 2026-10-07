@@ -167,10 +167,12 @@ def parse_iphub(body, ip):
 
 class Service:
     def __init__(self, id, name, url, parse, interval=1.0, daily=None, keyed_daily=None, key_env=None, key_required=False,
-                 headers=None, terms='not checked', plugin=False):
+                 headers=None, terms='not checked', plugin=False, local=False, own=False):
         self.id, self.name, self.url, self.parse, self.interval = id, name, url, parse, interval
         self.keyless_daily, self.keyed_daily = daily, keyed_daily
         self.key_env, self.key_required, self.headers, self.terms, self.plugin = key_env, key_required, headers, terms, plugin
+        # local: downloadable lists checked on the server, no lookup. own: built by this benchmark's author.
+        self.local, self.own = local, own
 
     def key(self):
         if not self.key_env:
@@ -223,6 +225,8 @@ SERVICES = [
             terms='keyless; proxy flag only'),
     Service('negativity', 'Negativity', lambda ip, k: f'https://api.negativity.fr/ip/{q(ip)}', parse_negativity, terms='keyless'),
     Service('marvinmc', 'marvinmc.dev', lambda ip, k: f'https://marvinmc.dev/proxy/?ip={q(ip)}', parse_letter('TRUE', 'FALSE'), terms='keyless'),
+    Service('cg-intel', 'Connection Guard Intel', None, None, interval=0, plugin=True, local=True, own=True,
+            terms='downloadable lists checked on the server (CC BY 4.0); no lookup, no quota; the benchmark author\'s own project'),
     Service('rayzs', 'rayzs.de', lambda ip, k: f'https://www.rayzs.de/provpn/api/proxy.php/?a={q(ip)}', parse_letter('TRUE', 'FALSE'),
             terms='keyless'),
 ]
@@ -308,6 +312,25 @@ def run_service(service, items, sleep=time.sleep, fetch=None):
     return out, raws
 
 
+def intel_answers(lists, items):
+    """Connection Guard Intel read like a service: VPN, Tor or proxy list → positive; relay → negative (a privacy relay
+    is not a VPN, and 0.6 lets it in by default); hosting alone → unknown; on no list → unknown, never clean."""
+    out = []
+    for item in items:
+        started = time.monotonic()
+        flags = {c: lists.has(c, item['ip']) for c in ('vpn', 'tor', 'proxy', 'relay', 'hosting')}
+        rec = dict(service='cg-intel', id=item['id'], cohort=item['cohort'], label=item['label'])
+        if flags['vpn'] or flags['tor'] or flags['proxy']:
+            rec.update(verdict(vpn=flags['vpn'], proxy=flags['proxy'], tor=flags['tor'], hosting=flags['hosting']))
+        elif flags['relay']:
+            rec.update(verdict(vpn=False, proxy=False, tor=False, hosting=False), relay=True)
+        else:
+            rec.update(dict(verdict=UNKNOWN, vpn=None, proxy=None, tor=None, hosting=flags['hosting']))
+        rec['ms'] = round((time.monotonic() - started) * 1000, 2)
+        out.append(rec)
+    return out
+
+
 def wilson(k, n, z=1.96):
     if not n:
         return None
@@ -346,8 +369,9 @@ def summarize(records, items):
             name=s.name, keyed=bool(s.key()), plugin=s.plugin, terms=s.terms, subjects=len(rows), answered=len(answered),
             caught=caught, bad=len(bad), caught_ci=wilson(caught, len(bad)),
             refused=refused, good=len(good), refused_ci=wilson(refused, len(good)),
-            ms_p50=round(statistics.median(ms)) if ms else None,
-            ms_p95=round(sorted(ms)[max(0, math.ceil(len(ms) * 0.95) - 1)]) if ms else None,
+            ms_p50=round(statistics.median(ms), 1 if s.local else None) if ms else None,
+            ms_p95=round(sorted(ms)[max(0, math.ceil(len(ms) * 0.95) - 1)], 1 if s.local else None) if ms else None,
+            local=s.local, own=s.own,
             errors=errors, cohorts=cohorts)
     return out
 
@@ -471,7 +495,7 @@ def chains(answers, items, lists, services):
                 if all(s == 'intel' or s in services for s in chain):
                     out.append(chain_report(name, chain, simulate(chain, answers, items, lists, confirm, exhausted), items, **base))
             for s in services:
-                if s in CG_DEFAULT or BY_ID[s].key_required:
+                if s in CG_DEFAULT or BY_ID[s].key_required or BY_ID[s].local:
                     continue
                 chain = without + [s]
                 out.append(chain_report(f'{BY_ID[s].name} instead of IP-API', chain,
@@ -493,9 +517,14 @@ def markdown(summary, chain_rows, meta):
              '| Service | Key | Answered | Caught | Refused | p50 | p95 | Errors | Terms |', '|---|---|---|---|---|---|---|---|---|']
     for sid, s in sorted(summary.items(), key=lambda x: (-(x[1]['caught'] - 5 * x[1]['refused']))):
         errs = ', '.join(f'{k} {v}' for k, v in sorted(s['errors'].items())) or '–'
-        lines.append(f'| {s["name"]}{" ¹" if s["plugin"] else ""} | {"yes" if s["keyed"] else "no"} | {s["answered"]}/{s["subjects"]} | '
-                     f'{pct(s["caught"], s["bad"])} | {pct(s["refused"], s["good"])} | {s["ms_p50"] or "–"} ms | {s["ms_p95"] or "–"} ms | {errs} | {s["terms"]} |')
-    lines += ['', '¹ supported by Connection Guard 0.6.', '', '## Chains',
+        ms = lambda v: '–' if v is None else f'{v} ms'
+        lines.append(f'| {s["name"]}{" ¹" if s["plugin"] else ""}{" ²" if s.get("own") else ""} | {"yes" if s["keyed"] else "no"} | {s["answered"]}/{s["subjects"]} | '
+                     f'{pct(s["caught"], s["bad"])} | {pct(s["refused"], s["good"])} | {ms(s["ms_p50"])} | {ms(s["ms_p95"])} | {errs} | {s["terms"]} |')
+    lines += ['', '¹ supported by Connection Guard 0.6.',
+              '² built by this benchmark\'s author. Its VPN and Tor lists come from the same operator lists and Tor list that label the',
+              'VPN and Tor addresses, so those rows show coverage, not how well it finds unknown servers. Its proxy list uses none of the',
+              'three lists the proxy cohort was built from. "Answered" counts every address, listed or not; an unlisted address is unknown.',
+              '', '## Chains',
               '', f'Replayed from the answers above. `intel` = Connection Guard Intel lists as of {meta.get("intel", {}).get("as_of")}.',
               '`quota used up`: services with a daily quota below the dataset size answer nothing, as on a busy server.', '',
               '| Chain | Blackbox confirmed | Quota | Caught | Refused |', '|---|---|---|---|---|']
@@ -510,20 +539,23 @@ def run(recorder, service_ids=None, limit=0):
     if limit:
         items = items[:limit]
     wanted = [BY_ID[s] for s in (service_ids or [s.id for s in SERVICES])]
-    services = [s for s in wanted if s.available()]
+    try:
+        lists, intel = Lists.fetch()
+    except Exception as e:  # the chains then run without the local lists, and say so; Intel is not measured
+        lists, intel = None, dict(error=f'{type(e).__name__}: {e}'[:200])
+    local = [s for s in wanted if s.local and lists]
+    services = [s for s in wanted if s.available() and not s.local]
     skipped = [s.id for s in wanted if not s.available()]
     print(f'[providers] {len(items)} addresses, services: {", ".join(s.id for s in services)}; no key: {", ".join(skipped) or "none"}', flush=True)
     started = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-    with cf.ThreadPoolExecutor(len(services)) as pool:
+    with cf.ThreadPoolExecutor(max(1, len(services))) as pool:
         results = list(pool.map(lambda s: run_service(s, items), services))
     records = [r for rec, _ in results for r in rec]
     raws = [r for _, raw in results for r in raw]
-    try:
-        lists, intel = Lists.fetch()
-    except Exception as e:  # the chains then run without the local lists, and say so
-        lists, intel = None, dict(error=f'{type(e).__name__}: {e}'[:200])
+    if local:
+        records += intel_answers(lists, items)
     answers = {(r['service'], r['id']): r for r in records}
-    ids = [s.id for s in services]
+    ids = [s.id for s in services] + [s.id for s in local]
     summary = summarize(records, items)
     chain_rows = chains(answers, items, lists, ids)
     meta = dict(started=started, subjects=len(items), services=ids, skipped_no_key=skipped, intel=intel,

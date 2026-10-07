@@ -404,7 +404,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     import datetime
     date = datetime.date.fromisoformat(started[0][:10]).strftime('%-d %B %Y') if started else ''
     rounds = max([e['rounds'] for p in perf.values() for e in p.values()] or [0])
-    sections, height = [], 236
+    sections, height = [], 236 if products else 190
 
     def place(cards, columns):
         nonlocal height
@@ -533,12 +533,18 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     if prov:
         services = sorted(prov['services'].items(), key=lambda x: -(x[1]['caught'] / max(1, x[1]['bad']) - 3 * x[1]['refused'] / max(1, x[1]['good'])))
         caught = {s: v['caught'] / v['bad'] if v['bad'] else None for s, v in services}
-        refused = {s: v['refused'] / v['good'] if v['good'] else None for s, v in services}
-        speed = {s: v['ms_p50'] for s, v in services}
+        # Fewest refusals only counts for services that also catch: a service that flags nothing refuses nobody.
+        refused = {s: v['refused'] / v['good'] if v['good'] else None for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2}
+        speed = {s: v['ms_p50'] for s, v in services if not v.get('local')}
         wc, wr, ws = best(caught, False), best(refused, True), best(speed, True)
-        body = [('', [td(esc(v['name'])), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
+        body = [('', [td(esc(v['name']) + (' <span class="frac">own, see note</span>' if v.get('own') else '')), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
                       td(f'{v["refused"]}/{v["good"]}', 'best' if s in wr else ''), td(f'{v["answered"]}/{v["subjects"]}'),
-                      td(fmt_ms(v['ms_p50']), 'best' if s in ws else ''), td('key' if v['keyed'] else 'keyless')]) for s, v in services]
+                      td('local' if v.get('local') else fmt_ms(v['ms_p50']), 'best' if s in ws else ''),
+                      td('lists' if v.get('local') else 'key' if v['keyed'] else 'keyless')]) for s, v in services]
+        if any(v.get('own') for _, v in services):
+            body.append(('', [f'<td colspan="6" class="na" style="white-space:normal;font-size:12.5px;height:44px">Own: Connection Guard Intel is the '
+                              'benchmark author\'s project. Its VPN and Tor lists come from the same sources that label those addresses, so '
+                              'those numbers show coverage; its proxy list uses none of the proxy cohort\'s sources.</td>']))
         place([table_card('Detection services on their own', 'Every address sent straight to each service at its own rate limit and quota. Hosting alone is not a hit.',
                           ['Service', 'VPN, Tor, proxies caught', 'Home and mobile refused', 'Answered', 'Median time', 'Access'],
                           body, ['26%', '16%', '16%', '14%', '14%', '14%'], tag=f'{prov["meta"]["subjects"]} addresses')], '1fr')
@@ -550,7 +556,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
 <span class="pill"><span class="dot"></span><b>{status}</b> · {esc(date)}{f" · {esc(platform.capitalize())}" if platform else ""}</span></div>
 <h1>{esc(title or ('Anti-VPN plugins, measured.' if products else 'Detection services, measured.'))}</h1>
 <p class="sub">{f"{len(products)} unmodified plugins on the same server, with the same players and the same simulated detection services." if products else "Detection services measured directly, without any plugin."}</p>
-<div class="legend">{''.join(f'<span>{esc(names[p])}</span>' for p in products)}</div></header>'''
+<div class="legend">{''.join(f'<span>{esc(names[p])}</span>' for p in products)}</div></header>'''.replace('<header>', '<header>' if products else '<header style="height:190px">')
     foot = f'''<footer><span><b>Method, raw data and every log:</b> github.com/gerolndnr/mc-antivpn-bench · runs {esc(runs)}{f" · commit {esc(', '.join(commits))}" if commits else ""}<br>
 The accent marks the best value in each row. Results describe this setup and dataset, not every server.</span>
 <span style="text-align:right">Conflict of interest: maintained by the author of Connection Guard.<br>Other plugin authors can contest adapters and results (METHODOLOGY 10).</span></footer>'''
