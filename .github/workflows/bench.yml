@@ -76,12 +76,12 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
             # Keyed chunk series: start day, number of chunks (one per UTC day), products. A product added later joins
-            # a later series. 11-12 Oct: about 2 ProxyCheck queries per subject (AdvancedAntiVPN + baseline), so
-            # 346 subjects a day stay under one free key's 1,000.
+            # a later series. 11-13 Oct: about 3 ProxyCheck queries per subject (AdvancedAntiVPN, Connection Guard 0.6.1,
+            # baseline), so 231 subjects a day stay under one free key's 1,000.
             day=$(date -u +%Y-%m-%d)
             series=""
             for s in "2026-10-07 4 connection-guard,connection-guard-candidate,foxgate,proxyshield,vpnguard" \
-                     "2026-10-11 2 kaurivpn,advancedantivpn"; do
+                     "2026-10-11 3 kaurivpn,advancedantivpn,connection-guard-061"; do
               set -- $s
               k=$(( ( $(date -u -d "$day" +%s) - $(date -u -d "$1" +%s) ) / 86400 ))
               if [ "$k" -ge 0 ] && [ "$k" -lt "$2" ]; then series="$k/$2 $3"; fi
