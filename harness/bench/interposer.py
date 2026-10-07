@@ -239,11 +239,25 @@ class Interposer:
         self.quota_hits[key] = (start, count)
         return count > quota['limit']
 
-    def rule_for(self, host):
+    def rule_for(self, host, target=''):
+        path = (target or '').split('?')[0]
         for rule in self.rules['rules']:
-            if any(fnmatch.fnmatch(host, pattern) for pattern in rule.get('hosts', ['*'])):
+            if any(fnmatch.fnmatch(host, pattern) for pattern in rule.get('hosts', ['*'])) and \
+                    (not rule.get('paths') or any(fnmatch.fnmatch(path, p) for p in rule['paths'])):
                 return rule
         return dict(action=self.rules['default'])
+
+    @staticmethod
+    def mojang_profile(target):
+        """Mojang's name -> profile answer for a benchmark player, as for a real account. The players have no Mojang
+        accounts, so the real API answers 404; a product that resolves names online would treat every player as
+        unknown. The UUID is the server's offline-mode UUID of the name."""
+        name = urllib.parse.unquote(target.split('?')[0].rstrip('/').rsplit('/', 1)[-1])
+        digest = bytearray(hashlib.md5(f'OfflinePlayer:{name}'.encode()).digest())
+        digest[6] = (digest[6] & 0x0f) | 0x30
+        digest[8] = (digest[8] & 0x3f) | 0x80
+        body = json.dumps(dict(id=bytes(digest).hex(), name=name)).encode()
+        return dict(status=200, reason='OK', headers=[('Content-Type', 'application/json')], body=body)
 
     # ---------------------------------------------------------------- secrets
     def redact(self, text):
@@ -385,7 +399,7 @@ class Interposer:
             request.body.decode('utf-8', 'replace')
         leaks = [dict(secret=name, allowed_host=self.secret_allowed(name, host), tls=scheme == 'https')
                  for name in self.canaries_in(raw)]
-        rule = self.rule_for(host)
+        rule = self.rule_for(host, request.target)
         key, template_key, subject = self.canonical(scheme, host, request)
         event = dict(conn=conn_id, scheme=scheme, host=host, port=port, method=request.method,
                      baseline=bool(request.header('x-bench-baseline')),
@@ -408,6 +422,8 @@ class Interposer:
     async def _decide(self, ctx, request, scheme, port):
         rule, action = ctx['rule'], ctx['action']
         answer, source = None, None
+        if action == 'mojang-profile':
+            return self.mojang_profile(request.target), 'fixture'
         if action in ('record', 'replay'):
             answer = self.store.get(ctx['key'])
             source = 'store' if answer else None

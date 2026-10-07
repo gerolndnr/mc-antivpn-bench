@@ -525,3 +525,74 @@ class PinnedVersionsAreNotAddresses(unittest.TestCase):
             adapter = json.load(open(os.path.join(ROOT, 'products', name)))
             if adapter.get('previous_pins'):
                 self.assertIn(adapter['id'], scenarios.UPGRADE_MARKERS, name)
+
+
+class PlayerAccounts(unittest.TestCase):
+    def test_name_lookup_answers_like_a_real_account(self):
+        box = interposer.Interposer(tempfile.mkdtemp())
+        box.configure(engine.measurement_rules())
+        self.assertEqual(box.rule_for('api.mojang.com', '/users/profiles/minecraft/kauriv000019')['action'], 'mojang-profile')
+        self.assertNotEqual(box.rule_for('api.mojang.com', '/other')['action'], 'mojang-profile')
+        answer = json.loads(interposer.Interposer.mojang_profile('/users/profiles/minecraft/kauriv000019')['body'])
+        self.assertEqual(answer['name'], 'kauriv000019')
+        self.assertEqual(len(answer['id']), 32)
+        self.assertEqual(answer['id'][12], '3')  # name-based (offline-mode) UUID
+
+
+class MeasuredDates(unittest.TestCase):
+    def test_span_of_the_runs_shown(self):
+        from bench import overview
+        m = lambda s, d=0: dict(environment=dict(started=s), duration_s=d)
+        self.assertEqual(overview.measured_dates([m('2026-10-06T22:25:11+00:00', 3000), m('2026-10-07T08:26:33+00:00')]),
+                         '6–7 October 2026')
+        self.assertEqual(overview.measured_dates([m('2026-10-07T08:00:00+00:00', 60)]), '7 October 2026')
+
+
+class ReadmeOverviewSelection(unittest.TestCase):
+    """A newer run with only some products adds them; the other products keep their newest result."""
+
+    def run_folder(self, base, run_id, products, detection_profile=None):
+        folder = os.path.join(base, str(run_id))
+        os.makedirs(os.path.join(folder, 'platform'))
+        json.dump(dict(products=products, environment=dict(started='2026-10-07T08:00:00+00:00')),
+                  open(os.path.join(folder, 'manifest.json'), 'w'))
+        for p in products:
+            json.dump(dict(product=p, platform='paper', result=[]), open(os.path.join(folder, 'platform', f'{p}-paper.json'), 'w'))
+        if detection_profile:
+            os.makedirs(os.path.join(folder, 'detection'))
+            rows = [dict(subject=f's{i}', cohort='tor', label='vpn', attempt=0,
+                         products={p: dict(blocked=True) for p in products}) for i in range(3)]
+            json.dump(dict(profile=detection_profile, chunk=None, rows=rows),
+                      open(os.path.join(folder, 'detection', f'{detection_profile}.json'), 'w'))
+
+    def test_partial_run_adds_products(self):
+        from bench import latest
+        base = tempfile.mkdtemp()
+        self.run_folder(base, 2, ['kaurivpn'], 'enforce')
+        self.run_folder(base, 1, ['connection-guard', 'foxgate'], 'enforce')
+        saved = latest.runs, latest.dataset_size
+        latest.runs = lambda repo, limit: [dict(id=2), dict(id=1)]
+        latest.dataset_size = lambda: 3
+        try:
+            chosen, providers, profile = latest.select('x', base)
+        finally:
+            latest.runs, latest.dataset_size = saved
+        self.assertEqual(sorted(chosen['functional']), ['connection-guard', 'foxgate', 'kaurivpn'])
+        self.assertEqual(sorted(chosen['detection']), ['connection-guard', 'foxgate', 'kaurivpn'])
+        self.assertEqual(profile, 'enforce')
+
+    def test_keyed_profile_only_once_every_product_has_it(self):
+        from bench import latest
+        base = tempfile.mkdtemp()
+        self.run_folder(base, 3, ['connection-guard', 'foxgate'], 'proxycheck_key')
+        self.run_folder(base, 2, ['kaurivpn'], 'enforce')
+        self.run_folder(base, 1, ['connection-guard', 'foxgate'], 'enforce')
+        saved = latest.runs, latest.dataset_size
+        latest.runs = lambda repo, limit: [dict(id=3), dict(id=2), dict(id=1)]
+        latest.dataset_size = lambda: 3
+        try:
+            chosen, _, profile = latest.select('x', base)
+        finally:
+            latest.runs, latest.dataset_size = saved
+        self.assertEqual(profile, 'enforce')
+        self.assertEqual(chosen['detection']['connection-guard'][0][0], '1')

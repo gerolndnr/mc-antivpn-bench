@@ -138,10 +138,14 @@ def detection(dirs):
     if not by:
         return None
     profile = 'proxycheck_key' if 'proxycheck_key' in by else 'enforce' if 'enforce' in by else next(iter(by))
-    final = {}
+    # Final attempt per subject and product: products can come from different runs (bench.latest).
+    final, attempts = {}, {}
     for row in by[profile]:
-        if row['subject'] not in final or row['attempt'] >= final[row['subject']]['attempt']:
-            final[row['subject']] = row
+        entry = final.setdefault(row['subject'], dict(cohort=row['cohort'], products={}))
+        for pid, result in row['products'].items():
+            if row['attempt'] >= attempts.get((row['subject'], pid), -1):
+                attempts[(row['subject'], pid)] = row['attempt']
+                entry['products'][pid] = result
     rows = list(final.values())
     products = sorted({p for r in rows for p in r['products']}, key=lambda p: PRODUCT_ORDER.index(p) if p in PRODUCT_ORDER else 99)
     cohorts = {}
@@ -223,6 +227,29 @@ def providers(dirs):
         if os.path.exists(path):
             return json.load(open(path))
     return None
+
+
+def measured_dates(ms):
+    """The days the shown results were measured, first run start to last run end: "7 October 2026",
+    "6–7 October 2026", "30 September – 2 October 2026"."""
+    import datetime
+    days = []
+    for m in ms:
+        started = (m.get('environment') or {}).get('started')
+        if not started:
+            continue
+        start = datetime.datetime.fromisoformat(started)
+        days += [start.date(), (start + datetime.timedelta(seconds=m.get('duration_s') or 0)).date()]
+    if not days:
+        return ''
+    first, last = min(days), max(days)
+    if first == last:
+        return f'{first.day} {first:%B %Y}'
+    if (first.year, first.month) == (last.year, last.month):
+        return f'{first.day}–{last.day} {last:%B %Y}'
+    if first.year == last.year:
+        return f'{first.day} {first:%B} – {last.day} {last:%B %Y}'
+    return f'{first.day} {first:%B %Y} – {last.day} {last:%B %Y}'
 
 
 def manifests(dirs):
@@ -401,9 +428,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         products = newest_only(products)
     names = product_names(products, labels)
     ms = manifests(dirs)
-    started = sorted(m['environment'].get('started', '') for m in ms if m.get('environment'))
-    import datetime
-    date = datetime.date.fromisoformat(started[0][:10]).strftime('%-d %B %Y') if started else ''
+    date = measured_dates(ms)
     rounds = max([e['rounds'] for p in perf.values() for e in p.values()] or [0])
     sections, height = [], 236 if products else 190
 

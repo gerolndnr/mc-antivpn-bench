@@ -40,6 +40,10 @@ UPDATES = ['api.github.com', 'github.com', 'objects.githubusercontent.com', 'rel
 LIBRARIES = ['repo1.maven.org', 'repo.maven.apache.org', '*.maven.apache.org', 'repo.papermc.io', 'repo.okaeri.cloud',
              'jitpack.io', 'repo.codemc.io', 'oss.sonatype.org', 's01.oss.sonatype.org']
 UPDATES_AND_LIBRARIES = UPDATES + LIBRARIES
+# Benchmark players have no Mojang accounts. A product that resolves a name online (KauriVPN on BungeeCord) gets the
+# answer a real player's account would give, never the 404 a made-up name gets (interposer.mojang_profile).
+PLAYER_ACCOUNTS = dict(name='player-accounts', hosts=['api.mojang.com'], paths=['/users/profiles/minecraft/*'],
+                       action='mojang-profile')
 
 
 def safe_name(name):
@@ -65,7 +69,7 @@ def secrets_spec(canaries):
 
 
 def measurement_rules(extra=None, default='record', normalize_quota=True):
-    rules = [dict(name='telemetry', hosts=TELEMETRY, action='deny'),
+    rules = [PLAYER_ACCOUNTS, dict(name='telemetry', hosts=TELEMETRY, action='deny'),
              dict(name='updates', hosts=UPDATES, action='deny'),
              dict(name='libraries', hosts=LIBRARIES, action='passthrough')]
     rules += list(extra or [])
@@ -82,7 +86,7 @@ def measurement_rules(extra=None, default='record', normalize_quota=True):
 def clean_install_rules():
     """A first start legitimately downloads libraries (and may check for updates)."""
     return dict(default='record', replay_latency='recorded', seed=1, rules=[
-        dict(name='telemetry', hosts=TELEMETRY, action='deny'),
+        PLAYER_ACCOUNTS, dict(name='telemetry', hosts=TELEMETRY, action='deny'),
         dict(name='updates-and-libraries', hosts=UPDATES_AND_LIBRARIES, action='passthrough')])
 
 
