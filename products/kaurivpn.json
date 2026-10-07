@@ -59,5 +59,7 @@
     "bStats (bstats: true) - blocked like every product's telemetry"
   ],
   "list_sources": [],
-  "list_sources_note": "Downloads no lists; every check is a funkemunky.cc lookup (prefixWhitelists exempts names starting with '*', which no benchmark player uses)."
+  "list_sources_note": "Downloads no lists; every check is a funkemunky.cc lookup (prefixWhitelists exempts names starting with '*', which no benchmark player uses).",
+  "decides_after_join": true,
+  "decides_after_join_note": "Lets every player in and checks afterwards: 393 of 395 refusals in detection were kicks of a player already on the server (DENY_PLAY). Its join times are the time until it lets the player in, not until it decides."
 }

@@ -66,6 +66,16 @@ def product_names(ids, labels):
     return out
 
 
+def after_join(pid):
+    """Plugins that let the player in and check afterwards (adapter `decides_after_join`): their login times are not
+    decision times, so the graphic shows "after join" instead and never marks them best."""
+    path = os.path.join(ROOT, 'products', f'{pid}.json')
+    return os.path.exists(path) and bool(json.load(open(path)).get('decides_after_join'))
+
+
+AFTER = '<span class="na">after join</span>'
+
+
 def pin_of(pid):
     path = os.path.join(ROOT, 'products', f'{pid}.json')
     if not os.path.exists(path):
@@ -463,23 +473,28 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                 continue
             checked = e['checked']
             note = (f'{num(checked)} of {num(e["subjects"])} checked' if pid != 'none' and e['subjects'] else '')
+            if after_join(pid):
+                rows.append((pid, names[pid], None, 'after join', 'lets everyone in, kicks later', False))
+                continue
             rows.append((pid, names[pid], e['burst_p95'], fmt_ms(e['burst_p95']), note, pid == 'none'))
         # A fast answer that skipped most players is not the best answer: only plugins that checked the most players compete.
         most = max([p[k]['checked'] or 0 for k, *_ in rows if k != 'none'] or [0])
         card_a = bar_card('1,000 players join in 20 seconds', 'Time until the plugin decides, 95th percentile, among those that checked the most players.',
                           rows, low=True, cap=30000, tag=platform.capitalize() + (f' · median of {rounds} rounds' if rounds > 1 else ''),
-                          eligible={k for k, *_ in rows if k != 'none' and (p[k]['checked'] or 0) >= 0.95 * most})
+                          eligible={k for k, *_ in rows if k != 'none' and not after_join(k) and (p[k]['checked'] or 0) >= 0.95 * most})
         metrics = [('Single join, p95', 'cold_p95', fmt_ms, True), ('Repeat join, p50', 'warm_p50', fmt_ms, True),
                    ('Lookups, 100 same-IP joins', 'stampede', num, True), ('Players checked in the wave', 'checked', num, False),
                    ('Start-up', 'start', lambda v: '–' if v is None else f'{v:.1f} s', True)]
         cols = [pid for pid in products if pid in p]
         body = []
+        timed = ('cold_p95', 'warm_p50')
         for label, key, f, low in metrics:
             vals = {pid: p[pid][key] for pid in cols}
             if all(v is None for v in vals.values()):
                 continue
-            w = best(vals, low)
-            body.append(('', [td(esc(label))] + [td(f(vals[pid]), 'best' if pid in w else '') for pid in cols]))
+            hide = {pid for pid in cols if key in timed and after_join(pid)}
+            w = best({pid: v for pid, v in vals.items() if pid not in hide}, low)
+            body.append(('', [td(esc(label))] + [td(AFTER if pid in hide else f(vals[pid]), 'best' if pid in w else '') for pid in cols]))
         card_b = table_card('Everyday joins', 'Same simulated services, same delays and free-tier limits for every plugin.',
                             [''] + [names[pid] for pid in cols], body, ['30%'] + [f'{70 / max(1, len(cols)):.2f}%'] * len(cols))
         place([card_a, card_b], '1fr 1fr')
@@ -508,6 +523,12 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             body.append(('total', [td(('Blocked' if not low else 'Refused') + f' of {n}')] + [td(str(tot[pid]), 'best' if pid in w else '') for pid in cols]))
         profile = {'enforce': 'as shipped, no API keys', 'proxycheck_key': 'same free ProxyCheck key for every plugin',
                    'free_keys': 'free keys'}.get(det['profile'], det['profile'])
+        late = [pid for pid in cols if after_join(pid)]
+        if late:
+            who = ', '.join(names[pid].split('\n')[0] for pid in late)
+            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                              f'{esc(who)} lets every player in and checks afterwards: its blocks are kicks of a player who is already on '
+                              'the server. Its join times are therefore shown as "after join".</td>']))
         place([table_card('Detection and false positives', f'{num(det["subjects"])} real addresses, {profile}. Each number: addresses blocked.',
                           [''] + [names[pid] for pid in cols], body, ['28%'] + [f'{72 / max(1, len(cols)):.2f}%'] * len(cols))], '1fr')
 
@@ -524,8 +545,9 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         if any(v is not None for v in home.values()):
             # Fastest home login only among plugins that still refuse VPN and Tor during the timeout: letting
             # everyone in at once is quick, not good.
-            w = best({pid: v for pid, v in home.items() if (fail[pid].get('timeout') or {}).get('ok')}, True)
-            body.append(('total', [td('Home login while timing out')] + [td(fmt_ms(home[pid]), 'best' if pid in w else '') for pid in cols]))
+            w = best({pid: v for pid, v in home.items() if (fail[pid].get('timeout') or {}).get('ok') and not after_join(pid)}, True)
+            body.append(('total', [td('Home login while timing out')] +
+                         [td(AFTER if after_join(pid) else fmt_ms(home[pid]), 'best' if pid in w else '') for pid in cols]))
         cards.append(table_card('When detection services fail', 'VPN and Tor still refused while every service fails this way.',
                                 [''] + [names[pid] for pid in cols], body, ['34%'] + [f'{66 / max(1, len(cols)):.2f}%'] * len(cols)))
     if red:
