@@ -609,3 +609,22 @@ class ProviderScore(unittest.TestCase):
         self.assertLess(low, p.score(s))
         self.assertGreater(high, p.score(s))
         self.assertEqual(p.score(dict(caught=0, bad=382, refused=0, good=310, ms_p50=612.0)), 0.0)
+
+
+class OverviewJobNeedsNoPackages(unittest.TestCase):
+    """.github/workflows/overview.yml runs bench.latest with bare Python: no yaml, cryptography or h2."""
+
+    def test_latest_and_score_import_without_packages(self):
+        import subprocess, sys
+        code = ('import builtins, sys\n'
+                'real = builtins.__import__\n'
+                'def guard(name, *a, **k):\n'
+                '    if name.split(".")[0] in ("yaml", "cryptography", "h2"): raise ImportError(name)\n'
+                '    return real(name, *a, **k)\n'
+                'builtins.__import__ = guard\n'
+                'from bench import latest, overview, score\n'
+                's = dict(caught=1, bad=2, refused=0, good=2, ms_p50=0)\n'
+                'assert score.score(s) == 50.0\n')
+        env = dict(os.environ, PYTHONPATH=os.path.join(ROOT, 'harness'))
+        result = subprocess.run([sys.executable, '-c', code], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)

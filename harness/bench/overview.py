@@ -559,7 +559,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
 
     # Detection services on their own
     if prov:
-        from .providers import REFUSAL_WEIGHT, score
+        from .score import REFUSAL_WEIGHT, score
         services = sorted(prov['services'].items(), key=lambda x: -score(x[1]))
         scores = {s: score(v) for s, v in services}
         caught = {s: v['caught'] / v['bad'] if v['bad'] else None for s, v in services}
