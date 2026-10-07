@@ -1,7 +1,7 @@
 {
   "id": "connection-guard-061",
   "name": "Connection Guard 0.6.1 candidate (feffbfb)",
-  "relationship": "Unreleased candidate of Connection Guard (PR #84), measured before release. Same adapter as 0.6.0; not a public product and never shown in the README overview (pre_release).",
+  "relationship": "Release candidate of Connection Guard 0.6.1 (PR #84 head feffbfb), shown as \"Connection Guard v0.6.1\" in the README overview. Same adapter as 0.6.0.",
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
@@ -108,6 +108,5 @@
     "https://intel.connectionguard.net/vpn.txt",
     "https://intel.connectionguard.net/tor.txt"
   ],
-  "list_sources_note": "Connection Guard Intel lists the shipped configuration downloads (relay.txt and hosting.txt never decide on their own). Intel is built from the same operator server lists as this dataset's VPN labels: its coverage here is circular (see the circularity table).",
-  "pre_release": true
+  "list_sources_note": "Connection Guard Intel lists the shipped configuration downloads (relay.txt and hosting.txt never decide on their own). Intel is built from the same operator server lists as this dataset's VPN labels: its coverage here is circular (see the circularity table)."
 }
