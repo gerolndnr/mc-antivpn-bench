@@ -2,7 +2,7 @@
 import json
 import os
 
-from . import artifacts
+from . import artifacts, private
 
 PINS = os.path.join(artifacts.ROOT, 'products', 'modrinth-pins.json')
 
@@ -16,11 +16,15 @@ def pins():
     if os.path.exists(CANDIDATES):
         with open(CANDIDATES) as handle:
             out.update(json.load(handle))
+    out.update(private.pins())
     return out
 
 
 def jar(pin_key):
     pin = pins()[pin_key]
+    if pin.get('private'):
+        # Bought, licensed to the owner: kept outside this repository (bench/private.py).
+        return private.jar(pin_key)
     if pin.get('path'):
         # Unreleased candidate committed to this repository (own product, MIT), verified by hash.
         path = os.path.join(artifacts.ROOT, pin['path'])

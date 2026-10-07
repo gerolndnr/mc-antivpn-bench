@@ -19,13 +19,15 @@ import subprocess
 import sys
 import time
 
-from . import artifacts, engine, products, scenarios
+from . import artifacts, engine, private, products, scenarios
 
 ROOT = artifacts.ROOT
 IPV4_ANY = __import__('re').compile(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])')
 IPV6_ANY = __import__('re').compile(r'(?<![\w:])[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}(?![\w:])')
 # The candidate stays in the default set while its pull request is open.
 ALL_PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn']
+# Bought products join the default set only where their JAR was provided (bench/private.py).
+ALL_PRODUCTS += [p['product'] for key, p in private.pins().items() if private.available(key) and p['product'] not in ALL_PRODUCTS]
 ALL_PLATFORMS = ['paper', 'folia', 'velocity', 'bungee']
 
 
@@ -70,7 +72,9 @@ class Recorder:
         self._sorted = sorted(self.subject_map, key=len, reverse=True)
 
     def redact(self, text):
-        """Dataset addresses become their ids; every other non-loopback address becomes <ip>."""
+        """Dataset addresses become their ids; every other non-loopback address becomes <ip>; a bought product's
+        buyer id becomes <purchaser>."""
+        text = private.redact(text)
         for ip in self._sorted:
             if ip in text:
                 text = text.replace(ip, self.subject_map[ip])

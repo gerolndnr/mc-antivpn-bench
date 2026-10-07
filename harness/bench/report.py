@@ -18,9 +18,9 @@ COHORT_ORDER = ['commercial_vpn', 'fresh_vpn', 'vpn_v6', 'tor', 'proxy', 'reside
                 'residential_v6']
 POSITIVE = {'commercial_vpn', 'fresh_vpn', 'vpn_v6', 'tor', 'proxy'}
 NAMES = {'connection-guard': 'Connection Guard 0.5.1', 'connection-guard-candidate': 'Connection Guard 0.6.0 (c4b67eb)', 'foxgate': 'FoxGate 1.2.0-pre10',
-         'proxyshield': 'ProxyShield 2.5.1', 'vpnguard': 'VPNGuard 1.2.0', 'kaurivpn': 'KauriVPN 1.10.1.1', 'proxycheck': 'ProxyCheck API',
+         'proxyshield': 'ProxyShield 2.5.1', 'vpnguard': 'VPNGuard 1.2.0', 'kaurivpn': 'KauriVPN 1.10.1.1', 'advancedantivpn': 'AdvancedAntiVPN 2.31.8', 'proxycheck': 'ProxyCheck API',
          'vpnapi': 'VPNAPI API', 'none': 'no product (platform only)'}
-PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn']
+PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn', 'advancedantivpn']
 
 
 def wilson(k, n, z=1.96):

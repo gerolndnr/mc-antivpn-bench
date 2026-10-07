@@ -459,3 +459,53 @@ class IntelAsService(unittest.TestCase):
         self.assertEqual(got, dict(vpn='positive', proxy='positive', relay='negative', dc='unknown', none='unknown'))
         summary = p.summarize(p.intel_answers(lists, items), items)
         self.assertTrue(summary['cg-intel']['own'] and summary['cg-intel']['local'])
+
+
+class BoughtProducts(unittest.TestCase):
+    """A paid JAR's buyer id must never reach a public result (bench/private.py)."""
+
+    def setUp(self):
+        from bench import private
+        self.private = private
+        self.directory = tempfile.mkdtemp()
+        self.saved = private.DIRECTORY
+        private.DIRECTORY = self.directory
+        self.jar = b'PK fake jar 7771234'
+        with open(os.path.join(self.directory, 'AdvancedAntiVPN-2.31.8.jar'), 'wb') as handle:
+            handle.write(self.jar)
+        with open(os.path.join(self.directory, 'private.json'), 'w') as handle:
+            json.dump(dict(sha256={'AdvancedAntiVPN-2.31.8.jar': hashlib.sha256(self.jar).hexdigest()},
+                           redact=['7771234', '55501']), handle)
+
+    def tearDown(self):
+        self.private.DIRECTORY = self.saved
+
+    def test_public_repository_holds_no_hash_or_id(self):
+        for pin in self.private.pins().values():
+            self.assertTrue(pin['private'])
+            self.assertFalse({'sha256', 'sha512', 'url', 'redact'} & set(pin))
+
+    def test_jar_is_verified_against_the_private_hash(self):
+        self.assertTrue(self.private.jar('advancedantivpn-2.31.8').endswith('AdvancedAntiVPN-2.31.8.jar'))
+        with open(os.path.join(self.directory, 'AdvancedAntiVPN-2.31.8.jar'), 'ab') as handle:
+            handle.write(b'x')
+        with self.assertRaises(RuntimeError):
+            self.private.jar('advancedantivpn-2.31.8')
+
+    def test_buyer_id_is_masked_and_a_leak_is_found(self):
+        line = 'Plugin registered to 7771234 | 55501 GET /legacy/premium.php?user_id=7771234'
+        self.assertNotIn('7771234', self.private.redact(line))
+        self.assertNotIn('55501', self.private.redact(line))
+        self.assertEqual(self.private.redact('"served_ms": 77712345, "port": 555012'), '"served_ms": 77712345, "port": 555012')
+        results = tempfile.mkdtemp()
+        with open(os.path.join(results, 'clean.log'), 'w') as handle:
+            handle.write(self.private.redact(line))
+        self.assertEqual(self.private.leaks(results), [])
+        with open(os.path.join(results, 'leak.log'), 'w') as handle:
+            handle.write(line)
+        self.assertEqual(self.private.leaks(results), ['leak.log'])
+
+    def test_egress_log_masks_the_buyer_id(self):
+        spec = engine.secrets_spec(dict(proxycheck='1-2-3-4', vpnapi='ab'))
+        box = interposer.Interposer(tempfile.mkdtemp(), interposer.secrets_from_environment(spec))
+        self.assertNotIn('7771234', box.redact('/legacy/premium.php?user_id=7771234&resource_id=101081'))

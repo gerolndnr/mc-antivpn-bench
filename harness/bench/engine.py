@@ -21,7 +21,7 @@ import time
 
 import yaml
 
-from . import products, servers
+from . import private, products, servers
 
 WORK = servers.WORK
 INSTALLED = os.path.join(WORK, 'templates', 'installed')
@@ -56,8 +56,12 @@ def make_canaries(seed=None):
 
 
 def secrets_spec(canaries):
-    return dict(proxycheck=dict(env='PROXYCHECK_KEY', canary=canaries['proxycheck'], hosts=['proxycheck.io']),
+    spec = dict(proxycheck=dict(env='PROXYCHECK_KEY', canary=canaries['proxycheck'], hosts=['proxycheck.io']),
                 vpnapi=dict(env='VPNAPI_KEY', canary=canaries['vpnapi'], hosts=['vpnapi.io']))
+    # A bought product's buyer id (e.g. in a marketplace licence check URL) is masked in the egress log like a key.
+    for i, value in enumerate(private.redact_values()):
+        spec[f'purchaser-{i}'] = dict(value=value, hosts=[])
+    return spec
 
 
 def measurement_rules(extra=None, default='record', normalize_quota=True):

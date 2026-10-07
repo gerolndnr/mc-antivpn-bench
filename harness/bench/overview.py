@@ -44,7 +44,7 @@ def records(dirs, family):
 
 def product_names(ids, labels):
     pins = {}
-    for name in ('modrinth-pins.json', 'candidate-pins.json'):
+    for name in ('modrinth-pins.json', 'candidate-pins.json', 'private-pins.json'):
         path = os.path.join(ROOT, 'products', name)
         if os.path.exists(path):
             pins.update(json.load(open(path)))
@@ -72,7 +72,7 @@ def pin_of(pid):
     adapter = json.load(open(path))
     pin = (adapter.get('pins') or {}).get('velocity') or next(iter((adapter.get('pins') or {'': ''}).values()))
     pins = {}
-    for name in ('modrinth-pins.json', 'candidate-pins.json'):
+    for name in ('modrinth-pins.json', 'candidate-pins.json', 'private-pins.json'):
         if os.path.exists(os.path.join(ROOT, 'products', name)):
             pins.update(json.load(open(os.path.join(ROOT, 'products', name))))
     return pins.get(pin, {})

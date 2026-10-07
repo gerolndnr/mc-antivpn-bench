@@ -25,17 +25,23 @@ The suite is written and run by the maintainers of **Connection Guard**, one of 
 | ProxyShield | 2.5.1 (native Paper/Folia/Velocity/Bungee builds) | [Modrinth](https://modrinth.com/plugin/proxyshield) | GPL-3.0 |
 | VPNGuard | 1.2.0 | [Modrinth](https://modrinth.com/plugin/vpnguard) | All rights reserved |
 | KauriVPN (Kauri AntiVPN) | 1.10.1.1; 1.10.1.2 on Folia (published for Folia only) | [Modrinth](https://modrinth.com/plugin/kauri-antivpn) | Apache-2.0 |
+| AdvancedAntiVPN | 2.31.8 (one JAR for Spigot/Paper, BungeeCord and Velocity) | [SpigotMC](https://www.spigotmc.org/resources/101081/), paid, bought | Commercial |
 | Baseline: ProxyCheck.io API | v2, `vpn=1&asn=1` | direct | service |
 | Baseline: VPNAPI.io API | `/api/{ip}` | direct | service |
 
 **Selection rule.** The newest version on Modrinth whose listed loaders include the platform under test. Where a product publishes per-platform builds, each platform gets its native build. Pins with SHA-512: [`products/modrinth-pins.json`](products/modrinth-pins.json).
 
+**Bought products.** AdvancedAntiVPN is sold only on SpigotMC. The benchmark owner bought it at the listed price, like any server owner; its author did not provide it.
+- Every SpigotMC premium download carries its buyer's id, which AdvancedAntiVPN prints at startup and sends in its licence check. So the JAR, its hash and that id are kept in a private repository, not here.
+- CI downloads it only into the git-ignored cache. The public pin ([`products/private-pins.json`](products/private-pins.json)) names the version only.
+- Public logs show the buyer id as `<purchaser>`. A run whose public results still contain it uploads none ([`harness/bench/private.py`](harness/bench/private.py)).
+- Without the owner's copy the product is left out, so others cannot reproduce this row without buying it themselves.
+
 **Not in v1:**
 - *AntiVPN-X*: no product of that name was found on Modrinth, Hangar, SpigotMC or GitHub on 2026-10-05.
-- *AdvancedAntiVPN*: commercial; it needs a licence this project does not own.
 - *v4Guard*: the connector checks nothing until the server is linked to a v4Guard account in its web dashboard ("This instance is not connected to a company! We're not processing your checks."), every fresh instance gets a new link code, all settings live in that dashboard, and the connector talks to its service over a WebSocket (Socket.IO) that the interposer can neither record nor fault. Checked 7 October 2026.
 
-Both can be added through an adapter (section 10).
+Either can be added through an adapter (section 10).
 
 ## 3. Environment
 
@@ -340,6 +346,11 @@ The adapters for products without public source code are written from their publ
   - Found while checking a question from FoxGate's author about `central.zowi.gay/tors`, which was fetched normally (HTTP 200).
   - Fixed in the adapter. Both families now stop with an error when a product asks an unlisted host about a subject (docs/ADAPTERS.md). Re-run: failure 37593590733, performance 37593586654. In the failure re-run FoxGate refused the VPN subject in all five fault cases.
 - **2026-10-07, KauriVPN added** (Modrinth, Apache-2.0). It enforces out of the box and asks only its author's own service (funkemunky.cc, 20,000 free queries); it has no ProxyCheck or VPNAPI key fields, so `proxycheck_key` and `free_keys` measure it as `enforce`. The keyed detection chunks of 7-10 October keep the five products they started with; KauriVPN joins the next keyed series.
+- **2026-10-07, AdvancedAntiVPN added** (SpigotMC, paid, bought at the listed price; see "Bought products" in section 2).
+  - As shipped every service is off, so it blocks nobody.
+  - `enforce` switches on the three services its config offers without a key (IP-API, ProxyCheck, VPNAPI) and keeps the default vote of 2.
+  - Folia is not advertised; the Folia row records whether it loads.
+  - It joins the next keyed detection series, like KauriVPN.
 - **2026-10-07, family `providers`** (7.9): every detection service on its own, Connection Guard Intel among them (marked as the author's project), and replays of lookup chains, including the planned Connection Guard 0.6.1 chain.
 - **2026-10-07, overview graphic** at the end of every run and at the top of the README: the newest complete result of every family, the newest pinned version of each plugin, the accent on the best value of each row.
 

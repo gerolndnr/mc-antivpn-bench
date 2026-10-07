@@ -800,11 +800,12 @@ class Interposer:
 
 
 def secrets_from_environment(spec):
-    """spec: {name: {"env": "PROXYCHECK_KEY", "canary": "...", "hosts": [...]}}"""
+    """spec: {name: {"env": "PROXYCHECK_KEY", "canary": "...", "hosts": [...]}}; an entry with "value" and no
+    canary is only masked in the logs (a bought product's buyer id)."""
     resolved = {}
     for name, entry in spec.items():
-        resolved[name] = dict(canary=entry['canary'], hosts=entry['hosts'],
-                              value=os.environ.get(entry.get('env', ''), '') or None)
+        resolved[name] = dict(canary=entry.get('canary'), hosts=entry['hosts'],
+                              value=entry.get('value') or os.environ.get(entry.get('env', ''), '') or None)
     return resolved
 
 

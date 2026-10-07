@@ -1,0 +1,14 @@
+{
+  "advancedantivpn-2.31.8": {
+    "private": true,
+    "product": "advancedantivpn",
+    "project": "advancedantivpn",
+    "version": "2.31.8",
+    "version_type": "release",
+    "published": "2026-07-04",
+    "filename": "AdvancedAntiVPN-2.31.8.jar",
+    "loaders": ["bukkit", "spigot", "paper", "bungeecord", "velocity"],
+    "source": "SpigotMC premium resource 101081, bought by the benchmark owner on 2026-10-07 at the listed price",
+    "note": "Each SpigotMC premium download carries its buyer's id, so the JAR, its hash and that id stay in the owner's private repository (bench/private.py)."
+  }
+}

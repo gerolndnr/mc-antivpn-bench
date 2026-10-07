@@ -1,0 +1,91 @@
+{
+  "id": "advancedantivpn",
+  "name": "AdvancedAntiVPN",
+  "relationship": "Independent third party (HexedHero). Paid plugin (SpigotMC premium); bought at the listed price, not provided by the author.",
+  "license": "Commercial, licensed to the buyer (not redistributed by this benchmark)",
+  "source": null,
+  "listing": "https://www.spigotmc.org/resources/101081/",
+  "pins": {
+    "paper": "advancedantivpn-2.31.8",
+    "folia": "advancedantivpn-2.31.8",
+    "velocity": "advancedantivpn-2.31.8",
+    "bungee": "advancedantivpn-2.31.8"
+  },
+  "pins_note": "One JAR for every platform. Folia is not advertised (plugin.yml has no folia-supported), so the Folia result records whether it loads. No previous release is pinned: only the current version was bought.",
+  "data_dir": {
+    "paper": "AdvancedAntiVPN",
+    "folia": "AdvancedAntiVPN",
+    "velocity": "advancedantivpn",
+    "bungee": "AdvancedAntiVPN"
+  },
+  "config": "config.yml",
+  "ready_pattern": null,
+  "profiles": {
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded: every service is disabled (Flagged Threshold 2), so it blocks nobody and warns that no service is enabled."
+    },
+    "enforce": {
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "Services.IP-API.Enabled": true,
+            "Services.ProxyCheck.Enabled": true,
+            "Services.VPNAPI.Enabled": true
+          }
+        }
+      ],
+      "note": "The services its own config.yml offers without a key (IP-API unlimited, ProxyCheck and VPNAPI 100 a day each) switched on; Flagged Threshold stays at its default 2, so two of three must agree. Nothing else changed."
+    },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "Services.ProxyCheck.Key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through its documented Services.ProxyCheck.Key field (same key for every product)."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "Services.ProxyCheck.Key": "{canary:proxycheck}",
+            "Services.VPNAPI.Key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck and VPNAPI keys through their documented key fields."
+    }
+  },
+  "redis": null,
+  "redis_note": "No Redis option (SQLite or MySQL). Redis test not applicable.",
+  "commands": {
+    "reload": "advancedantivpn reload",
+    "inspect": [
+      "advancedantivpn stats"
+    ]
+  },
+  "lookup_hosts": [
+    "ip-api.com",
+    "proxycheck.io",
+    "vpnapi.io",
+    "v2.api.iphub.info",
+    "check.getipintel.net",
+    "www.iphunter.info",
+    "ipqualityscore.com"
+  ],
+  "documented_failure_policy": "Not documented.",
+  "telemetry": [
+    "bStats - blocked like every product's telemetry",
+    "SpigotMC premium licence check (api.spigotmc.org, Paper only) and update check: forwarded as on a real server; the buyer id in it is masked"
+  ],
+  "list_sources": [],
+  "list_sources_note": "Downloads no lists (the optional GeoLite2 country database needs a MaxMind key and stays off)."
+}

@@ -91,6 +91,16 @@ jobs:
         with:
           path: cache/artifacts
           key: artifacts-${{ hashFiles('artifacts.lock.json', 'products/modrinth-pins.json') }}
+      # Bought products (bench/private.py): the JAR carries the owner's SpigotMC buyer id, so it lives in a private
+      # repository and lands only in cache/private/plugins (git-ignored, outside the Actions cache). Without the
+      # secret the bought products are left out of the default set.
+      - name: Bought products
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_PLUGINS_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::notice::PRIVATE_PLUGINS_TOKEN is not set: bought products are skipped"; exit 0; fi
+          gh release download plugins -R gerolndnr/mc-antivpn-bench-private -D cache/private/plugins --clobber
+          ls cache/private/plugins | sed 's/^/  /'
       - name: Build runtime image
         run: docker build -t mc-antivpn-bench:ci harness/docker && echo "BENCH_IMAGE=$(docker image inspect mc-antivpn-bench:ci --format '{{.Id}}')" >> "$GITHUB_ENV"
       - name: Reuse recorded provider answers
@@ -134,6 +144,15 @@ jobs:
           [ -d "results/$RUN_ID" ] || exit 0
           sudo chown -R "$(id -u)" "results/$RUN_ID"
           PYTHONPATH=harness python3 -m bench.overview "results/$RUN_ID" --output "results/$RUN_ID" || echo "::warning::overview not drawn"
+      - name: No buyer data in public results
+        if: always()
+        run: |
+          [ -d "results/$RUN_ID" ] || exit 0
+          if ! PYTHONPATH=harness python3 -m bench.private check "results/$RUN_ID"; then
+            sudo rm -rf "results/$RUN_ID"
+            echo "::error::buyer data of a bought product in public results: public results withheld"
+            exit 1
+          fi
       # This repository is public, and anyone signed in to GitHub can download a public repository's artifacts.
       # Everything that can hold a volunteer's address (unmasked results, egress logs, recorded answers) is
       # encrypted with ARTIFACT_KEY before upload; without the secret it is not uploaded at all. Decrypting:

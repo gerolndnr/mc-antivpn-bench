@@ -49,3 +49,29 @@ gh run download <run-id> -R gerolndnr/mc-antivpn-bench -n results-private -D pri
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:$HOME/.mc-antivpn-bench-artifact-key \
   -in private-<run-id>/results-private.tgz.enc | tar xzf - -C private-<run-id>
 ```
+
+## Bought products (`PRIVATE_PLUGINS_TOKEN`)
+
+AdvancedAntiVPN is a paid SpigotMC plugin. Its JAR carries the buyer's SpigotMC id, so it is kept in the private repository `gerolndnr/mc-antivpn-bench-private`, release `plugins`:
+
+| File | Content |
+| --- | --- |
+| `AdvancedAntiVPN-2.31.8.jar` | the JAR as downloaded from SpigotMC |
+| `private.json` | `{"sha256": {"<file>": "<hex>"}, "redact": ["<buyer id>", "<nonce>", ...]}` |
+
+CI downloads that release into `cache/private/plugins/` with a read-only token. The folder is git-ignored and not in the Actions cache. Public results are masked with the `redact` values and are withheld if one remains (`bench/private.py`). Without the secret, bought products are left out.
+
+The token is a fine-grained personal access token:
+- **Repository access:** only `mc-antivpn-bench-private`.
+- **Permissions:** *Contents: Read-only*.
+- **Expiry:** at most a year.
+
+Create it at <https://github.com/settings/personal-access-tokens/new>, then run:
+
+```sh
+gh secret set PRIVATE_PLUGINS_TOKEN -R gerolndnr/mc-antivpn-bench
+```
+
+For local runs, put the two files into `cache/private/plugins/` yourself.
+
+A new version means a new JAR and new `redact` values: upload both to the same release.
