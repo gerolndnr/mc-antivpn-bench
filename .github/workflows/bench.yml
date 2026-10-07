@@ -122,7 +122,7 @@ jobs:
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
           docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
             -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e PROVIDER_KEY_IPAPI_IS -e PROVIDER_KEY_IPLOCATE \
-            -e PROVIDER_KEY_IP2LOCATION -e PROVIDER_KEY_IPHUB -e BENCH_PROVIDER_SERVICES -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
+            -e PROVIDER_KEY_IP2LOCATION -e PROVIDER_KEY_IPHUB -e BENCH_PROVIDER_SERVICES -e GITHUB_SHA -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
             -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_PERF_ROUNDS="${{ inputs.perf_rounds || '3' }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Overview graphic of this run

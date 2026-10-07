@@ -163,11 +163,13 @@ def providers_run(args, run_id, recorder):
     from . import providers
     services = (args.services or os.environ.get('BENCH_PROVIDER_SERVICES') or '').strip()
     limit = int(args.limit or os.environ.get('BENCH_DETECTION_LIMIT') or 0)
+    try:
+        commit = subprocess.run(['git', '-C', ROOT, 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip() or None
+    except OSError:  # no git in the container
+        commit = os.environ.get('GITHUB_SHA')
     manifest = dict(run_id=run_id, family='providers', products=[], platforms=[],
                     environment=dict(started=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
-                                     bench_commit=subprocess.run(['git', '-C', ROOT, 'rev-parse', 'HEAD'], capture_output=True,
-                                                                 text=True).stdout.strip() or None,
-                                     python=sys.version.split()[0], host=os.environ.get('BENCH_HOST_DESCRIPTION')))
+                                     bench_commit=commit, python=sys.version.split()[0], host=os.environ.get('BENCH_HOST_DESCRIPTION')))
     started = time.monotonic()
     providers.run(recorder, services.split(',') if services else None, limit)
     manifest['duration_s'] = time.monotonic() - started
