@@ -12,7 +12,7 @@ Each product is described by one JSON file in [`products/`](../products). The ha
 | `profiles.free_keys` | Where the free ProxyCheck and VPNAPI keys go. `{canary:proxycheck}` and `{canary:vpnapi}` are replaced by format-compatible fake keys; the interposer swaps them for real keys toward the owning host only. |
 | `redis` | Edits that switch the product to Redis, or `null` with `redis_note` if the product has no Redis option. |
 | `commands.reload`, `commands.inspect` | Console commands used by the reload and secret-leakage tests. |
-| `lookup_hosts` | Hosts the product queries **per subject**. The failure-safety test faults exactly these, and the performance test replays them with the latency model. Lists downloaded at start-up must not be listed here. |
+| `lookup_hosts` | Hosts the product queries **per subject**. The failure-safety test faults exactly these, and the performance test replays them with the latency model. Lists downloaded at start-up must not be listed here. **Every** host the product asks about a player's address must be listed: since 7 October 2026 the performance and failure families stop with an error when a product asks an unlisted host about a subject, because that host would be live while every other service is simulated or faulted. |
 | `list_sources` | Lists the shipped configuration downloads; used only for the circularity table. |
 | `documented_failure_policy` | What your documentation says happens when providers fail. The failure test compares behaviour with this. |
 

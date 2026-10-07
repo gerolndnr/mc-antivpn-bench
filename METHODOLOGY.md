@@ -329,6 +329,17 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
+## Corrections and changes after the first published run
+
+- **2026-10-07, FoxGate adapter: `api.zowi.gay` was missing from `lookup_hosts`.** FoxGate asks it once per player address. Connection Guard's adapter listed the same host; FoxGate's did not.
+  - *Performance* (run 37540317765): FoxGate's zowi lookups went to the live service instead of the simulated one, about 1,000 synthetic addresses at 50 a second, while every other service ran at the simulated latency. FoxGate's performance numbers of that run are not comparable.
+  - *Failure* (run 37540309049): the host was not faulted, so FoxGate kept one working service.
+  - *Detection*: outcomes are unaffected (every lookup is live there); its lookup counts left zowi out.
+  - Found while checking a question from FoxGate's author about `central.zowi.gay/tors`, which was fetched normally (HTTP 200).
+  - Fixed in the adapter. Both families now stop with an error when a product asks an unlisted host about a subject (docs/ADAPTERS.md). Re-run: failure 37593590733, performance 37593586654. In the failure re-run FoxGate refused the VPN subject in all five fault cases.
+- **2026-10-07, family `providers`** (7.9): every detection service on its own, Connection Guard Intel among them (marked as the author's project), and replays of lookup chains, including the planned Connection Guard 0.6.1 chain.
+- **2026-10-07, overview graphic** at the end of every run and at the top of the README: the newest complete result of every family, the newest pinned version of each plugin, the accent on the best value of each row.
+
 ## Changes before the first published run
 
 - **2026-10-07, published run for Connection Guard 0.6.0.** Candidate c4b67eb (JAR sha256 8ba9534a…c2b2) against stable 0.5.1 (previously 0.5.0) and the current FoxGate, ProxyShield and VPNGuard releases. The keyed detection profile runs in four nightly chunks from 7 to 10 October 2026, one per UTC day, so one free ProxyCheck key covers every product.
