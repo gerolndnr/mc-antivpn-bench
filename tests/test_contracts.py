@@ -628,3 +628,44 @@ class OverviewJobNeedsNoPackages(unittest.TestCase):
         env = dict(os.environ, PYTHONPATH=os.path.join(ROOT, 'harness'))
         result = subprocess.run([sys.executable, '-c', code], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class ServiceDownDuringRun(unittest.TestCase):
+    def test_ten_timeouts_in_a_row_stop_the_service(self):
+        from bench import providers as p
+        calls = []
+        def fetch(url, headers):
+            calls.append(url)
+            raise TimeoutError('timed out')
+        service = next(s for s in p.SERVICES if s.id == 'zowi')
+        items = [dict(id=f's{i}', ip='45.90.28.7', cohort='tor', label='vpn') for i in range(50)]
+        out, _ = p.run_service(service, items, sleep=lambda s: None, fetch=fetch)
+        self.assertEqual(len(calls), p.UNAVAILABLE_AFTER)
+        self.assertEqual(sum(r.get('error') == 'unavailable' for r in out), 50 - p.UNAVAILABLE_AFTER)
+        summary = p.summarize(out, items)
+        self.assertTrue(summary['zowi']['unavailable'])
+
+    def test_readme_keeps_the_earlier_result_of_a_service_that_was_down(self):
+        from bench import latest, score
+        base = tempfile.mkdtemp()
+        entry = lambda caught, errors: dict(name='zowi', caught=caught, bad=382, refused=2, good=310, subjects=692,
+                                            answered=692 - sum(errors.values()), ms_p50=272, errors=errors,
+                                            caught_ci=None, refused_ci=None)
+        for run_id, started, zowi in ((2, '2026-10-07T13:00:00+00:00', entry(0, {'timeout': 10, 'unavailable': 682})),
+                                      (1, '2026-10-07T09:00:00+00:00', entry(339, {}))):
+            folder = os.path.join(base, str(run_id), 'providers')
+            os.makedirs(folder)
+            json.dump(dict(meta=dict(started=started, subjects=692), services=dict(zowi=zowi), chains=[]),
+                      open(os.path.join(folder, 'summary.json'), 'w'))
+            json.dump(dict(products=[], environment=dict(started=started)), open(os.path.join(base, str(run_id), 'manifest.json'), 'w'))
+        saved = latest.runs
+        latest.runs = lambda repo, limit: [dict(id=2), dict(id=1)]
+        try:
+            chosen, providers, profile = latest.select('x', base)
+        finally:
+            latest.runs = saved
+        dirs = latest.merge(chosen, providers, profile, base)
+        merged = json.load(open(os.path.join(dirs['providers'][0], 'providers', 'summary.json')))
+        self.assertEqual(merged['services']['zowi']['caught'], 339)
+        self.assertEqual(merged['services']['zowi']['from_date'], '2026-10-07')
+        self.assertTrue(score.unavailable(entry(0, {'timeout': 10, 'unavailable': 682})))

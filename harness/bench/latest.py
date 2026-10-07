@@ -10,7 +10,7 @@ adds those products and leaves the others' results in place.
     of the dataset never counts. The graphic shows the keyed profile (proxycheck_key) only once every product with a
     detection result has it, and the keyless one (enforce) until then, so one table never mixes profiles.
   - Performance on Velocity only.
-  - Providers: the newest run.
+  - Providers: per service the newest run in which it answered; a service that was down keeps its earlier result.
   - Never a run that measured an unreleased candidate (adapter `pre_release`).
 Writes overview-dark.png, overview-light.png and latest.json (which runs each product came from). Display names can
 be set in <output>/labels.json ({"product-id": "Name"}).
@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import tempfile
 
-from . import overview
+from . import overview, score
 
 FAMILIES = ['functional', 'failure', 'redis', 'detection', 'performance', 'providers']
 # Result folders per family; the first one decides whether a run has a result for a product.
@@ -116,8 +116,13 @@ def select(repo, base, limit=60):
         if any(pre_release(p) for p in manifest.get('products', [])):
             continue  # the README shows released versions only; a candidate's runs stay in their own overview
         run_id = str(run['id'])
-        if providers is None and glob.glob(os.path.join(folder, 'providers', '*.json')):
-            providers = (run_id, folder)
+        summary = load(os.path.join(folder, 'providers', 'summary.json'))
+        if summary and summary.get('services'):
+            providers = providers or dict(newest=(run_id, folder, summary), services={})
+            for sid, entry in summary['services'].items():
+                taken = providers['services'].get(sid)
+                if taken is None or (score.unavailable(taken[2]) and not score.unavailable(entry)):
+                    providers['services'][sid] = (run_id, folder, entry, summary.get('meta') or {})
         for family in chosen:
             for product, files in product_files(folder, family).items():
                 chosen[family].setdefault(product, [(run_id, folder, files)])
@@ -173,14 +178,35 @@ def merge(chosen, providers, profile, base):
                         shutil.copy(path, sub)
             dirs.setdefault(family, []).append(target)
     if providers:
-        dirs['providers'] = [providers[1]]
+        # One summary: every service from its newest run in which it answered (a service that was down in the newest
+        # run keeps its earlier result, labelled with that run's date); the chains and meta of the newest run.
+        run_id, folder, newest = providers['newest']
+        target = os.path.join(base, 'merged', 'providers', run_id)
+        os.makedirs(os.path.join(target, 'providers'), exist_ok=True)
+        if os.path.exists(os.path.join(folder, 'manifest.json')):
+            shutil.copy(os.path.join(folder, 'manifest.json'), target)
+        services = {}
+        dirs['providers'] = [target]
+        for sid, (rid, src, entry, meta) in providers['services'].items():
+            entry = dict(entry)
+            if rid != run_id:
+                entry['from_date'] = (meta.get('started') or '')[:10]
+                extra = os.path.join(base, 'merged', 'providers', rid)
+                if not os.path.exists(extra):
+                    os.makedirs(extra)
+                    if os.path.exists(os.path.join(src, 'manifest.json')):
+                        shutil.copy(os.path.join(src, 'manifest.json'), extra)
+                    dirs['providers'].append(extra)
+            services[sid] = entry
+        with open(os.path.join(target, 'providers', 'summary.json'), 'w') as handle:
+            json.dump(dict(newest, services=services), handle)
     return dirs
 
 
 def sources(chosen, providers):
     out = {family: {p: sorted({s[0] for s in srcs}) for p, srcs in sorted(by.items())} for family, by in chosen.items()}
     if providers:
-        out['providers'] = {'services': [providers[0]]}
+        out['providers'] = {sid: [rid] for sid, (rid, _, _, _) in sorted(providers['services'].items())}
     return out
 
 

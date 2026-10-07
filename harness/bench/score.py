@@ -23,3 +23,17 @@ def score_range(s):
     caught = s.get('caught_ci') or [share(s['caught'], s['bad'])] * 2
     refused = s.get('refused_ci') or [share(s['refused'], s['good'])] * 2
     return [score(s, caught[0], refused[1]), score(s, caught[1], refused[0])]
+
+
+def unavailable(s):
+    """No answer at all (timeouts, network errors, stopped after ten in a row) for more than half the addresses: the
+    service was down or blocked the runner. Its numbers then measure the outage, so it gets no score and no rank."""
+    if 'unavailable' in s:
+        return bool(s['unavailable'])
+    errors = s.get('errors') or {}
+    return sum(errors.get(k, 0) for k in ('timeout', 'network', 'unavailable')) > (s.get('subjects') or 0) / 2
+
+
+def rank_key(s):
+    """Sort key: highest score first, unavailable services last."""
+    return (unavailable(s), -score(s))

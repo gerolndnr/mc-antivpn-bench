@@ -25,7 +25,7 @@ import urllib.parse
 import urllib.request
 
 from . import scenarios
-from .score import REFUSAL_WEIGHT, SPEED_POINTS_MAX, SPEED_POINTS_PER_S, score, score_range
+from .score import REFUSAL_WEIGHT, SPEED_POINTS_MAX, SPEED_POINTS_PER_S, rank_key, score, score_range, unavailable
 
 UA = 'mc-antivpn-bench provider comparison (https://github.com/gerolndnr/mc-antivpn-bench)'
 INTEL = 'https://intel.connectionguard.net/'
@@ -284,11 +284,19 @@ def query(service, item, key, fetch=None):
     return rec, raw
 
 
+UNAVAILABLE_AFTER = 10
+
+
 def run_service(service, items, sleep=time.sleep, fetch=None):
     key = service.key()
-    out, raws, used, limited, streak = [], [], 0, 0, 0
+    out, raws, used, limited, streak, down = [], [], 0, 0, 0, 0
     daily = service.daily
     for item in items:
+        if down >= UNAVAILABLE_AFTER:
+            # No answer at all ten times in a row: the service is down or blocks the runner. Asking the rest would take
+            # 8 s each and measure the outage, not the detection (summary: unavailable).
+            out.append(dict(service=service.id, id=item['id'], cohort=item['cohort'], label=item['label'], error='unavailable'))
+            continue
         if daily is not None and used >= daily:
             out.append(dict(service=service.id, id=item['id'], cohort=item['cohort'], label=item['label'], error='not_queried'))
             continue
@@ -305,6 +313,7 @@ def run_service(service, items, sleep=time.sleep, fetch=None):
             rec, raw = query(service, item, key, fetch)
             used += 1
         streak = streak + 1 if rec.get('error') == 'rate_limited' else 0
+        down = down + 1 if rec.get('error') in ('timeout', 'network') else 0
         out.append(rec)
         raws.append(dict(service=service.id, id=item['id'], body=raw))
         if len(out) % 100 == 0:
@@ -374,6 +383,7 @@ def summarize(records, items):
             ms_p95=round(sorted(ms)[max(0, math.ceil(len(ms) * 0.95) - 1)], 1 if s.local else None) if ms else None,
             local=s.local, own=s.own,
             errors=errors, cohorts=cohorts)
+        out[service]['unavailable'] = unavailable(out[service])
         out[service].update(score=score(out[service]), score_range=score_range(out[service]))
     return out
 
@@ -520,11 +530,12 @@ def markdown(summary, chain_rows, meta):
              f'(at most {SPEED_POINTS_MAX}), at least 0; sorted by it. The range is the 95 % interval from both shares: services whose',
              'ranges overlap are not clearly apart.', '',
              '| Service | Score | Key | Answered | Caught | Refused | p50 | p95 | Errors | Terms |', '|---|---|---|---|---|---|---|---|---|---|']
-    for sid, s in sorted(summary.items(), key=lambda x: -score(x[1])):
+    for sid, s in sorted(summary.items(), key=lambda x: rank_key(x[1])):
         errs = ', '.join(f'{k} {v}' for k, v in sorted(s['errors'].items())) or '–'
         ms = lambda v: '–' if v is None else f'{v} ms'
         low, high = score_range(s)
-        lines.append(f'| {s["name"]}{" ¹" if s["plugin"] else ""}{" ²" if s.get("own") else ""} | {score(s)} ({low}–{high}) | {"yes" if s["keyed"] else "no"} | {s["answered"]}/{s["subjects"]} | '
+        shown = 'unavailable during this run' if unavailable(s) else f'{score(s)} ({low}–{high})'
+        lines.append(f'| {s["name"]}{" ¹" if s["plugin"] else ""}{" ²" if s.get("own") else ""} | {shown} | {"yes" if s["keyed"] else "no"} | {s["answered"]}/{s["subjects"]} | '
                      f'{pct(s["caught"], s["bad"])} | {pct(s["refused"], s["good"])} | {ms(s["ms_p50"])} | {ms(s["ms_p95"])} | {errs} | {s["terms"]} |')
     lines += ['', '¹ supported by Connection Guard 0.6.',
               '² built by this benchmark\'s author. Its VPN and Tor lists come from the same operator lists and Tor list that label the',

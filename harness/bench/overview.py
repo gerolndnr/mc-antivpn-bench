@@ -252,6 +252,15 @@ def measured_dates(ms):
     return f'{first.day} {first:%B %Y} – {last.day} {last:%B %Y}'
 
 
+def short_date(iso):
+    import datetime
+    try:
+        day = datetime.date.fromisoformat(iso[:10])
+    except ValueError:
+        return iso
+    return f'{day.day} {day:%b}'
+
+
 def manifests(dirs):
     out = []
     for d in dirs:
@@ -566,21 +575,24 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
 
     # Detection services on their own
     if prov:
-        from .score import REFUSAL_WEIGHT, score
-        services = sorted(prov['services'].items(), key=lambda x: -score(x[1]))
-        scores = {s: score(v) for s, v in services}
-        caught = {s: v['caught'] / v['bad'] if v['bad'] else None for s, v in services}
+        from .score import REFUSAL_WEIGHT, rank_key, score, unavailable
+        services = sorted(prov['services'].items(), key=lambda x: rank_key(x[1]))
+        down = {s for s, v in services if unavailable(v)}
+        scores = {s: None if s in down else score(v) for s, v in services}
+        caught = {s: v['caught'] / v['bad'] if v['bad'] and s not in down else None for s, v in services}
         # Fewest refusals only counts for services that also catch: a service that flags nothing refuses nobody.
         refused = {s: v['refused'] / v['good'] if v['good'] else None for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2}
         # Fastest, and access without a quota, among the same services: a local list answers in microseconds, with no
         # request leaving the server and no daily limit.
-        useful = {s for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2}
+        useful = {s for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2 and s not in down}
         speed = {s: v['ms_p50'] for s, v in services if s in useful}
         wc, wr, ws = best(caught, False), best(refused, True), best(speed, True)
         wa = {s for s, v in services if s in useful and v.get('local')}
         ws_ = best(scores, False)
-        body = [('', [td(esc(v['name']) + (' <span class="frac">own, see note</span>' if v.get('own') else '')),
-                      td(f'{scores[s]:.1f}', 'best' if s in ws_ else ''), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
+        tags = lambda s, v: ''.join(f' <span class="frac">{t}</span>' for t in (
+            'own, see note' if v.get('own') else '', f'earlier run, {short_date(v["from_date"])}' if v.get('from_date') else '') if t)
+        body = [('', [td(esc(v['name']) + tags(s, v)),
+                      td('<span class="na">unavailable</span>' if s in down else f'{scores[s]:.1f}', 'best' if s in ws_ else ''), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
                       td(f'{v["refused"]}/{v["good"]}', 'best' if s in wr else ''), td(f'{v["answered"]}/{v["subjects"]}'),
                       td(fmt_ms(v['ms_p50']), 'best' if s in ws else ''),
                       td('local lists, no quota' if v.get('local') else 'key' if v['keyed'] else 'keyless', 'best' if s in wa else '')])
