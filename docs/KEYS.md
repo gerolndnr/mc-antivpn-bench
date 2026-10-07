@@ -16,6 +16,14 @@ gh secret set VPNAPI_KEY -R gerolndnr/mc-antivpn-bench
 
 `gh` asks for the value interactively, so it never lands in your shell history.
 
+**A second ProxyCheck key (optional).** The nightly keyed detection chunks use `PROXYCHECK_KEY`, and one free key allows 1,000 queries a day. A manual run started with `use_keys` uses `PROXYCHECK_KEY_2` instead when it is set, so it never spends the nightly quota:
+
+```sh
+gh secret set PROXYCHECK_KEY_2 -R gerolndnr/mc-antivpn-bench
+```
+
+Without it, a manual `use_keys` run falls back to `PROXYCHECK_KEY`.
+
 The `providers` family (METHODOLOGY 7.9) also measures services that only answer with a free key. Each is optional; a service without its key is skipped and listed as such:
 
 | Secret | Where | Free tier |
