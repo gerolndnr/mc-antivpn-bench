@@ -1,23 +1,29 @@
 {
-  "detection_profile": "enforce",
+  "detection_profile": "proxycheck_key",
   "products": {
     "detection": {
       "advancedantivpn": [
-        "37646483626"
+        "37677514793"
       ],
       "connection-guard-061": [
-        "37686845792"
+        "37686850997"
+      ],
+      "foxgate": [
+        "37685513334"
       ],
       "kaurivpn": [
-        "37623918344"
+        "37685513334"
+      ],
+      "proxyshield": [
+        "37685513334"
+      ],
+      "vpnguard": [
+        "37685513334"
       ]
     },
     "failure": {
       "advancedantivpn": [
         "37624132539"
-      ],
-      "connection-guard": [
-        "37593590733"
       ],
       "connection-guard-061": [
         "37686834253"
@@ -25,17 +31,8 @@
       "connection-guard-candidate": [
         "37622124772"
       ],
-      "foxgate": [
-        "37593590733"
-      ],
       "kaurivpn": [
         "37624132539"
-      ],
-      "proxyshield": [
-        "37593590733"
-      ],
-      "vpnguard": [
-        "37593590733"
       ]
     },
     "functional": {
@@ -136,12 +133,11 @@
   },
   "runs": {
     "detection": [
-      "37623918344",
-      "37646483626",
-      "37686845792"
+      "37677514793",
+      "37685513334",
+      "37686850997"
     ],
     "failure": [
-      "37593590733",
       "37622124772",
       "37624132539",
       "37686834253"
