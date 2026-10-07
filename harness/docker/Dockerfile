@@ -6,7 +6,9 @@
 ARG JDK=25
 FROM eclipse-temurin:${JDK}-jdk-noble
 
-RUN apt-get update \
+# Short timeouts and retries: a stalled Ubuntu mirror otherwise holds the build for minutes per file.
+RUN printf 'Acquire::Retries "5";\nAcquire::http::Timeout "20";\n' > /etc/apt/apt.conf.d/80-retries \
+ && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       python3 python3-cryptography python3-yaml python3-h2 iptables redis-server procps \
       ca-certificates dnsutils curl \

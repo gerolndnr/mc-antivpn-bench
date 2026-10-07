@@ -115,8 +115,23 @@ jobs:
           if [ -z "$GH_TOKEN" ]; then echo "::notice::PRIVATE_PLUGINS_TOKEN is not set: bought products are skipped"; exit 0; fi
           gh release download plugins -R gerolndnr/mc-antivpn-bench-private -D cache/private/plugins --clobber
           ls cache/private/plugins | sed 's/^/  /'
+      # The image is built once per Dockerfile and kept in the Actions cache: a fresh build depends on
+      # archive.ubuntu.com, which stalled builds for 10+ minutes on 7 Oct, and a cached image also keeps the
+      # exact same packages across runs.
+      - uses: actions/cache@v4
+        id: image-cache
+        with:
+          path: /tmp/bench-image.tar
+          key: runtime-image-${{ hashFiles('harness/docker/Dockerfile') }}
       - name: Build runtime image
-        run: docker build -t mc-antivpn-bench:ci harness/docker && echo "BENCH_IMAGE=$(docker image inspect mc-antivpn-bench:ci --format '{{.Id}}')" >> "$GITHUB_ENV"
+        run: |
+          if [ -f /tmp/bench-image.tar ]; then
+            docker load -i /tmp/bench-image.tar
+          else
+            docker build -t mc-antivpn-bench:ci harness/docker
+            docker save mc-antivpn-bench:ci -o /tmp/bench-image.tar
+          fi
+          echo "BENCH_IMAGE=$(docker image inspect mc-antivpn-bench:ci --format '{{.Id}}')" >> "$GITHUB_ENV"
       - name: Reuse recorded provider answers
         if: inputs.state_from_run != ''
         env:
