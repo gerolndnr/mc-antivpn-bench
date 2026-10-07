@@ -66,6 +66,11 @@ def product_names(ids, labels):
     return out
 
 
+def adapter_of(pid):
+    path = os.path.join(ROOT, 'products', f'{pid}.json')
+    return json.load(open(path)) if os.path.exists(path) else {}
+
+
 def after_join(pid):
     """Plugins that let the player in and check afterwards (adapter `decides_after_join`): their login times are not
     decision times, so the graphic shows "after join" instead and never marks them best."""
@@ -141,10 +146,16 @@ def performance(dirs):
 
 def detection(dirs):
     """The headline profile (proxycheck_key if measured, else enforce), chunks merged, final attempt per subject."""
-    by = {}
-    for r in records(dirs, 'detection'):
-        if 'rows' in r:
+    by, keyless = {}, set()
+    for d in dirs:
+        manifest = os.path.join(d, 'manifest.json')
+        env = (json.load(open(manifest)).get('environment') or {}) if os.path.exists(manifest) else {}
+        for r in records([d], 'detection'):
+            if 'rows' not in r:
+                continue
             by.setdefault(r.get('profile', 'enforce'), []).extend(r['rows'])
+            if (env.get('keys_present') or {}).get('proxycheck') is False and r.get('profile', 'enforce') == 'enforce':
+                keyless |= {p for row in r['rows'] for p in row['products']}
     if not by:
         return None
     profile = 'proxycheck_key' if 'proxycheck_key' in by else 'enforce' if 'enforce' in by else next(iter(by))
@@ -163,7 +174,10 @@ def detection(dirs):
         subset = [r for r in rows if r['cohort'] == cid]
         if subset:
             cohorts[cid] = dict(n=len(subset), blocked={p: sum(1 for r in subset if r['products'].get(p, {}).get('blocked')) for p in products})
-    return dict(profile=profile, subjects=len(rows), products=products, cohorts=cohorts)
+    # Measured without the free ProxyCheck key that keyless ProxyCheck requests otherwise get (METHODOLOGY 7.1), for
+    # plugins that ask ProxyCheck: their own free daily quota ends their lookups, the others' did not.
+    unnormalized = {p for p in keyless if 'proxycheck.io' in (adapter_of(p).get('lookup_hosts') or [])}
+    return dict(profile=profile, subjects=len(rows), products=products, cohorts=cohorts, unnormalized=unnormalized)
 
 
 def failure(dirs):
@@ -525,6 +539,13 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             body.append(('total', [td(('Blocked' if not low else 'Refused') + f' of {n}')] + [td(str(tot[pid]), 'best' if pid in w else '') for pid in cols]))
         profile = {'enforce': 'as shipped, no API keys', 'proxycheck_key': 'same free ProxyCheck key for every plugin',
                    'free_keys': 'free keys'}.get(det['profile'], det['profile'])
+        bare = [pid for pid in cols if pid in det.get('unnormalized', set())]
+        if bare and det['profile'] == 'enforce':
+            who = ', '.join(names[pid] for pid in bare)
+            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                              f'{esc(who)}: measured in a later run without the free ProxyCheck key that keyless ProxyCheck requests got in '
+                              'the others\' run, so ProxyCheck answered it only its free 100 a day. Replaced by the keyed result once every '
+                              'plugin has one (13 October).</td>']))
         late = [pid for pid in cols if after_join(pid)]
         if late:
             who = ', '.join(names[pid].split('\n')[0] for pid in late)
