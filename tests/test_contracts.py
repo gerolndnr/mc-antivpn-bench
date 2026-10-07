@@ -669,3 +669,57 @@ class ServiceDownDuringRun(unittest.TestCase):
         self.assertEqual(merged['services']['zowi']['caught'], 339)
         self.assertEqual(merged['services']['zowi']['from_date'], '2026-10-07')
         self.assertTrue(score.unavailable(entry(0, {'timeout': 10, 'unavailable': 682})))
+
+
+class AdaptivePacing(unittest.TestCase):
+    """bench.heavy.Pacer: a plugin that decides at login moves on fast; one that kicks after the join keeps its window."""
+
+    def run_subjects(self, pacer, outcomes):
+        windows = []
+        for outcome in outcomes:
+            window = pacer.window({})
+            windows.append(window)
+            marks = dict(joined=100.0, decided=100.0 + 1000 * outcome[1]) if outcome[0] == 'DENY_PLAY' else {}
+            pacer.observe(dict(outcome=outcome[0], marks=marks), window)
+        return windows
+
+    def test_login_decider_gets_the_short_window_after_calibration(self):
+        from bench import heavy
+        p = heavy.Pacer()
+        windows = self.run_subjects(p, [('ALLOW', 0)] * 40)
+        self.assertTrue(all(w == heavy.OBSERVE_S for w in windows[:heavy.CALIBRATION]))
+        self.assertEqual(windows[heavy.CALIBRATION], heavy.OBSERVE_MIN_S)
+        self.assertEqual(windows[heavy.PROBE_EVERY * 3 - 1], heavy.OBSERVE_S)  # every 10th subject is a full probe
+
+    def test_late_kick_widens_the_window(self):
+        from bench import heavy
+        p = heavy.Pacer()
+        self.run_subjects(p, [('DENY_PLAY', 1.2)] + [('ALLOW', 0)] * 25)
+        self.assertAlmostEqual(p.observe_s, 2.4)
+        self.run_subjects(p, [('DENY_PLAY', 6.0)])
+        self.assertEqual(p.observe_s, heavy.OBSERVE_S)
+
+    def test_interval_backs_off_on_provider_errors_and_recovers(self):
+        from bench import heavy
+        p = heavy.Pacer()
+        p.after(['ip-api.com'])
+        self.assertAlmostEqual(p.interval, heavy.INTERVAL_START_S * 1.5)
+        for _ in range(20):
+            p.after([])
+        self.assertAlmostEqual(p.interval, heavy.INTERVAL_START_S * 1.5 / 1.25)
+
+    def test_fixed_mode_keeps_the_old_pacing(self):
+        from bench import heavy
+        p = heavy.Pacer(fixed=True)
+        self.assertTrue(all(w == heavy.OBSERVE_S for w in self.run_subjects(p, [('ALLOW', 0)] * 30)))
+        p.after(['x'])
+        self.assertEqual(p.interval, heavy.SUBJECT_INTERVAL_S)
+
+
+class RetryRowsPerProduct(unittest.TestCase):
+    def test_a_retry_replaces_only_the_product_it_retried(self):
+        from bench import report
+        rows = [dict(subject='s1', cohort='tor', label='vpn', attempt=0, products=dict(a=dict(blocked=False), b=dict(blocked=True))),
+                dict(subject='s1', cohort='tor', label='vpn', attempt=1, products=dict(a=dict(blocked=True)))]
+        final = report.headline_rows(dict(rows=rows))
+        self.assertEqual(final[0]['products'], dict(a=dict(blocked=True), b=dict(blocked=True)))

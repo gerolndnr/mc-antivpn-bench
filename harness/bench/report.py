@@ -59,11 +59,17 @@ def load(directories, family):
 
 # --------------------------------------------------------------- detection
 def headline_rows(record):
-    """Final attempt per subject (retries replace provider-error attempts)."""
-    final = {}
-    for row in record['rows']:
-        if row['subject'] not in final or row['attempt'] >= final[row['subject']]['attempt']:
-            final[row['subject']] = row
+    """Final attempt per subject and product (a retry replaces the provider-error attempt of the product it retried;
+    since adaptive pacing a retry row holds only that product)."""
+    final, attempts = {}, {}
+    for row in sorted(record['rows'], key=lambda r: r['attempt']):
+        entry = final.setdefault(row['subject'], dict(row, products={}))
+        if row['attempt'] >= entry['attempt']:
+            entry.update({k: v for k, v in row.items() if k != 'products'})
+        for pid, result in row['products'].items():
+            if row['attempt'] >= attempts.get((row['subject'], pid), -1):
+                attempts[(row['subject'], pid)] = row['attempt']
+                entry['products'][pid] = result
     return list(final.values())
 
 

@@ -20,7 +20,7 @@ The suite is written and run by the maintainers of **Connection Guard**, one of 
 
 | Product | Version | Source | Licence |
 | --- | --- | --- | --- |
-| Connection Guard | 0.6.0 (c4b67eb) and 0.5.1 | [Modrinth](https://modrinth.com/plugin/connectionguard) | MIT |
+| Connection Guard | 0.6.1 candidate (PR #84, feffbfb; "v0.6.1" in the README overview), 0.6.0 (c4b67eb) and 0.5.1 | [Modrinth](https://modrinth.com/plugin/connectionguard), candidate from CI | MIT |
 | FoxGate AntiVPN (free) | 1.2.0-pre10 | [Modrinth](https://modrinth.com/plugin/foxgate) | All rights reserved |
 | ProxyShield | 2.5.1 (native Paper/Folia/Velocity/Bungee builds) | [Modrinth](https://modrinth.com/plugin/proxyshield) | GPL-3.0 |
 | VPNGuard | 1.2.0 | [Modrinth](https://modrinth.com/plugin/vpnguard) | All rights reserved |
@@ -148,7 +148,12 @@ Outcome classes (client-side, per join):
 
 ### 7.1 Detection and false positives (Velocity)
 
-- **Setup.** All products run at the same time behind one Velocity build, one instance each. Every subject joins all of them within the same second, in a rotating order. Subjects run in a seeded shuffle, one subject per 5 s.
+- **Setup.** All products run at the same time behind one Velocity build, one instance each, and take the subjects in the same seeded shuffle.
+- **Pacing (from 8 October 2026).** Each product walks the subjects at its own pace, so a product that decides quickly finishes sooner and a slow one does not hold the others back.
+  - *Watch window.* An admitted player stays joined so that a product deciding after the join can still kick them. The first 20 subjects and every 10th one get the full 8 s. Otherwise the window is twice the latest kick after the join seen so far, at least 1.5 s; a later kick on a full-window subject widens it. A refusal at login needs no window.
+  - *Interval.* 2 s between a product's subjects at first. A detection-service 429 or 5xx during its subject multiplies it by 1.5; 20 clean subjects divide it by 1.25; it stays between 1 and 10 s. Subjects with such errors are retried as before.
+  - *Same answers.* Detection-service answers are recorded and replayed from the interposer's store, so a product that asks the same question later gets the answer recorded first.
+  - The window, interval, latest kick and time per product are in each result (`pacing`). `BENCH_DETECTION_PACING=fixed` restores the earlier pacing: every subject joins all products within the same second, full window, one subject per 5 s.
 - **Metrics.**
   - **Detection rate** = blocked / n for `vpn`, `tor` and `proxy` cohorts.
   - **False-positive rate** = blocked / n for `non_vpn` cohorts.
@@ -360,9 +365,10 @@ The adapters for products without public source code are written from their publ
   - Folia is not advertised; the Folia row records whether it loads.
 - **2026-10-07, KauriVPN on Folia:** 1.10.1.2 throws while enabling (it schedules with the Bukkit scheduler, which Folia refuses) and then admits everyone. The platform check now counts "Error occurred while enabling" as a load failure; before, it only looked for "Could not load plugin".
   - It joins KauriVPN and the Connection Guard 0.6.1 candidate in a second keyed detection series: three nightly chunks, 11 to 13 October. The keyless `enforce` pass is not run for it, because the published one attached the free key to keyless ProxyCheck requests and AdvancedAntiVPN would then need more than one day's quota.
-- **2026-10-07, Connection Guard 0.6.1 candidate** (PR #84 head feffbfb, product `connection-guard-061`). It is measured against 0.6.0 before release. Like every unreleased candidate, it never appears in the README overview.
+- **2026-10-07, Connection Guard 0.6.1 candidate** (PR #84 head feffbfb, product `connection-guard-061`). It is measured against 0.6.0 before release. From 7 October evening the README overview shows it as "Connection Guard v0.6.1" in place of 0.6.0, once every family had measured it (owner decision); 0.6.0's results stay in their runs.
 - **2026-10-07, player accounts.** The benchmark's players have no Mojang accounts. KauriVPN resolves each name online on BungeeCord, got Mojang's 404 and admitted everyone. A real player's name always resolves. Mojang's name lookup (`api.mojang.com/users/profiles/minecraft/<name>`) now gets, for every product, the answer an existing account gives, with the name's offline-mode UUID. No other Mojang request is affected.
 - **2026-10-07, README overview per product.** The graphic takes every product's newest complete result per family. A run with only newly added products no longer replaces the others. Detection shows the keyed profile only once every shown product has it. The date line gives the span of the runs shown (first start to last end); before, it showed the oldest start date only.
+- **2026-10-08, adaptive detection pacing** (7.1). Every subject used to wait for the slowest product and gave every admitted player 8 s, so a full pass took 80-90 minutes even for products that decide at login. Products now walk the subjects on their own, with a learned watch window and an interval that backs off on detection-service errors. Earlier runs used the fixed pacing.
 - **2026-10-07, AdvancedAntiVPN's keyless detection** (owner decision). It was measured in a run of its own, without the free ProxyCheck key the published `enforce` run attached to keyless ProxyCheck requests: the key's daily quota belongs to the nightly chunks until 10 October.
   - AdvancedAntiVPN asks ProxyCheck, VPNAPI and IP-API and needs two of them to agree. Without a key, ProxyCheck and VPNAPI answer 100 times a day each, so after about 100 players only IP-API answers, the vote cannot be reached, and it admits unchecked. That is its behaviour on a real server without keys, but a condition the other plugins did not have.
   - The graphic says so under the detection table. On 13 October the keyed series replaces it.

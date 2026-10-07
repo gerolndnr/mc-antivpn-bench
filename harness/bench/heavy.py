@@ -27,6 +27,72 @@ OBSERVE_S = 8.0
 SEED = 20261005
 
 
+# Detection pacing (METHODOLOGY 7.1). "adaptive": every plugin walks the subjects on its own and learns how long to watch
+# an admitted player for a late kick; "fixed": the full window and SUBJECT_INTERVAL_S for everyone, as before 8 Oct.
+PACING = os.environ.get('BENCH_DETECTION_PACING', 'adaptive')
+OBSERVE_MIN_S = 1.5
+CALIBRATION = 20
+PROBE_EVERY = 10
+INTERVAL_START_S, INTERVAL_MIN_S, INTERVAL_MAX_S = 2.0, 1.0, 10.0
+
+
+class Pacer:
+    """How long one plugin gets per subject.
+
+    Watch window: an admitted player stays joined for a while so that a plugin that decides after the join (KauriVPN)
+    can still kick them. The first CALIBRATION subjects and every PROBE_EVERY-th one get the full OBSERVE_S; otherwise the
+    window is twice the latest kick after the join seen so far, at least OBSERVE_MIN_S. A probe that sees a later kick
+    widens it from then on.
+    Interval: starts at INTERVAL_START_S; a detection-service 429 or 5xx during the plugin's subject multiplies it by 1.5,
+    20 clean subjects in a row divide it by 1.25, within INTERVAL_MIN_S..INTERVAL_MAX_S. A refused-at-login subject needs
+    no window at all, so a plugin that decides at login moves on as soon as it has answered.
+    """
+
+    def __init__(self, fixed=False):
+        self.fixed = fixed
+        self.count = 0
+        self.latest_kick_s = 0.0
+        self.kicks = 0
+        self.interval = SUBJECT_INTERVAL_S if fixed else INTERVAL_START_S
+        self.clean = 0
+        self.full_windows = 0
+        self.observe_s = OBSERVE_S
+        self.elapsed_s = 0.0
+
+    def window(self, subject):
+        self.count += 1
+        if self.fixed or self.count <= CALIBRATION or self.count % PROBE_EVERY == 0:
+            self.full_windows += 1
+            return OBSERVE_S
+        return self.observe_s
+
+    def observe(self, result, window):
+        marks = result.get('marks') or {}
+        if result.get('outcome') == 'DENY_PLAY' and 'joined' in marks and 'decided' in marks:
+            self.kicks += 1
+            self.latest_kick_s = max(self.latest_kick_s, (marks['decided'] - marks['joined']) / 1000)
+        if not self.fixed:
+            self.observe_s = min(OBSERVE_S, max(OBSERVE_MIN_S, 2 * self.latest_kick_s))
+
+    def after(self, errors):
+        if self.fixed:
+            return
+        if errors:
+            self.interval = min(INTERVAL_MAX_S, self.interval * 1.5)
+            self.clean = 0
+            return
+        self.clean += 1
+        if self.clean >= 20:
+            self.interval = max(INTERVAL_MIN_S, self.interval / 1.25)
+            self.clean = 0
+
+    def summary(self):
+        return dict(mode='fixed' if self.fixed else 'adaptive', observe_s=round(self.observe_s, 2),
+                    latest_kick_after_join_s=round(self.latest_kick_s, 2), kicks_after_join=self.kicks,
+                    full_windows=self.full_windows, subjects=self.count, final_interval_s=round(self.interval, 2),
+                    elapsed_s=self.elapsed_s)
+
+
 def dataset():
     return [json.loads(line) for line in open(PRIVATE)]
 
@@ -160,52 +226,85 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
         starts = {}
         for instance in instances:
             starts[instance.product_id] = await instance.start()
-        rows, retry = [], []
+        base_cache = {}
 
-        async def measure(subject, attempt):
+        async def baseline_of(subject):
+            # Once per subject, whichever plugin reaches it first; the others reuse it.
+            if subject['id'] not in base_cache:
+                base_cache[subject['id']] = asyncio.ensure_future(baselines(subject, canaries))
+            return await base_cache[subject['id']]
+
+        async def measure_one(instance, pacer, subject, attempt):
             mark = runtime.sequence()
-            rotation = product_ids[attempt % len(product_ids):] + product_ids[:attempt % len(product_ids)]
-            results = await asyncio.gather(*[
-                mcclient.admit(i.port, subject['ip'], player(i.product_id), observe_s=OBSERVE_S)
-                for i in sorted(instances, key=lambda i: rotation.index(i.product_id))])
-            base = await baselines(subject, canaries)
-            events = [e for e in runtime.events_since(mark) if e.get('subject_ip') == subject['ip']
-                      and not e.get('baseline')]
-            provider_errors = sorted({e['host'] for e in events if (e.get('status') or 0) in (429,) or
-                                      (e.get('status') or 0) >= 500 or e.get('error')})
-            row = dict(subject=subject['id'], cohort=subject['cohort'], label=subject['label'], attempt=attempt,
-                       provider_errors=provider_errors, baselines=base, products={})
-            for instance, result in zip(sorted(instances, key=lambda i: rotation.index(i.product_id)), results):
-                row['products'][instance.product_id] = dict(outcome=result['outcome'], blocked=blocked(result['outcome']),
-                                                            reason=(result.get('reason') or '')[:200],
-                                                            decision_ms=decision_ms(result))
-            return row
+            window = pacer.window(subject)
+            result = await mcclient.admit(instance.port, subject['ip'], player(instance.product_id), observe_s=window)
+            pacer.observe(result, window)
+            events = [e for e in runtime.events_since(mark) if e.get('subject_ip') == subject['ip'] and not e.get('baseline')]
+            errors = sorted({e['host'] for e in events if (e.get('status') or 0) in (429,) or
+                             (e.get('status') or 0) >= 500 or e.get('error')})
+            pacer.after(errors)
+            return dict(outcome=result['outcome'], blocked=blocked(result['outcome']), reason=(result.get('reason') or '')[:200],
+                        decision_ms=decision_ms(result), observe_s=round(window, 2)), errors
 
-        for index, subject in enumerate(order):
-            started = time.monotonic()
-            row = await measure(subject, 0)
-            if row['provider_errors']:
-                retry.append(subject)
-            rows.append(row)
-            if index % 25 == 0:
-                print(f'[detection {profile}] {index + 1}/{len(order)}', flush=True)
-            await asyncio.sleep(max(0.0, SUBJECT_INTERVAL_S - (time.monotonic() - started)))
+        async def pass_of(instance, pacer, subjects, attempt):
+            """One plugin's own pass: it moves to the next subject as soon as it has decided, at its own pace."""
+            out, begun = [], time.monotonic()
+            for index, subject in enumerate(subjects):
+                started = time.monotonic()
+                result, errors = await measure_one(instance, pacer, subject, attempt)
+                out.append((subject, result, errors))
+                if index % 50 == 0:
+                    print(f'[detection {profile}] {instance.product_id} {index + 1}/{len(subjects)} '
+                          f'(window {pacer.observe_s:.1f} s, interval {pacer.interval:.1f} s)', flush=True)
+                await asyncio.sleep(max(0.0, pacer.interval - (time.monotonic() - started)))
+            pacer.elapsed_s = round(pacer.elapsed_s + time.monotonic() - begun, 1)
+            return out
+
+        async def baseline_pass(subjects):
+            # The reference answers (ProxyCheck, VPNAPI) for every subject, alongside the plugin passes, one a second.
+            for subject in subjects:
+                begun = time.monotonic()
+                await baseline_of(subject)
+                await asyncio.sleep(max(0.0, 1.0 - (time.monotonic() - begun)))
+
+        pacers = {i.product_id: Pacer(fixed=PACING == 'fixed') for i in instances}
+        started_all = time.monotonic()
+        baseline_task = asyncio.ensure_future(baseline_pass(order))
+        passes = await asyncio.gather(*[pass_of(i, pacers[i.product_id], order, 0) for i in instances])
+        await baseline_task
+        rows_by_subject = {s['id']: dict(subject=s['id'], cohort=s['cohort'], label=s['label'], attempt=0,
+                                         provider_errors=[], products={}) for s in order}
+        retry = {}
+        for instance, results in zip(instances, passes):
+            for subject, result, errors in results:
+                row = rows_by_subject[subject['id']]
+                row['products'][instance.product_id] = result
+                row['provider_errors'] = sorted(set(row['provider_errors']) | set(errors))
+                if errors:
+                    retry.setdefault(instance.product_id, []).append(subject)
+        for s in order:
+            rows_by_subject[s['id']]['baselines'] = await baseline_of(s)
+        rows = [rows_by_subject[s['id']] for s in order]
+        pass_seconds = round(time.monotonic() - started_all, 1)
         if retry:
             await asyncio.sleep(90)
-            # Product caches would answer a retry from the first (failed) attempt, so retries run
-            # on freshly started instances with the same profile.
-            for instance in instances:
+            # Product caches would answer a retry from the first (failed) attempt, so a plugin's retries run on its
+            # freshly started instance with the same profile. Only the subjects that plugin saw a provider error on.
+            again = [i for i in instances if i.product_id in retry]
+            for instance in again:
                 await instance.stop()
-            for instance in instances:
                 await instance.prepare(profile, canaries)
-            for instance in instances:
                 await instance.start()
-            for subject in retry:
-                started = time.monotonic()
-                rows.append(await measure(subject, 1))
-                await asyncio.sleep(max(0.0, SUBJECT_INTERVAL_S - (time.monotonic() - started)))
+            second = await asyncio.gather(*[pass_of(i, pacers[i.product_id], retry[i.product_id], 1) for i in again])
+            for instance, results in zip(again, second):
+                for subject, result, errors in results:
+                    rows.append(dict(subject=subject['id'], cohort=subject['cohort'], label=subject['label'], attempt=1,
+                                     provider_errors=errors, baselines=rows_by_subject[subject['id']]['baselines'],
+                                     products={instance.product_id: result}))
+        pacing = {pid: p.summary() for pid, p in pacers.items()}
         record = dict(profile=profile, platform=DETECTION_PLATFORM, starts=starts, subjects=len(order),
-                      retried=len(retry), rows=rows, chunk=chunk or None)
+                      retried=sum(len(v) for v in retry.values()), rows=rows, chunk=chunk or None,
+                      pacing=pacing, first_pass_s=pass_seconds)
     finally:
         teardown = {}
         for instance in instances:
