@@ -137,10 +137,23 @@ class Server:
         return await asyncio.wait_for(ready, timeout)
 
     async def command(self, text, settle=1.0):
+        """Send a console command and wait until the plugin has answered: once it has printed something, the wait ends
+        after a quiet spell of a quarter of `settle` (at least 0.25 s). A command that prints nothing gets the full
+        `settle`, because silence is no sign that it finished."""
         mark = len(self.lines)
         self.process.stdin.write((text + '\n').encode())
         await self.process.stdin.drain()
-        await asyncio.sleep(settle)
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        quiet = max(0.25, settle / 4)
+        seen, last_change = mark, started
+        while loop.time() - started < settle:
+            await asyncio.sleep(0.05)
+            now = loop.time()
+            if len(self.lines) != seen:
+                seen, last_change = len(self.lines), now
+            elif seen > mark and now - last_change >= quiet:
+                break
         return [line for _, line in self.lines[mark:]]
 
     async def wait_for(self, pattern, timeout=30, since=0):

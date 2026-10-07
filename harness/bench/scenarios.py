@@ -12,7 +12,9 @@ import shutil
 
 import yaml
 
-from . import mcclient, products
+from . import mcclient
+from . import products
+from .pacing import observed, watch
 from .engine import Backend, Instance, ProductNotLoaded, clean_install_rules, measurement_rules, product_errors, profile_edits
 
 PRIVATE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -40,7 +42,10 @@ def blocked(outcome):
 
 
 async def join(instance, subject, observe_s=OBSERVE_S):
-    result = await mcclient.admit(instance.port, subject['ip'], player(instance.product_id), observe_s=observe_s)
+    # Learned per plugin for the whole run (bench/pacing.py); full window while calibrating and on every 10th join.
+    window = watch(instance.product_id, observe_s)
+    result = observed(instance.product_id, await mcclient.admit(instance.port, subject['ip'], player(instance.product_id),
+                                                                observe_s=window), window)
     result.pop('subject_ip', None)
     result['subject'] = subject['id']
     result['label'] = subject['label']

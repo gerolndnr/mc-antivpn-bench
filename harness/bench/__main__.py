@@ -220,6 +220,8 @@ async def main_run(args):
     finally:
         runtime.stop()
         manifest['duration_s'] = time.monotonic() - started
+        from . import pacing
+        manifest['pacing'] = pacing.summaries()  # watch windows learned per plugin (METHODOLOGY 7.1)
         open(os.path.join(recorder.public, 'manifest.json'), 'w').write(json.dumps(manifest, indent=2, default=str))
     print(f'results: results/{run_id}', flush=True)
     draw_overview(recorder)

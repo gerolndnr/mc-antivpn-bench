@@ -27,70 +27,8 @@ OBSERVE_S = 8.0
 SEED = 20261005
 
 
-# Detection pacing (METHODOLOGY 7.1). "adaptive": every plugin walks the subjects on its own and learns how long to watch
-# an admitted player for a late kick; "fixed": the full window and SUBJECT_INTERVAL_S for everyone, as before 8 Oct.
-PACING = os.environ.get('BENCH_DETECTION_PACING', 'adaptive')
-OBSERVE_MIN_S = 1.5
-CALIBRATION = 20
-PROBE_EVERY = 10
-INTERVAL_START_S, INTERVAL_MIN_S, INTERVAL_MAX_S = 2.0, 1.0, 10.0
-
-
-class Pacer:
-    """How long one plugin gets per subject.
-
-    Watch window: an admitted player stays joined for a while so that a plugin that decides after the join (KauriVPN)
-    can still kick them. The first CALIBRATION subjects and every PROBE_EVERY-th one get the full OBSERVE_S; otherwise the
-    window is twice the latest kick after the join seen so far, at least OBSERVE_MIN_S. A probe that sees a later kick
-    widens it from then on.
-    Interval: starts at INTERVAL_START_S; a detection-service 429 or 5xx during the plugin's subject multiplies it by 1.5,
-    20 clean subjects in a row divide it by 1.25, within INTERVAL_MIN_S..INTERVAL_MAX_S. A refused-at-login subject needs
-    no window at all, so a plugin that decides at login moves on as soon as it has answered.
-    """
-
-    def __init__(self, fixed=False):
-        self.fixed = fixed
-        self.count = 0
-        self.latest_kick_s = 0.0
-        self.kicks = 0
-        self.interval = SUBJECT_INTERVAL_S if fixed else INTERVAL_START_S
-        self.clean = 0
-        self.full_windows = 0
-        self.observe_s = OBSERVE_S
-        self.elapsed_s = 0.0
-
-    def window(self, subject):
-        self.count += 1
-        if self.fixed or self.count <= CALIBRATION or self.count % PROBE_EVERY == 0:
-            self.full_windows += 1
-            return OBSERVE_S
-        return self.observe_s
-
-    def observe(self, result, window):
-        marks = result.get('marks') or {}
-        if result.get('outcome') == 'DENY_PLAY' and 'joined' in marks and 'decided' in marks:
-            self.kicks += 1
-            self.latest_kick_s = max(self.latest_kick_s, (marks['decided'] - marks['joined']) / 1000)
-        if not self.fixed:
-            self.observe_s = min(OBSERVE_S, max(OBSERVE_MIN_S, 2 * self.latest_kick_s))
-
-    def after(self, errors):
-        if self.fixed:
-            return
-        if errors:
-            self.interval = min(INTERVAL_MAX_S, self.interval * 1.5)
-            self.clean = 0
-            return
-        self.clean += 1
-        if self.clean >= 20:
-            self.interval = max(INTERVAL_MIN_S, self.interval / 1.25)
-            self.clean = 0
-
-    def summary(self):
-        return dict(mode='fixed' if self.fixed else 'adaptive', observe_s=round(self.observe_s, 2),
-                    latest_kick_after_join_s=round(self.latest_kick_s, 2), kicks_after_join=self.kicks,
-                    full_windows=self.full_windows, subjects=self.count, final_interval_s=round(self.interval, 2),
-                    elapsed_s=self.elapsed_s)
+from .pacing import (CALIBRATION, INTERVAL_MAX_S, INTERVAL_MIN_S, INTERVAL_START_S, OBSERVE_MIN_S, PACING,  # noqa: F401
+                     PROBE_EVERY, Pacer, observed, watch)
 
 
 def dataset():
@@ -267,7 +205,8 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
                 await baseline_of(subject)
                 await asyncio.sleep(max(0.0, 1.0 - (time.monotonic() - begun)))
 
-        pacers = {i.product_id: Pacer(fixed=PACING == 'fixed') for i in instances}
+        pacers = {i.product_id: Pacer(fixed=PACING == 'fixed', always_full=bool(i.adapter.get('decides_after_join')))
+                  for i in instances}
         started_all = time.monotonic()
         baseline_task = asyncio.ensure_future(baseline_pass(order))
         passes = await asyncio.gather(*[pass_of(i, pacers[i.product_id], order, 0) for i in instances])
@@ -347,8 +286,9 @@ async def failure(runtime, recorder, canaries, product_ids, platform='velocity')
                 joins = {}
                 for key, subject in subjects.items():
                     mark = runtime.sequence()
-                    result = await mcclient.admit(instance.port, subject['ip'], player(product_id),
-                                                  observe_s=OBSERVE_S, deadline_s=60)
+                    window = watch(product_id, OBSERVE_S)
+                    result = observed(product_id, await mcclient.admit(instance.port, subject['ip'], player(product_id),
+                                                                       observe_s=window, deadline_s=60), window)
                     events = runtime.events_since(mark)
                     calls = [e for e in events if e.get('host') in adapter['lookup_hosts']]
                     joins[key] = dict(subject=subject['id'], outcome=result['outcome'], blocked=blocked(result['outcome']),
@@ -364,8 +304,9 @@ async def failure(runtime, recorder, canaries, product_ids, platform='velocity')
                 for key, wait in (('after_recovery_vpn', 2), ('after_recovery_vpn_65s', 63)):
                     await asyncio.sleep(wait)
                     mark = runtime.sequence()
-                    after = await mcclient.admit(instance.port, subjects['vpn']['ip'], player(product_id),
-                                                 observe_s=OBSERVE_S)
+                    window = watch(product_id, OBSERVE_S)
+                    after = observed(product_id, await mcclient.admit(instance.port, subjects['vpn']['ip'], player(product_id),
+                                                                      observe_s=window), window)
                     calls = [e for e in runtime.events_since(mark) if e.get('host') in adapter['lookup_hosts']]
                     record[key] = dict(outcome=after['outcome'], blocked=blocked(after['outcome']),
                                        decision_ms=decision_ms(after), lookup_requests=len(calls))
@@ -494,10 +435,19 @@ async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2
                                                             observe_s=observe_s, deadline_s=60)))
             await asyncio.sleep(1.0 / rate)
         return await asyncio.gather(*tasks)
+    pid = instance.product_id
     if concurrency:
-        return await asyncio.gather(*[mcclient.admit(instance.port, s['ip'], player('stamp'), observe_s=observe_s,
-                                                     deadline_s=60) for s in subjects])
-    return [await mcclient.admit(instance.port, s['ip'], player('seq'), observe_s=observe_s) for s in subjects]
+        window = watch(pid, observe_s)
+        results = await asyncio.gather(*[mcclient.admit(instance.port, s['ip'], player('stamp'), observe_s=window,
+                                                        deadline_s=60) for s in subjects])
+        for result in results:
+            observed(pid, result, window)
+        return results
+    out = []
+    for s in subjects:
+        window = watch(pid, observe_s)
+        out.append(observed(pid, await mcclient.admit(instance.port, s['ip'], player('seq'), observe_s=window), window))
+    return out
 
 
 def summarize(results, events, lookup_hosts, subjects=None):
@@ -622,8 +572,9 @@ async def redis_outage(runtime, recorder, canaries, product_ids, platform='veloc
             outcome = []
             for _ in range(2):
                 subject = next(subjects)
-                result = await mcclient.admit(instance.port, subject['ip'], player(product_id), observe_s=4,
-                                              deadline_s=60)
+                window = watch(product_id, 4.0)
+                result = observed(product_id, await mcclient.admit(instance.port, subject['ip'], player(product_id),
+                                                                   observe_s=window, deadline_s=60), window)
                 outcome.append(dict(subject=subject['id'], label=subject['label'], outcome=result['outcome'],
                                     blocked=blocked(result['outcome']), decision_ms=decision_ms(result),
                                     reason=(result.get('reason') or '')[:160]))

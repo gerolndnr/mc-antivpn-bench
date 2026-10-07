@@ -723,3 +723,51 @@ class RetryRowsPerProduct(unittest.TestCase):
                 dict(subject='s1', cohort='tor', label='vpn', attempt=1, products=dict(a=dict(blocked=True)))]
         final = report.headline_rows(dict(rows=rows))
         self.assertEqual(final[0]['products'], dict(a=dict(blocked=True), b=dict(blocked=True)))
+
+
+class SharedPacing(unittest.TestCase):
+    def test_call_site_full_window_and_after_join_plugins(self):
+        from bench import pacing
+        pacing._shared.clear()
+        windows = [pacing.watch('connection-guard-061', 4.0) for _ in range(pacing.CALIBRATION)]
+        self.assertTrue(all(w == 4.0 for w in windows))                      # calibration uses the site's full window
+        self.assertEqual(pacing.watch('connection-guard-061', 4.0), pacing.OBSERVE_MIN_S)
+        self.assertEqual(pacing.watch('connection-guard-061', 1.0), 1.0)      # never longer than the site's window
+        late = [pacing.watch('kaurivpn', 8.0) for _ in range(pacing.CALIBRATION + 5)]
+        self.assertTrue(all(w == 8.0 for w in late))                          # decides after the join: always full
+
+
+class CommandSettle(unittest.TestCase):
+    def run_command(self, lines_after):
+        import asyncio, time
+        from bench import servers
+
+        class Stdin:
+            def write(self, data): pass
+            async def drain(self): pass
+
+        server = servers.Server.__new__(servers.Server)
+        server.lines = []
+        server.process = type('P', (), {'stdin': Stdin()})()
+
+        async def scenario():
+            async def printer():
+                for delay, text in lines_after:
+                    await asyncio.sleep(delay)
+                    server.lines.append((time.monotonic(), text))
+            task = asyncio.ensure_future(printer())
+            started = time.monotonic()
+            out = await server.command('cg reload', settle=4.0)
+            await task
+            return time.monotonic() - started, out
+        return asyncio.run(scenario())
+
+    def test_answer_ends_the_wait_after_a_quiet_spell(self):
+        took, out = self.run_command([(0.1, 'Reloaded.')])
+        self.assertEqual(out, ['Reloaded.'])
+        self.assertLess(took, 2.0)
+
+    def test_silence_waits_the_full_settle(self):
+        took, out = self.run_command([])
+        self.assertEqual(out, [])
+        self.assertGreaterEqual(took, 3.9)
