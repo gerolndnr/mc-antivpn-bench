@@ -1,4 +1,91 @@
 {
+  "detection_profile": "enforce",
+  "products": {
+    "detection": {
+      "connection-guard": [
+        "37540326121"
+      ],
+      "connection-guard-candidate": [
+        "37540326121"
+      ],
+      "foxgate": [
+        "37540326121"
+      ],
+      "proxyshield": [
+        "37540326121"
+      ],
+      "vpnguard": [
+        "37540326121"
+      ]
+    },
+    "failure": {
+      "connection-guard": [
+        "37593590733"
+      ],
+      "connection-guard-candidate": [
+        "37593590733"
+      ],
+      "foxgate": [
+        "37593590733"
+      ],
+      "proxyshield": [
+        "37593590733"
+      ],
+      "vpnguard": [
+        "37593590733"
+      ]
+    },
+    "functional": {
+      "connection-guard": [
+        "37540302788"
+      ],
+      "connection-guard-candidate": [
+        "37540302788"
+      ],
+      "foxgate": [
+        "37540302788"
+      ],
+      "proxyshield": [
+        "37540302788"
+      ],
+      "vpnguard": [
+        "37540302788"
+      ]
+    },
+    "performance": {
+      "connection-guard": [
+        "37593586654"
+      ],
+      "connection-guard-candidate": [
+        "37593586654"
+      ],
+      "foxgate": [
+        "37593586654"
+      ],
+      "none": [
+        "37593586654"
+      ],
+      "proxyshield": [
+        "37593586654"
+      ],
+      "vpnguard": [
+        "37593586654"
+      ]
+    },
+    "providers": {
+      "services": [
+        "37602043725"
+      ]
+    },
+    "redis": {
+      "connection-guard": [
+        "37540313410"
+      ],
+      "connection-guard-candidate": [
+        "37540313410"
+      ]
+    }
+  },
   "runs": {
     "detection": [
       "37540326121"
