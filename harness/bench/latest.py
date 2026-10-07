@@ -6,7 +6,8 @@ Picks, newest first among successful `benchmark` runs started by hand or by the 
   - per family (functional, failure, redis, detection, performance on Velocity, providers) the newest run that
     compared at least two products (providers: any run);
   - for detection, a nightly chunk only together with the other chunks of the same profile; an incomplete set is
-    skipped in favour of the next complete result.
+    skipped in favour of the next complete result;
+  - never a run that measured an unreleased candidate (adapter `pre_release`).
 Writes overview-dark.png, overview-light.png and latest.json (which runs were used). Display names can be set in
 <output>/labels.json ({"product-id": "Name"}).
 """
@@ -46,6 +47,8 @@ def download(repo, run_id, base):
 def families_in(folder):
     manifest = os.path.join(folder, 'manifest.json')
     products = json.load(open(manifest)).get('products', []) if os.path.exists(manifest) else []
+    if any(pre_release(p) for p in products):
+        return {}  # the README shows released versions only; a candidate's runs stay in their own overview
     found = {}
     for family in FAMILIES:
         files = glob.glob(os.path.join(folder, FOLDERS[family], '*.json'))
@@ -58,6 +61,11 @@ def families_in(folder):
             continue
         found[family] = files
     return found
+
+
+def pre_release(product_id):
+    path = os.path.join(overview.ROOT, 'products', f'{product_id}.json')
+    return os.path.exists(path) and bool(json.load(open(path)).get('pre_release'))
 
 
 def detection_chunk(files):

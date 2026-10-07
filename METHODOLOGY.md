@@ -352,6 +352,8 @@ The adapters for products without public source code are written from their publ
   - Folia is not advertised; the Folia row records whether it loads.
 - **2026-10-07, KauriVPN on Folia:** 1.10.1.2 throws while enabling (it schedules with the Bukkit scheduler, which Folia refuses) and then admits everyone. The platform check now counts "Error occurred while enabling" as a load failure; before, it only looked for "Could not load plugin".
   - It joins the next keyed detection series, like KauriVPN.
+- **2026-10-07, Connection Guard 0.6.1 candidate** (PR #84 head feffbfb, product `connection-guard-061`). It is measured against 0.6.0 before release. Like every unreleased candidate, it never appears in the README overview.
+- **2026-10-07, keys in manual runs.** Every family attaches the free ProxyCheck key to keyless ProxyCheck requests. A manual run now receives the keys only with `use_keys`; the nightly chunks always do. This protects the one key's daily quota.
 - **2026-10-07, family `providers`** (7.9): every detection service on its own, Connection Guard Intel among them (marked as the author's project), and replays of lookup chains, including the planned Connection Guard 0.6.1 chain.
 - **2026-10-07, overview graphic** at the end of every run and at the top of the README: the newest complete result of every family, the newest pinned version of each plugin, the accent on the best value of each row.
 

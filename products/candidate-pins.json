@@ -106,5 +106,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.6.1-candidate-feffbfb": {
+    "project": "connectionguard",
+    "version": "0.6.1-SNAPSHOT",
+    "path": "candidates/connection-guard-0.6.1-SNAPSHOT-feffbfb.jar",
+    "sha256": "b32ce513b2dcbf6052c1f29ea6244a24c8ceca1751258771bc7b2bfbd0db6301",
+    "filename": "connection-guard-0.6.1-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #84 head feffbfbac11af388b5e431d9fb4cc49dda801a17 (Blackbox needs confirmation, IP-API off for new installs, Intel PROXY list), CI run 37604712245 artifact (merge ref 8a736db)",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }

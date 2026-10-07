@@ -42,6 +42,10 @@ on:
       state_from_run:
         description: Workflow run id whose recorded provider answers to reuse (empty = start fresh)
         default: ''
+      use_keys:
+        description: Pass PROXYCHECK_KEY/VPNAPI_KEY (off by default so manual runs leave the nightly chunks' quota alone)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -119,8 +123,9 @@ jobs:
             -m bench.dataset materialize
       - name: Run
         env:
-          PROXYCHECK_KEY: ${{ secrets.PROXYCHECK_KEY }}
-          VPNAPI_KEY: ${{ secrets.VPNAPI_KEY }}
+          # Nightly chunks always get the keys; a manual run only with use_keys (one free key's daily quota is shared).
+          PROXYCHECK_KEY: ${{ (github.event_name == 'schedule' || inputs.use_keys) && secrets.PROXYCHECK_KEY || '' }}
+          VPNAPI_KEY: ${{ (github.event_name == 'schedule' || inputs.use_keys) && secrets.VPNAPI_KEY || '' }}
           # providers family: optional free keys (set by the owner); a service without its key is skipped.
           PROVIDER_KEY_IPAPI_IS: ${{ secrets.PROVIDER_KEY_IPAPI_IS }}
           PROVIDER_KEY_IPLOCATE: ${{ secrets.PROVIDER_KEY_IPLOCATE }}

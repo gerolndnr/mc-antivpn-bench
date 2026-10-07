@@ -20,7 +20,8 @@ import subprocess
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 WIDTH = 1600
-PRODUCT_ORDER = ['connection-guard-candidate', 'connection-guard', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn']
+PRODUCT_ORDER = ['connection-guard-061', 'connection-guard-candidate', 'connection-guard', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn',
+                 'advancedantivpn']
 CATCH = [('commercial_vpn', 'Commercial VPNs'), ('fresh_vpn', 'Newly added VPN servers'), ('vpn_v6', 'VPNs over IPv6'),
          ('tor', 'Tor exits'), ('proxy', 'Public proxies')]
 SPARE = [('residential', 'Home connections'), ('residential_v6', 'Home connections, IPv6'), ('mobile_cgnat', 'Mobile networks')]
