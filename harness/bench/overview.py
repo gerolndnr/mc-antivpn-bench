@@ -559,7 +559,9 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
 
     # Detection services on their own
     if prov:
-        services = sorted(prov['services'].items(), key=lambda x: -(x[1]['caught'] / max(1, x[1]['bad']) - 3 * x[1]['refused'] / max(1, x[1]['good'])))
+        from .providers import REFUSAL_WEIGHT, score
+        services = sorted(prov['services'].items(), key=lambda x: -score(x[1]))
+        scores = {s: score(v) for s, v in services}
         caught = {s: v['caught'] / v['bad'] if v['bad'] else None for s, v in services}
         # Fewest refusals only counts for services that also catch: a service that flags nothing refuses nobody.
         refused = {s: v['refused'] / v['good'] if v['good'] else None for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2}
@@ -569,19 +571,21 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         speed = {s: v['ms_p50'] for s, v in services if s in useful}
         wc, wr, ws = best(caught, False), best(refused, True), best(speed, True)
         wa = {s for s, v in services if s in useful and v.get('local')}
-        body = [('', [td(esc(v['name']) + (' <span class="frac">own, see note</span>' if v.get('own') else '')), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
+        ws_ = best(scores, False)
+        body = [('', [td(esc(v['name']) + (' <span class="frac">own, see note</span>' if v.get('own') else '')),
+                      td(f'{scores[s]:.1f}', 'best' if s in ws_ else ''), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
                       td(f'{v["refused"]}/{v["good"]}', 'best' if s in wr else ''), td(f'{v["answered"]}/{v["subjects"]}'),
                       td(fmt_ms(v['ms_p50']), 'best' if s in ws else ''),
                       td('local lists, no quota' if v.get('local') else 'key' if v['keyed'] else 'keyless', 'best' if s in wa else '')])
                 for s, v in services]
         if any(v.get('own') for _, v in services):
-            body.append(('', [f'<td colspan="6" class="na" style="white-space:normal;font-size:12.5px;height:44px">Own: Connection Guard Intel is the '
+            body.append(('', [f'<td colspan="7" class="na" style="white-space:normal;font-size:12.5px;height:44px">Own: Connection Guard Intel is the '
                               'benchmark author\'s project. Its VPN and Tor lists come from the same sources that label those addresses, so '
                               'those numbers show coverage; its proxy list uses none of the proxy cohort\'s sources.</td>']))
-        place([table_card('Detection services on their own', 'Every address sent straight to each service at its own rate limit and quota. Hosting alone is not a hit. '
-                          'A local list is checked on the server: no request, no quota.',
-                          ['Service', 'VPN, Tor, proxies caught', 'Home and mobile refused', 'Answered', 'Median time', 'Access'],
-                          body, ['26%', '16%', '16%', '14%', '14%', '14%'], tag=f'{prov["meta"]["subjects"]} addresses')], '1fr')
+        place([table_card('Detection services on their own', f'Score = 100 × (share caught − {REFUSAL_WEIGHT} × share refused) − 5 per second of median time. '
+                          'Each service at its own quota; hosting alone is not a hit.',
+                          ['Service', 'Score', 'VPN, Tor, proxies caught', 'Home and mobile refused', 'Answered', 'Median time', 'Access'],
+                          body, ['24%', '9%', '15%', '15%', '12%', '12%', '13%'], tag=f'{prov["meta"]["subjects"]} addresses')], '1fr')
 
     runs = ', '.join(sorted({str(m.get('run_id', '')).split('-')[0] for m in ms}))
     commits = sorted({(m['environment'].get('bench_commit') or '')[:7] for m in ms if m.get('environment')} - {''})

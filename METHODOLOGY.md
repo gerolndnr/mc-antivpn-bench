@@ -288,6 +288,13 @@ No plugin and no server: the harness sends every dataset address straight to eac
   - `unknown`: hosting alone, or flags missing. Hosting is review evidence, never a positive, as in the plugins.
   - Errors (`rate_limited`, `http_<code>`, `timeout`, `unreadable`, `not_queried`) are reported per service.
 - **Metrics per service.** Caught = `positive` / all VPN, Tor and proxy addresses. Refused = `positive` / all home and mobile addresses. Both have Wilson 95 % intervals; an unanswered address counts as neither caught nor refused. Latency p50 and p95 of answered lookups. Answers per cohort, including the hosting flag.
+- **Score and order.** Every table of this family is sorted by one score:
+
+  `score = 100 × (caught share − 3 × refused share) − 5 points per second of median time (at most 10)`, floored at 0.
+  - **Refusals weigh three times a miss.** Turning a real player away costs more than letting one VPN user in, who still meets bans and other checks. At weight 1 Blackbox would lead the 7 October run, at 5 zowi; the report gives the formula so a reader can re-weight.
+  - **Quota and errors are already in it.** An address a service did not answer counts as not caught, so they get no term of their own.
+  - **Speed only breaks near-ties.** 270 ms costs 1.4 points, a local list nothing; a join's decision time is measured in the plugin families.
+  - **Range.** The score is also computed from both Wilson bounds, giving a 95 % range. Services whose ranges overlap are not clearly apart, and the report says "leading", not "best".
 - **Chains.** The answers are replayed through lookup chains: Connection Guard 0.6's shipped order (`intel, proxycheck, blackbox, zowi, ipquery, ip-api`), the same with Blackbox needing confirmation, without IP-API, and with every other keyless service in IP-API's place or directly after Blackbox.
   - The first `positive` or `negative` decides. `unknown` and errors pass to the next service.
   - `intel` checks Connection Guard Intel's published lists, fetched at the end of the run, with their `as_of` recorded: VPN and Tor decide, hosting is evidence only.
@@ -355,6 +362,8 @@ The adapters for products without public source code are written from their publ
 - **2026-10-07, Connection Guard 0.6.1 candidate** (PR #84 head feffbfb, product `connection-guard-061`). It is measured against 0.6.0 before release. Like every unreleased candidate, it never appears in the README overview.
 - **2026-10-07, player accounts.** The benchmark's players have no Mojang accounts. KauriVPN resolves each name online on BungeeCord, got Mojang's 404 and admitted everyone. A real player's name always resolves. Mojang's name lookup (`api.mojang.com/users/profiles/minecraft/<name>`) now gets, for every product, the answer an existing account gives, with the name's offline-mode UUID. No other Mojang request is affected.
 - **2026-10-07, README overview per product.** The graphic takes every product's newest complete result per family. A run with only newly added products no longer replaces the others. Detection shows the keyed profile only once every shown product has it. The date line gives the span of the runs shown (first start to last end); before, it showed the oldest start date only.
+- **2026-10-07, provider score.** The provider tables were sorted by two different rules: the report by caught − 5 × refused (counts), the graphic by shares with weight 3. Neither said so. Both now use the score of 7.9, shown as its own column.
+- **2026-10-07, Connection Guard Intel proxy list from all twelve maintainers' lists** (owner decision, whatever the licence). The rule stays: two independent maintainers must list an address. On the lists of 7 October it lists 68 of the 100 proxy-cohort addresses, up from 17 with the MIT lists only, and no home or mobile address. The cohort's three source lists are still not used.
 - **2026-10-07, keys in manual runs.** Every family attaches the free ProxyCheck key to keyless ProxyCheck requests. A manual run now receives the keys only with `use_keys`; the nightly chunks always do. This protects the one key's daily quota.
 - **2026-10-07, family `providers`** (7.9): every detection service on its own, Connection Guard Intel among them (marked as the author's project), and replays of lookup chains, including the planned Connection Guard 0.6.1 chain.
 - **2026-10-07, overview graphic** at the end of every run and at the top of the README: the newest complete result of every family, the newest pinned version of each plugin, the accent on the best value of each row.

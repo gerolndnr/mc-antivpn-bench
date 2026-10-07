@@ -596,3 +596,16 @@ class ReadmeOverviewSelection(unittest.TestCase):
             latest.runs, latest.dataset_size = saved
         self.assertEqual(profile, 'enforce')
         self.assertEqual(chosen['detection']['connection-guard'][0][0], '1')
+
+
+class ProviderScore(unittest.TestCase):
+    def test_score_weights_refusals_three_times_and_speed_only_a_little(self):
+        from bench import providers as p
+        s = dict(caught=379, bad=382, refused=12, good=310, ms_p50=69.0, caught_ci=[0.977, 0.997], refused_ci=[0.022, 0.067])
+        self.assertEqual(p.score(s), 87.3)
+        local = dict(caught=289, bad=382, refused=0, good=310, ms_p50=0.0, caught_ci=[0.71, 0.80], refused_ci=[0.0, 0.012])
+        self.assertEqual(p.score(local), 75.7)
+        low, high = p.score_range(s)
+        self.assertLess(low, p.score(s))
+        self.assertGreater(high, p.score(s))
+        self.assertEqual(p.score(dict(caught=0, bad=382, refused=0, good=310, ms_p50=612.0)), 0.0)

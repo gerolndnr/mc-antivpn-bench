@@ -341,6 +341,30 @@ def wilson(k, n, z=1.96):
     return [round(max(0.0, c - h), 4), round(min(1.0, c + h), 4)]
 
 
+# Score (METHODOLOGY 7.9): 100 x (share caught - 3 x share of home and mobile players refused), minus 5 points per second
+# of median answer time (at most 10), floored at 0. Unanswered addresses already count as not caught, so quotas and
+# errors are inside "caught"; speed only breaks near-ties.
+REFUSAL_WEIGHT = 3
+SPEED_POINTS_PER_S = 5
+SPEED_POINTS_MAX = 10
+
+
+def score(s, caught=None, refused=None):
+    """Score of one summary entry; `caught`/`refused` override the shares (for the 95 % range)."""
+    r = s['caught'] / s['bad'] if caught is None and s['bad'] else (caught or 0)
+    f = s['refused'] / s['good'] if refused is None and s['good'] else (refused or 0)
+    speed = min(SPEED_POINTS_MAX, SPEED_POINTS_PER_S * (s.get('ms_p50') or 0) / 1000)
+    return round(max(0.0, 100 * (r - REFUSAL_WEIGHT * f) - speed), 1)
+
+
+def score_range(s):
+    """95 % range from the Wilson intervals of both shares."""
+    share = lambda k, n: k / n if n else 0
+    caught = s.get('caught_ci') or [share(s['caught'], s['bad'])] * 2
+    refused = s.get('refused_ci') or [share(s['refused'], s['good'])] * 2
+    return [score(s, caught[0], refused[1]), score(s, caught[1], refused[0])]
+
+
 def summarize(records, items):
     labels = {i['id']: i['label'] for i in items}
     out = {}
@@ -373,6 +397,7 @@ def summarize(records, items):
             ms_p95=round(sorted(ms)[max(0, math.ceil(len(ms) * 0.95) - 1)], 1 if s.local else None) if ms else None,
             local=s.local, own=s.own,
             errors=errors, cohorts=cohorts)
+        out[service].update(score=score(out[service]), score_range=score_range(out[service]))
     return out
 
 
@@ -514,11 +539,15 @@ def markdown(summary, chain_rows, meta):
              'Each service gets every address directly, at its own rate limit and daily quota. `caught` counts VPN, Tor and',
              'proxy addresses answered positive; `refused` counts home and mobile addresses answered positive. Hosting alone',
              'is not a positive. Addresses a service did not answer (quota, errors) count as not caught and not refused.', '',
-             '| Service | Key | Answered | Caught | Refused | p50 | p95 | Errors | Terms |', '|---|---|---|---|---|---|---|---|---|']
-    for sid, s in sorted(summary.items(), key=lambda x: (-(x[1]['caught'] - 5 * x[1]['refused']))):
+             f'`Score` = 100 × (share caught − {REFUSAL_WEIGHT} × share refused) − {SPEED_POINTS_PER_S} points per second of median time '
+             f'(at most {SPEED_POINTS_MAX}), at least 0; sorted by it. The range is the 95 % interval from both shares: services whose',
+             'ranges overlap are not clearly apart.', '',
+             '| Service | Score | Key | Answered | Caught | Refused | p50 | p95 | Errors | Terms |', '|---|---|---|---|---|---|---|---|---|---|']
+    for sid, s in sorted(summary.items(), key=lambda x: -score(x[1])):
         errs = ', '.join(f'{k} {v}' for k, v in sorted(s['errors'].items())) or '–'
         ms = lambda v: '–' if v is None else f'{v} ms'
-        lines.append(f'| {s["name"]}{" ¹" if s["plugin"] else ""}{" ²" if s.get("own") else ""} | {"yes" if s["keyed"] else "no"} | {s["answered"]}/{s["subjects"]} | '
+        low, high = score_range(s)
+        lines.append(f'| {s["name"]}{" ¹" if s["plugin"] else ""}{" ²" if s.get("own") else ""} | {score(s)} ({low}–{high}) | {"yes" if s["keyed"] else "no"} | {s["answered"]}/{s["subjects"]} | '
                      f'{pct(s["caught"], s["bad"])} | {pct(s["refused"], s["good"])} | {ms(s["ms_p50"])} | {ms(s["ms_p95"])} | {errs} | {s["terms"]} |')
     lines += ['', '¹ supported by Connection Guard 0.6.',
               '² built by this benchmark\'s author. Its VPN and Tor lists come from the same operator lists and Tor list that label the',
