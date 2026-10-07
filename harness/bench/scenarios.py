@@ -74,7 +74,7 @@ async def with_instance(runtime, product_id, platform, profile, canaries, body, 
         record.pop('_install_console', None)
         record['product_error_lines'] = product_errors(console, instance.adapter, platform)[:40]
         name = re.escape(instance.adapter['data_dir'][platform])
-        record['load_failure'] = record.get('load_failure') or bool(re.search(r"(Could not load plugin|Error loading plugin|Couldn't pass \w+ to)"
+        record['load_failure'] = record.get('load_failure') or bool(re.search(r"(Could not load plugin|Error loading plugin|Error occurred while enabling|Couldn't pass \w+ to)"
                                                 r"[^\n]*(" + name + '|' + re.escape(instance.jar_name) + ')',
                                                 console, re.I))
         record['egress_hosts'] = sorted({e.get('host') or '?' for e in instance.egress()})
@@ -111,6 +111,9 @@ UPGRADE_MARKERS = {
     'foxgate': ['antivpn.timeout', 'antivpn.maxFlags'],
     'proxyshield': ['api.timeout-seconds', 'api.cache-minutes'],
     'vpnguard': ['timeout', 'cache-ttl-hours'],
+    # KauriVPN's only integer setting; with its default H2 database the port is not used.
+    'kaurivpn': ['database.port'],
+    'advancedantivpn': ['Cache Time', 'Concurrent Connections Per IP.Maximum Amount'],
 }
 
 
@@ -139,7 +142,7 @@ async def upgrade(runtime, product_id, platform, canaries, cases):
         return record
     path = os.path.join(old.data_dir, adapter['config'])
     document = yaml.safe_load(open(path)) or {}
-    dotted = next((p for p in UPGRADE_MARKERS[product_id] if isinstance(read_path(document, p), int)
+    dotted = next((p for p in UPGRADE_MARKERS.get(product_id, []) if isinstance(read_path(document, p), int)
                    and not isinstance(read_path(document, p), bool)), None)
     marker_set = dotted is not None
     value = read_path(document, dotted) + 1 if marker_set else None

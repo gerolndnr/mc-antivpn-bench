@@ -42,9 +42,15 @@ def address_forms(ip):
                   key=len, reverse=True)
 
 
+# Pinned versions with four numbers (KauriVPN 1.10.1.1) look like IPv4 addresses; they are kept as they are.
+PINNED_VERSIONS = {pin.get('version', '').split('+')[0] for pin in products.pins().values()}
+
+
 def _mask(candidate, replacement):
     """Mask a real, non-loopback address; leave timestamps, versions and loopback alone."""
     import ipaddress
+    if candidate in PINNED_VERSIONS:
+        return candidate
     try:
         address = ipaddress.ip_address(candidate)
     except ValueError:

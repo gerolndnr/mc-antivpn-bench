@@ -509,3 +509,19 @@ class BoughtProducts(unittest.TestCase):
         spec = engine.secrets_spec(dict(proxycheck='1-2-3-4', vpnapi='ab'))
         box = interposer.Interposer(tempfile.mkdtemp(), interposer.secrets_from_environment(spec))
         self.assertNotIn('7771234', box.redact('/legacy/premium.php?user_id=7771234&resource_id=101081'))
+
+
+class PinnedVersionsAreNotAddresses(unittest.TestCase):
+    def test_four_part_version_survives_masking(self):
+        from bench.__main__ import _mask
+        self.assertEqual(_mask('1.10.1.1', '<ip>'), '1.10.1.1')
+        self.assertEqual(_mask('8.8.4.4', '<ip>'), '<ip>')
+
+    def test_every_adapter_has_an_upgrade_marker_when_it_pins_a_previous_release(self):
+        from bench import scenarios
+        for name in os.listdir(os.path.join(ROOT, 'products')):
+            if name.endswith('-pins.json') or not name.endswith('.json'):
+                continue
+            adapter = json.load(open(os.path.join(ROOT, 'products', name)))
+            if adapter.get('previous_pins'):
+                self.assertIn(adapter['id'], scenarios.UPGRADE_MARKERS, name)
