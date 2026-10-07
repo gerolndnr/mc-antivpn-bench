@@ -178,8 +178,9 @@ def merge(chosen, providers, profile, base):
                         shutil.copy(path, sub)
             dirs.setdefault(family, []).append(target)
     if providers:
-        # One summary: every service from its newest run in which it answered (a service that was down in the newest
-        # run keeps its earlier result, labelled with that run's date); the chains and meta of the newest run.
+        # One summary: every service from its newest run in which it answered (a service that was down in, or not part
+        # of, the newest run keeps its earlier result, labelled with that run's date; one only left out of it is labelled only from another day); the chains
+        # and meta of the newest run.
         run_id, folder, newest = providers['newest']
         target = os.path.join(base, 'merged', 'providers', run_id)
         os.makedirs(os.path.join(target, 'providers'), exist_ok=True)
@@ -190,7 +191,11 @@ def merge(chosen, providers, profile, base):
         for sid, (rid, src, entry, meta) in providers['services'].items():
             entry = dict(entry)
             if rid != run_id:
-                entry['from_date'] = (meta.get('started') or '')[:10]
+                # Down in the newest run: always tagged. Only left out of it (a run of a few services): tagged when
+                # the earlier run is from another day.
+                day = (meta.get('started') or '')[:10]
+                if sid in (newest.get('services') or {}) or day != ((newest.get('meta') or {}).get('started') or '')[:10]:
+                    entry['from_date'] = day
                 extra = os.path.join(base, 'merged', 'providers', rid)
                 if not os.path.exists(extra):
                     os.makedirs(extra)

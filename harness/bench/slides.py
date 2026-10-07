@@ -307,7 +307,7 @@ def slide_providers(d):
         notes.append('own: built by the benchmark\'s author. Its VPN and Tor lists come from the same sources that label those addresses; '
                      'its proxy list uses none of the proxy group\'s sources.')
     if any(v.get('from_date') for _, v in shown):
-        notes.append('Services down in the newest run keep their result from an earlier run.')
+        notes.append('Services down in, or not part of, the newest run keep their result from an earlier run.')
     return title, sub, body, notes, f'providers, {(prov.get("meta") or {}).get("started", "")[:10]}'
 
 

@@ -685,6 +685,18 @@ class ServiceDownDuringRun(unittest.TestCase):
         merged = json.load(open(os.path.join(dirs['providers'][0], 'providers', 'summary.json')))
         self.assertEqual(merged['services']['zowi']['caught'], 339)
         self.assertEqual(merged['services']['zowi']['from_date'], '2026-10-07')
+        # A service the newest run left out, from the same day, carries no "earlier run" tag.
+        json.dump(dict(meta=dict(started='2026-10-07T09:00:00+00:00', subjects=692), chains=[],
+                       services=dict(zowi=entry(339, {}), ipquery=dict(entry(0, {}), name='IPQuery'))),
+                  open(os.path.join(base, '1', 'providers', 'summary.json'), 'w'))
+        latest.runs = lambda repo, limit: [dict(id=2), dict(id=1)]
+        try:
+            chosen, providers, profile = latest.select('x', base)
+        finally:
+            latest.runs = saved
+        merged = json.load(open(os.path.join(latest.merge(chosen, providers, profile, tempfile.mkdtemp())['providers'][0], 'providers', 'summary.json')))
+        self.assertNotIn('from_date', merged['services']['ipquery'])
+        self.assertEqual(merged['services']['zowi']['from_date'], '2026-10-07')
         self.assertTrue(score.unavailable(entry(0, {'timeout': 10, 'unavailable': 682})))
 
 
