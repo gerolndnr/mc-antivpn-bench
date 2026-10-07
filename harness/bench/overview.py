@@ -528,7 +528,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     # Detection
     if det and det['cohorts']:
         cols = [pid for pid in det['products'] if pid in products]
-        body, totals = [], {}
+        body, totals, rates = [], {}, {}
         # Fewest refused only counts for plugins that also block: one that blocks almost nothing refuses nobody
         # (as in the services table).
         catch_n = sum(det['cohorts'][cid]['n'] for cid, _ in CATCH if cid in det['cohorts'])
@@ -553,6 +553,17 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             tot = {pid: sum(det['cohorts'][cid]['blocked'][pid] for cid, _ in present) for pid in cols}
             w = best(only(tot), low)
             body.append(('total', [td(('Blocked' if not low else 'Refused') + f' of {n}')] + [td(str(tot[pid]), 'best' if pid in w else '') for pid in cols]))
+            rates[low] = (n, tot, only)
+        # True-flag rate: share of the addresses that should be blocked and were. False-flag rate: share of the home and
+        # mobile players refused. Same accent rules as the totals above.
+        if len(rates) == 2:
+            pct = lambda v: f'{100 * v:.1f} %'
+            body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">Rates</td>']))
+            for low, label in ((False, 'True flags · bad addresses blocked'), (True, 'False flags · good players refused')):
+                n, tot, only = rates[low]
+                share = {pid: tot[pid] / n if n else None for pid in cols}
+                w = best(only(share), low, pct)
+                body.append(('', [td(label)] + [td('–' if share[pid] is None else pct(share[pid]), 'best' if pid in w else '') for pid in cols]))
         profile = {'enforce': 'as shipped, no API keys', 'proxycheck_key': 'same free ProxyCheck key for every plugin',
                    'free_keys': 'free keys'}.get(det['profile'], det['profile'])
         bare = [pid for pid in cols if pid in det.get('unnormalized', set())]
