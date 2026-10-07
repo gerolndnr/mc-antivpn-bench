@@ -362,6 +362,15 @@ class Providers(unittest.TestCase):
 class Overview(unittest.TestCase):
     """bench.overview: draws from public results only, newest version per plugin, no addresses."""
 
+    def test_run_step_forwards_its_env_into_the_container(self):
+        # A variable set on the runner but missing from `docker run -e` never reaches the harness.
+        import yaml
+        path = os.path.join(os.path.dirname(__file__), '..', '.github', 'workflows', 'bench.yml')
+        steps = yaml.safe_load(open(path))['jobs']['bench']['steps']
+        run = next(s for s in steps if s.get('name') == 'Run')
+        for name in run['env']:
+            self.assertIn(f'-e {name}', run['run'], name)
+
     def test_overview_accent_follows_the_shown_value(self):
         from bench import overview
         self.assertEqual(overview.fmt_ms(2.04), '2.0 ms')
