@@ -335,7 +335,7 @@ class Providers(unittest.TestCase):
 
     def test_chain_first_answer_decides_and_blackbox_needs_confirmation(self):
         p = self.p
-        lists = p.Lists(dict(vpn='198.51.100.0/24\n', tor='', hosting='203.0.113.0/24\n'))
+        lists = p.Lists(dict(vpn='198.51.100.0/24\n', tor='', relay='', hosting='203.0.113.0/24\n'))
         items = [dict(id='home', ip='192.0.2.1', label='non_vpn', cohort='residential'),
                  dict(id='dc', ip='203.0.113.5', label='proxy', cohort='proxy'),
                  dict(id='vpn', ip='198.51.100.9', label='vpn', cohort='commercial_vpn')]
@@ -429,3 +429,21 @@ class UnlistedLookups(unittest.TestCase):
             adapter = json.load(open(os.path.join(ROOT, 'products', product + '.json')))
             for host in hosts:
                 self.assertIn(host, adapter['lookup_hosts'], f'{product}: {host}')
+
+
+class RelayInChains(unittest.TestCase):
+    def test_relay_hit_lets_the_player_in_before_any_service(self):
+        from bench import providers as p
+        lists = p.Lists(dict(vpn='', tor='', relay='104.28.0.0/16\n', hosting=''))
+        items = [dict(id='warp', ip='104.28.200.15', label='non_vpn', cohort='residential')]
+        answers = {('blackbox', 'warp'): dict(verdict='positive')}
+        self.assertEqual(p.simulate(['intel', 'blackbox'], answers, items, lists), {'warp': (False, 'intel-relay')})
+
+
+class IntelProxyStep(unittest.TestCase):
+    def test_proxy_list_counts_only_in_the_061_step(self):
+        from bench import providers as p
+        lists = p.Lists(dict(vpn='', tor='', relay='', hosting='', proxy='45.90.28.7\n'))
+        items = [dict(id='px', ip='45.90.28.7', label='proxy', cohort='proxy')]
+        self.assertEqual(p.simulate(['intel'], {}, items, lists), {'px': (False, None)})
+        self.assertEqual(p.simulate(['intel', 'intel-proxy'], {}, items, lists), {'px': (True, 'intel-proxy')})

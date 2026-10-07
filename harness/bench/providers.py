@@ -376,10 +376,14 @@ class Lists:
     @classmethod
     def fetch(cls):
         texts = {}
-        for category in ('vpn', 'tor', 'hosting'):
+        for category in ('vpn', 'tor', 'relay', 'hosting', 'proxy'):
             req = urllib.request.Request(INTEL + category + '.txt', headers={'User-Agent': UA})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                texts[category] = resp.read().decode()
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    texts[category] = resp.read().decode()
+            except urllib.error.HTTPError:
+                if category != 'proxy':  # proxy.txt is optional (published since 7 Oct 2026, read by 0.6.1)
+                    raise
         req = urllib.request.Request(INTEL + 'manifest.json', headers={'User-Agent': UA})
         with urllib.request.urlopen(req, timeout=30) as resp:
             manifest = json.loads(resp.read())
@@ -390,14 +394,24 @@ def simulate(chain, answers, items, lists=None, confirm_blackbox=False, exhauste
     """Replays one lookup chain. The first `positive` or `negative` decides; `unknown`, errors and services listed in
     `exhausted` (no quota left) pass to the next. `intel` checks the local lists (VPN and Tor decide, hosting is
     evidence only). With `confirm_blackbox`, a Blackbox `positive` counts only inside Intel's hosting ranges and is
-    otherwise `unknown`. No decision means the player is let in."""
+    otherwise `unknown`. A relay hit (iCloud Private Relay, WARP) lets the player in, as Connection Guard 0.6 does with
+    its default `relay: ALLOW`. No decision means the player is let in."""
     decisions = {}
     for item in items:
         decided, by = False, None
         for step in chain:
+            if step == 'intel-proxy':
+                # Connection Guard 0.6.1 reads Intel's proxy list; 0.6.0 does not.
+                if lists and lists.has('proxy', item['ip']):
+                    decided, by = True, 'intel-proxy'
+                    break
+                continue
             if step == 'intel':
                 if lists and (lists.has('vpn', item['ip']) or lists.has('tor', item['ip'])):
                     decided, by = True, 'intel'
+                    break
+                if lists and lists.has('relay', item['ip']):
+                    decided, by = False, 'intel-relay'
                     break
                 continue
             if step in exhausted:
@@ -433,6 +447,8 @@ def chain_report(name, chain, decisions, items, **options):
 
 # Connection Guard 0.6.0's shipped order (config.yml provider.order, ip-check.net off by default).
 CG_DEFAULT = ['intel', 'proxycheck', 'blackbox', 'zowi', 'ipquery', 'ip-api']
+# The 0.6.1 plan (delivery handoff of 7 Oct 2026): Intel's proxy list, Blackbox needs confirmation, IP-API off.
+CG_061_PLAN = ['intel', 'intel-proxy', 'proxycheck', 'blackbox', 'zowi', 'ipquery']
 
 
 def chains(answers, items, lists, services):
@@ -444,8 +460,16 @@ def chains(answers, items, lists, services):
             base = dict(confirm_blackbox=confirm, quota=quota)
             out.append(chain_report('Connection Guard 0.6 default', CG_DEFAULT,
                                     simulate(CG_DEFAULT, answers, items, lists, confirm, exhausted), items, **base))
+            if confirm:
+                out.append(chain_report('Connection Guard 0.6.1 plan', CG_061_PLAN,
+                                        simulate(CG_061_PLAN, answers, items, lists, confirm, exhausted), items, **base))
             without = [s for s in CG_DEFAULT if s != 'ip-api']
             out.append(chain_report('without IP-API', without, simulate(without, answers, items, lists, confirm, exhausted), items, **base))
+            # Blackbox later: behind zowi, or last, where it is asked only when the others have no answer.
+            for name, chain in (('Blackbox behind zowi, no IP-API', ['intel', 'proxycheck', 'zowi', 'blackbox', 'ipquery']),
+                                ('Blackbox last, no IP-API', ['intel', 'proxycheck', 'zowi', 'ipquery', 'blackbox'])):
+                if all(s == 'intel' or s in services for s in chain):
+                    out.append(chain_report(name, chain, simulate(chain, answers, items, lists, confirm, exhausted), items, **base))
             for s in services:
                 if s in CG_DEFAULT or BY_ID[s].key_required:
                     continue
