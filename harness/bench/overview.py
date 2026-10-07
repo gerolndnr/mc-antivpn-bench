@@ -472,18 +472,20 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             if not e or e['burst_p95'] is None:
                 continue
             checked = e['checked']
-            note = (f'{num(checked)} of {num(e["subjects"])} checked' if pid != 'none' and e['subjects'] else '')
+            note = (f'{num(checked)} of {num(e["subjects"])} looked up' if pid != 'none' and e['subjects'] else '')
             if after_join(pid):
                 rows.append((pid, names[pid], None, 'after join', 'lets everyone in, kicks later', False))
                 continue
             rows.append((pid, names[pid], e['burst_p95'], fmt_ms(e['burst_p95']), note, pid == 'none'))
-        # A fast answer that skipped most players is not the best answer: only plugins that checked the most players compete.
+        # A fast answer that skipped most players is not the best answer: only plugins that looked up the most players compete.
+        # "Looked up" counts players with at least one detection-service request; a player refused from a local list
+        # (Connection Guard Intel) is decided without one.
         most = max([p[k]['checked'] or 0 for k, *_ in rows if k != 'none'] or [0])
-        card_a = bar_card('1,000 players join in 20 seconds', 'Time until the plugin decides, 95th percentile, among those that checked the most players.',
+        card_a = bar_card('1,000 players join in 20 seconds', 'Time until the plugin decides, 95th percentile, among those that looked up the most players.',
                           rows, low=True, cap=30000, tag=platform.capitalize() + (f' · median of {rounds} rounds' if rounds > 1 else ''),
                           eligible={k for k, *_ in rows if k != 'none' and not after_join(k) and (p[k]['checked'] or 0) >= 0.95 * most})
         metrics = [('Single join, p95', 'cold_p95', fmt_ms, True), ('Repeat join, p50', 'warm_p50', fmt_ms, True),
-                   ('Lookups, 100 same-IP joins', 'stampede', num, True), ('Players checked in the wave', 'checked', num, False),
+                   ('Lookups, 100 same-IP joins', 'stampede', num, True), ('Players looked up in the wave', 'checked', num, False),
                    ('Start-up', 'start', lambda v: '–' if v is None else f'{v:.1f} s', True)]
         cols = [pid for pid in products if pid in p]
         body = []
