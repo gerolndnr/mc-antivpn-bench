@@ -269,6 +269,8 @@ def fmt_ms(v):
         return '30 s'
     if v >= 1000:
         return f'{v / 1000:.1f} s'.replace('.0 s', ' s')
+    if v < 1:
+        return '< 0.1 ms' if v < 0.1 else f'{v:.1f} ms'
     return f'{v:.0f} ms'
 
 
@@ -561,17 +563,23 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         caught = {s: v['caught'] / v['bad'] if v['bad'] else None for s, v in services}
         # Fewest refusals only counts for services that also catch: a service that flags nothing refuses nobody.
         refused = {s: v['refused'] / v['good'] if v['good'] else None for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2}
-        speed = {s: v['ms_p50'] for s, v in services if not v.get('local')}
+        # Fastest, and access without a quota, among the same services: a local list answers in microseconds, with no
+        # request leaving the server and no daily limit.
+        useful = {s for s, v in services if v['bad'] and v['caught'] >= v['bad'] / 2}
+        speed = {s: v['ms_p50'] for s, v in services if s in useful}
         wc, wr, ws = best(caught, False), best(refused, True), best(speed, True)
+        wa = {s for s, v in services if s in useful and v.get('local')}
         body = [('', [td(esc(v['name']) + (' <span class="frac">own, see note</span>' if v.get('own') else '')), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
                       td(f'{v["refused"]}/{v["good"]}', 'best' if s in wr else ''), td(f'{v["answered"]}/{v["subjects"]}'),
-                      td('local' if v.get('local') else fmt_ms(v['ms_p50']), 'best' if s in ws else ''),
-                      td('lists' if v.get('local') else 'key' if v['keyed'] else 'keyless')]) for s, v in services]
+                      td(fmt_ms(v['ms_p50']), 'best' if s in ws else ''),
+                      td('local lists, no quota' if v.get('local') else 'key' if v['keyed'] else 'keyless', 'best' if s in wa else '')])
+                for s, v in services]
         if any(v.get('own') for _, v in services):
             body.append(('', [f'<td colspan="6" class="na" style="white-space:normal;font-size:12.5px;height:44px">Own: Connection Guard Intel is the '
                               'benchmark author\'s project. Its VPN and Tor lists come from the same sources that label those addresses, so '
                               'those numbers show coverage; its proxy list uses none of the proxy cohort\'s sources.</td>']))
-        place([table_card('Detection services on their own', 'Every address sent straight to each service at its own rate limit and quota. Hosting alone is not a hit.',
+        place([table_card('Detection services on their own', 'Every address sent straight to each service at its own rate limit and quota. Hosting alone is not a hit. '
+                          'A local list is checked on the server: no request, no quota.',
                           ['Service', 'VPN, Tor, proxies caught', 'Home and mobile refused', 'Answered', 'Median time', 'Access'],
                           body, ['26%', '16%', '16%', '14%', '14%', '14%'], tag=f'{prov["meta"]["subjects"]} addresses')], '1fr')
 
