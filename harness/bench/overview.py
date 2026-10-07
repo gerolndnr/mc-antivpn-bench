@@ -513,20 +513,31 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             body.append(('', [td(esc(label))] + [td(AFTER if pid in hide else f(vals[pid]), 'best' if pid in w else '') for pid in cols]))
         card_b = table_card('Everyday joins', 'Same simulated services, same delays and free-tier limits for every plugin.',
                             [''] + [names[pid] for pid in cols], body, ['30%'] + [f'{70 / max(1, len(cols)):.2f}%'] * len(cols))
-        place([card_a, card_b], '1fr 1fr')
+        # Side by side up to four plugins; with more, the table's columns get too narrow for the names.
+        if len(cols) <= 4:
+            place([card_a, card_b], '1fr 1fr')
+        else:
+            place([card_a], '1fr')
+            place([card_b], '1fr')
 
     # Detection
     if det and det['cohorts']:
         cols = [pid for pid in det['products'] if pid in products]
         body, totals = [], {}
+        # Fewest refused only counts for plugins that also block: one that blocks almost nothing refuses nobody
+        # (as in the services table).
+        catch_n = sum(det['cohorts'][cid]['n'] for cid, _ in CATCH if cid in det['cohorts'])
+        caught = {pid: sum(det['cohorts'][cid]['blocked'][pid] for cid, _ in CATCH if cid in det['cohorts']) for pid in cols}
+        blockers = {pid for pid in cols if caught[pid] >= catch_n / 2}
         for group, cohorts, low in (('Should be blocked', CATCH, False), ('Should get in', SPARE, True)):
+            only = (lambda d: {k: v for k, v in d.items() if k in blockers}) if low else (lambda d: d)
             present = [(cid, label) for cid, label in cohorts if cid in det['cohorts']]
             if not present:
                 continue
             body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">{group}{" · higher is better" if not low else " · fewer refused is better"}</td>']))
             for cid, label in present:
                 c = det['cohorts'][cid]
-                w = best(c['blocked'], low)
+                w = best(only(c['blocked']), low)
                 cells = [td(f'{esc(label)}<span class="frac">{c["n"]}</span>')]
                 for pid in cols:
                     k = c['blocked'][pid]
@@ -535,7 +546,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                 body.append(('', cells))
             n = sum(det['cohorts'][cid]['n'] for cid, _ in present)
             tot = {pid: sum(det['cohorts'][cid]['blocked'][pid] for cid, _ in present) for pid in cols}
-            w = best(tot, low)
+            w = best(only(tot), low)
             body.append(('total', [td(('Blocked' if not low else 'Refused') + f' of {n}')] + [td(str(tot[pid]), 'best' if pid in w else '') for pid in cols]))
         profile = {'enforce': 'as shipped, no API keys', 'proxycheck_key': 'same free ProxyCheck key for every plugin',
                    'free_keys': 'free keys'}.get(det['profile'], det['profile'])
