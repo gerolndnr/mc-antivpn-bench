@@ -661,22 +661,28 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         wc, wr, ws = best(caught, False), best(refused, True), best(speed, True, fmt_ms)
         wa = {s for s, v in services if s in useful and v.get('local')}
         ws_ = best(scores, False)
+        # True-flag rate: share of the VPN, Tor and proxy addresses answered positive; false-flag rate: share of the home
+        # and mobile addresses answered positive.
+        rate = lambda k, n, gone: '–' if gone or not n else f'{100 * k / n:.1f} %'
         tags = lambda s, v: ''.join(f' <span class="frac">{t}</span>' for t in (
             'own, see note' if v.get('own') else '', f'earlier run, {short_date(v["from_date"])}' if v.get('from_date') else '') if t)
         body = [('', [td(esc(v['name']) + tags(s, v)),
                       td('<span class="na">unavailable</span>' if s in down else f'{scores[s]:.1f}', 'best' if s in ws_ else ''), td(f'{v["caught"]}/{v["bad"]}', 'best' if s in wc else ''),
-                      td(f'{v["refused"]}/{v["good"]}', 'best' if s in wr else ''), td(f'{v["answered"]}/{v["subjects"]}'),
+                      td(rate(v['caught'], v['bad'], s in down or not v['answered']), 'best' if s in wc else ''),
+                      td(f'{v["refused"]}/{v["good"]}', 'best' if s in wr else ''),
+                      td(rate(v['refused'], v['good'], s in down or not v['answered']), 'best' if s in wr else ''), td(f'{v["answered"]}/{v["subjects"]}'),
                       td(fmt_ms(v['ms_p50']), 'best' if s in ws else ''),
                       td('local lists, no quota' if v.get('local') else 'key' if v['keyed'] else 'keyless', 'best' if s in wa else '')])
                 for s, v in services]
         if any(v.get('own') for _, v in services):
-            body.append(('', [f'<td colspan="7" class="na" style="white-space:normal;font-size:12.5px;height:44px">Own: Connection Guard Intel is the '
+            body.append(('', [f'<td colspan="9" class="na" style="white-space:normal;font-size:12.5px;height:44px">Own: Connection Guard Intel is the '
                               'benchmark author\'s project. Its VPN and Tor lists come from the same sources that label those addresses, so '
                               'those numbers show coverage; its proxy list uses none of the proxy cohort\'s sources.</td>']))
         place([table_card('Detection services on their own', f'Score = 100 × (share caught − {REFUSAL_WEIGHT} × share refused) − 5 per second of median time. '
-                          'Each service at its own quota; hosting alone is not a hit.',
-                          ['Service', 'Score', 'VPN, Tor, proxies caught', 'Home and mobile refused', 'Answered', 'Median time', 'Access'],
-                          body, ['24%', '9%', '15%', '15%', '12%', '12%', '13%'], tag=f'{prov["meta"]["subjects"]} addresses')], '1fr')
+                          'Each service at its own quota; hosting alone is not a hit. Flag rates of all addresses; unanswered counts as not flagged.',
+                          ['Service', 'Score', 'VPN, Tor, proxies caught', 'True flags', 'Home and mobile refused', 'False flags', 'Answered',
+                           'Median time', 'Access'],
+                          body, ['19%', '7%', '13%', '8%', '13%', '8%', '10%', '10%', '12%'], tag=f'{prov["meta"]["subjects"]} addresses')], '1fr')
 
     runs = ', '.join(sorted({str(m.get('run_id', '')).split('-')[0] for m in ms}))
     commits = sorted({(m['environment'].get('bench_commit') or '')[:7] for m in ms if m.get('environment')} - {''})
