@@ -268,6 +268,26 @@ The run starts, three subjects join, the product's inspection commands run, then
 
 File permissions of the configured key files are reported for information. Every product stores keys in its config file, which is normal.
 
+### 7.9 Detection services on their own (`providers`)
+
+No plugin and no server: the harness sends every dataset address straight to each detection service and reads the answer the way the plugins do. This measures the data source, separately from any plugin's use of it.
+
+- **Fair use.** One request per second per service (1.5 s for IP-API, whose free limit is 45 a minute), an identifying User-Agent, the service's own daily quota as a hard stop. A `429` is retried once after 60 s. Keys are used only where configured (`docs/KEYS.md`); the shared `PROXYCHECK_KEY` is not used by this family, so its quota stays with the nightly detection chunks.
+- **Order.** Cohorts are interleaved in a seeded order (seed `20261007`) in proportion to their size. A service whose quota is smaller than the dataset therefore answers a sample with every cohort in it. The unanswered rest is `not_queried`.
+- **Reading an answer.**
+  - `positive`: any explicit VPN, proxy or Tor flag.
+  - `negative`: all of them explicitly false.
+  - `unknown`: hosting alone, or flags missing. Hosting is review evidence, never a positive, as in the plugins.
+  - Errors (`rate_limited`, `http_<code>`, `timeout`, `unreadable`, `not_queried`) are reported per service.
+- **Metrics per service.** Caught = `positive` / all VPN, Tor and proxy addresses. Refused = `positive` / all home and mobile addresses. Both have Wilson 95 % intervals; an unanswered address counts as neither caught nor refused. Latency p50 and p95 of answered lookups. Answers per cohort, including the hosting flag.
+- **Chains.** The answers are replayed through lookup chains: Connection Guard 0.6's shipped order (`intel, proxycheck, blackbox, zowi, ipquery, ip-api`), the same with Blackbox needing confirmation, without IP-API, and with every other keyless service in IP-API's place or directly after Blackbox.
+  - The first `positive` or `negative` decides. `unknown` and errors pass to the next service.
+  - `intel` checks Connection Guard Intel's published lists, fetched at the end of the run, with their `as_of` recorded: VPN and Tor decide, hosting is evidence only.
+  - Each chain runs twice: with one day's quota for every service, and with services whose daily quota is below the dataset size *used up*, as on a busy server.
+  - A replay is not a plugin measurement: it leaves out caching, timeouts and concurrency, which the other families measure.
+- **Terms.** Each service's terms as checked on 7 October 2026 are printed next to its numbers. A good result does not make a service suitable as a default; the report says when terms are missing or restrict commercial use.
+- **Conflict of interest.** Connection Guard's author wrote this family, and Connection Guard Intel comes from the same author. Intel is only used inside the chain replays, never ranked as a service: its lists are built from the same operator lists that label the VPN cohorts (6, circularity).
+
 ## 8. What will and will not be claimed
 
 **Will be claimed:**

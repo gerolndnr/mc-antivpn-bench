@@ -13,7 +13,7 @@ on:
       family:
         description: Test family
         type: choice
-        options: [functional, detection, failure, redis, performance, all]
+        options: [functional, detection, failure, redis, performance, all, providers]
         default: functional
       products:
         description: Comma-separated product ids (empty = all)
@@ -36,6 +36,9 @@ on:
       perf_rounds:
         description: Performance rounds (3 for a published result, 1 for a quick check)
         default: '3'
+      services:
+        description: providers family only, comma-separated service ids (empty = all)
+        default: ''
       state_from_run:
         description: Workflow run id whose recorded provider answers to reuse (empty = start fresh)
         default: ''
@@ -105,6 +108,12 @@ jobs:
         env:
           PROXYCHECK_KEY: ${{ secrets.PROXYCHECK_KEY }}
           VPNAPI_KEY: ${{ secrets.VPNAPI_KEY }}
+          # providers family: optional free keys (set by the owner); a service without its key is skipped.
+          PROVIDER_KEY_IPAPI_IS: ${{ secrets.PROVIDER_KEY_IPAPI_IS }}
+          PROVIDER_KEY_IPLOCATE: ${{ secrets.PROVIDER_KEY_IPLOCATE }}
+          PROVIDER_KEY_IP2LOCATION: ${{ secrets.PROVIDER_KEY_IP2LOCATION }}
+          PROVIDER_KEY_IPHUB: ${{ secrets.PROVIDER_KEY_IPHUB }}
+          BENCH_PROVIDER_SERVICES: ${{ inputs.services }}
         run: |
           mkdir -p "$RUNNER_TEMP/work"
           [ "${{ steps.nightly.outputs.skip }}" = "true" ] && exit 0
@@ -112,9 +121,16 @@ jobs:
           [ -n "${{ inputs.products }}" ] && args="$args --products ${{ inputs.products }}"
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
           docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
-            -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
+            -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e PROVIDER_KEY_IPAPI_IS -e PROVIDER_KEY_IPLOCATE \
+            -e PROVIDER_KEY_IP2LOCATION -e PROVIDER_KEY_IPHUB -e BENCH_PROVIDER_SERVICES -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
             -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_PERF_ROUNDS="${{ inputs.perf_rounds || '3' }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
+      - name: Overview graphic of this run
+        if: always() && steps.nightly.outputs.skip != 'true'
+        run: |
+          [ -d "results/$RUN_ID" ] || exit 0
+          sudo chown -R "$(id -u)" "results/$RUN_ID"
+          PYTHONPATH=harness python3 -m bench.overview "results/$RUN_ID" --output "results/$RUN_ID" || echo "::warning::overview not drawn"
       # This repository is public, and anyone signed in to GitHub can download a public repository's artifacts.
       # Everything that can hold a volunteer's address (unmasked results, egress logs, recorded answers) is
       # encrypted with ARTIFACT_KEY before upload; without the secret it is not uploaded at all. Decrypting:

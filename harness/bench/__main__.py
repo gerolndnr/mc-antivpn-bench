@@ -5,7 +5,7 @@
   python3 -m bench pins
 
 Families: functional (platforms, release, secrets), failure, performance, redis,
-detection, all. Results: results/<run-id>/ (public, subject addresses replaced by
+detection, all, and providers (the detection services on their own, no plugin). Results: results/<run-id>/ (public, subject addresses replaced by
 ids) and cache/private/runs/<run-id>/ (raw logs).
 """
 import argparse
@@ -158,10 +158,30 @@ async def prebuild_templates(runtime, platforms):
     runtime.rules(engine.measurement_rules())
 
 
+def providers_run(args, run_id, recorder):
+    """No servers, no interposer: the services are asked directly (bench/providers.py)."""
+    from . import providers
+    services = (args.services or os.environ.get('BENCH_PROVIDER_SERVICES') or '').strip()
+    limit = int(args.limit or os.environ.get('BENCH_DETECTION_LIMIT') or 0)
+    manifest = dict(run_id=run_id, family='providers', products=[], platforms=[],
+                    environment=dict(started=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+                                     bench_commit=subprocess.run(['git', '-C', ROOT, 'rev-parse', 'HEAD'], capture_output=True,
+                                                                 text=True).stdout.strip() or None,
+                                     python=sys.version.split()[0], host=os.environ.get('BENCH_HOST_DESCRIPTION')))
+    started = time.monotonic()
+    providers.run(recorder, services.split(',') if services else None, limit)
+    manifest['duration_s'] = time.monotonic() - started
+    open(os.path.join(recorder.public, 'manifest.json'), 'w').write(json.dumps(manifest, indent=2, default=str))
+    print(f'results: results/{run_id}', flush=True)
+    draw_overview(recorder)
+
+
 async def main_run(args):
     from .runtime import Runtime
     run_id = args.run_id or datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     recorder = Recorder(run_id)
+    if args.family == 'providers':
+        return providers_run(args, run_id, recorder)
     canaries_path = os.path.join(engine.WORK, 'state', 'canaries.json')
     os.makedirs(os.path.dirname(canaries_path), exist_ok=True)
     if os.path.exists(canaries_path):
@@ -190,14 +210,27 @@ async def main_run(args):
         manifest['duration_s'] = time.monotonic() - started
         open(os.path.join(recorder.public, 'manifest.json'), 'w').write(json.dumps(manifest, indent=2, default=str))
     print(f'results: results/{run_id}', flush=True)
+    draw_overview(recorder)
+
+
+def draw_overview(recorder):
+    """overview.html of this run (overview.png too where Chrome is installed; CI draws it on the host)."""
+    from . import overview
+    try:
+        html_path, png = overview.write([recorder.public], recorder.public)
+        print(f'overview: {png or html_path}', flush=True)
+    except Exception as e:  # never fail a run over its picture
+        print(f'overview not drawn: {type(e).__name__}: {e}', flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(prog='bench')
     sub = parser.add_subparsers(dest='command', required=True)
     run = sub.add_parser('run')
-    run.add_argument('family', choices=['functional', 'failure', 'performance', 'redis', 'detection', 'all'])
+    run.add_argument('family', choices=['functional', 'failure', 'performance', 'redis', 'detection', 'all', 'providers'])
     run.add_argument('--products')
+    run.add_argument('--services', help='providers family: comma-separated service ids (default: all with a key where needed)')
+    run.add_argument('--limit', help='providers family: first N addresses of the interleaved order')
     run.add_argument('--platforms')
     run.add_argument('--run-id')
     sub.add_parser('pins')

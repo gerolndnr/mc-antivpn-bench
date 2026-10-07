@@ -8,6 +8,15 @@ A reproducible benchmark for Minecraft anti-VPN plugins. It runs **unmodified, p
 
 There is no combined score. Every result is reported per question, per cohort and per product, with denominators and raw data.
 
+## Latest results
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/overview/overview-dark.png">
+  <img alt="Latest results of every test family: join wave, everyday joins, detection and false positives, failing detection services, Redis outage, platforms and release quality" src="docs/overview/overview-light.png">
+</picture>
+
+The newest complete result of every family, redrawn after each run by [overview.yml](.github/workflows/overview.yml); [latest.json](docs/overview/latest.json) lists the runs. Each plugin appears once, in its newest pinned version. Draw it from any result folders with `PYTHONPATH=harness python3 -m bench.overview results/<run> [...] --output <dir>`.
+
 > **Conflict of interest.** This suite is maintained by the authors of Connection Guard, one of the products under test. The methodology, the adapters and every raw log are public, so other plugin authors can check and challenge each decision. Corrections are welcome; see [METHODOLOGY.md](METHODOLOGY.md#right-of-reply).
 
 ## What runs where
@@ -33,7 +42,13 @@ docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v mcbench-work:/work -e PY
   -e PROXYCHECK_KEY -e VPNAPI_KEY --entrypoint python3 mc-antivpn-bench:dev -m bench run functional
 ```
 
-Families are `functional` (platforms, clean install, upgrade, invalid reload, secret leakage), `detection`, `failure`, `redis`, `performance` and `all`. The `contracts` CI job runs the offline tests:
+Families are `functional` (platforms, clean install, upgrade, invalid reload, secret leakage), `detection`, `failure`, `redis`, `performance`, `all`, and `providers`: the detection services on their own, without a plugin, plus replays of whole lookup chains (METHODOLOGY 7.9). It needs no Docker:
+
+```sh
+PYTHONPATH=harness python3 -m bench run providers [--services blackbox,zowi] [--limit 100]
+```
+
+ The `contracts` CI job runs the offline tests:
 
 ```sh
 PYTHONPATH=harness python3 -m unittest discover -s tests -v

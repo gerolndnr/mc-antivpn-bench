@@ -10,6 +10,7 @@ import os
 import struct
 import tempfile
 import unittest
+import urllib.error
 
 from bench import dataset, engine, interposer, mcclient
 
@@ -278,3 +279,136 @@ class Publication(unittest.TestCase):
         own = {dataset.slash24(i['ip']) for i in items}
         for subject in heavy.synthetic_subjects(items, 200, 1):
             self.assertNotIn(dataset.slash24(subject['ip']), own)
+
+
+class Providers(unittest.TestCase):
+    """Family `providers`: answer parsing, quota handling and chain replay, without network."""
+
+    def setUp(self):
+        from bench import providers
+        self.p = providers
+
+    def test_verdicts_follow_the_plugins_reading(self):
+        p = self.p
+        self.assertEqual(p.parse_zowi(b'{"security":{"vpn":true,"proxy":false,"tor":false,"hosting":true}}', '')['verdict'], p.POSITIVE)
+        # Hosting alone is review evidence: the chain asks the next service.
+        self.assertEqual(p.parse_zowi(b'{"security":{"vpn":false,"proxy":false,"tor":false,"hosting":true}}', '')['verdict'], p.UNKNOWN)
+        self.assertEqual(p.parse_zowi(b'{"security":{"vpn":false,"proxy":false,"tor":false,"hosting":false}}', '')['verdict'], p.NEGATIVE)
+        self.assertIsNone(p.parse_zowi(b'{"error":"limit"}', ''))
+        self.assertEqual(p.parse_letter('Y', 'N')(b'Y\n', '')['verdict'], p.POSITIVE)
+        self.assertIsNone(p.parse_letter('Y', 'N')(b'<html>', ''))
+        self.assertEqual(p.parse_ipapi(b'{"status":"success","proxy":false,"hosting":true}', '')['verdict'], p.UNKNOWN)
+        self.assertIsNone(p.parse_ipapi(b'{"status":"fail"}', ''))
+        self.assertEqual(p.parse_proxycheck(b'{"status":"ok","192.0.2.1":{"proxy":"yes","type":"VPN"}}', '192.0.2.1')['verdict'], p.POSITIVE)
+        self.assertEqual(p.parse_proxycheck(b'{"status":"ok","192.0.2.1":{"proxy":"no","type":"Hosting"}}', '192.0.2.1')['verdict'], p.UNKNOWN)
+        self.assertEqual(p.parse_proxycheck(b'{"status":"ok","192.0.2.1":{"proxy":"no","type":"Residential"}}', '192.0.2.1')['verdict'], p.NEGATIVE)
+        self.assertEqual(p.parse_ipquery(b'{"risk":{"is_vpn":false,"is_proxy":false,"is_tor":false,"is_datacenter":false}}', '')['verdict'], p.NEGATIVE)
+        self.assertEqual(p.parse_iphub(b'{"block":2}', '')['verdict'], p.UNKNOWN)
+        self.assertEqual(p.parse_iphub(b'{"block":1}', '')['verdict'], p.POSITIVE)
+
+    def test_interleaved_order_is_stable_and_keeps_cohort_shares(self):
+        items = [dict(id=f'{c}-{i}', cohort=c) for c, n in (('a', 60), ('b', 30), ('c', 10)) for i in range(n)]
+        first = self.p.order(items)
+        self.assertEqual([i['id'] for i in first], [i['id'] for i in self.p.order(items)])
+        head = [i['cohort'] for i in first[:20]]
+        self.assertEqual((head.count('a'), head.count('b'), head.count('c')), (12, 6, 2))
+
+    def test_daily_quota_leaves_the_rest_not_queried(self):
+        p = self.p
+        service = p.Service('t', 'T', lambda ip, k: f'https://example.invalid/{ip}', p.parse_letter('Y', 'N'), interval=0, daily=2)
+        items = [dict(id=f's{i}', ip=f'192.0.2.{i}', cohort='x', label='vpn') for i in range(4)]
+        out, _ = p.run_service(service, items, sleep=lambda s: None, fetch=lambda url, headers: (200, b'Y'))
+        self.assertEqual([r.get('verdict', r.get('error')) for r in out], ['positive', 'positive', 'not_queried', 'not_queried'])
+
+    def test_rate_limited_is_retried_once(self):
+        p = self.p
+        calls = []
+
+        def fetch(url, headers):
+            calls.append(url)
+            if len(calls) == 1:
+                raise urllib.error.HTTPError(url, 429, 'Too Many Requests', {}, None)
+            return 200, b'N'
+        service = p.Service('t', 'T', lambda ip, k: f'https://example.invalid/{ip}', p.parse_letter('Y', 'N'), interval=0)
+        out, _ = p.run_service(service, [dict(id='s', ip='192.0.2.1', cohort='x', label='non_vpn')], sleep=lambda s: None, fetch=fetch)
+        self.assertEqual((len(calls), out[0]['verdict']), (2, p.NEGATIVE))
+
+    def test_chain_first_answer_decides_and_blackbox_needs_confirmation(self):
+        p = self.p
+        lists = p.Lists(dict(vpn='198.51.100.0/24\n', tor='', hosting='203.0.113.0/24\n'))
+        items = [dict(id='home', ip='192.0.2.1', label='non_vpn', cohort='residential'),
+                 dict(id='dc', ip='203.0.113.5', label='proxy', cohort='proxy'),
+                 dict(id='vpn', ip='198.51.100.9', label='vpn', cohort='commercial_vpn')]
+        answers = {('blackbox', 'home'): dict(verdict='positive'), ('blackbox', 'dc'): dict(verdict='positive'),
+                   ('zowi', 'home'): dict(verdict='negative'), ('zowi', 'dc'): dict(verdict='negative'),
+                   ('proxycheck', 'home'): dict(verdict='negative')}
+        chain = ['intel', 'proxycheck', 'blackbox', 'zowi']
+        plain = p.simulate(chain, answers, items, lists)
+        self.assertEqual(plain, {'home': (False, 'proxycheck'), 'dc': (True, 'blackbox'), 'vpn': (True, 'intel')})
+        used_up = p.simulate(chain, answers, items, lists, exhausted=('proxycheck',))
+        self.assertEqual(used_up['home'], (True, 'blackbox'))
+        confirmed = p.simulate(chain, answers, items, lists, confirm_blackbox=True, exhausted=('proxycheck',))
+        # Outside Intel's hosting ranges an unconfirmed Blackbox listing passes on; inside, it still counts.
+        self.assertEqual((confirmed['home'], confirmed['dc']), ((False, 'zowi'), (True, 'blackbox')))
+
+    def test_public_answers_carry_no_addresses(self):
+        p = self.p
+        service = p.Service('t', 'T', lambda ip, k: f'https://example.invalid/{ip}', p.parse_letter('Y', 'N'), interval=0)
+        out, raw = p.run_service(service, [dict(id='s', ip='192.0.2.77', cohort='x', label='vpn')], sleep=lambda s: None,
+                                 fetch=lambda url, headers: (200, b'Y'))
+        self.assertNotIn('192.0.2.77', json.dumps(out))
+
+
+class Overview(unittest.TestCase):
+    """bench.overview: draws from public results only, newest version per plugin, no addresses."""
+
+    def test_overview_from_minimal_results(self):
+        from bench import overview
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, 'detection'))
+            os.makedirs(os.path.join(tmp, 'failure'))
+            rows = []
+            for i, (cohort, label) in enumerate([('commercial_vpn', 'vpn'), ('residential', 'non_vpn')]):
+                rows.append(dict(subject=f'{cohort}-{i}', cohort=cohort, label=label, attempt=0, products={
+                    p: dict(blocked=label == 'vpn', outcome='DENY_LOGIN' if label == 'vpn' else 'ALLOW', decision_ms=10)
+                    for p in ('connection-guard', 'connection-guard-candidate', 'foxgate')}))
+            json.dump(dict(profile='enforce', platform='velocity', rows=rows), open(os.path.join(tmp, 'detection', 'enforce.json'), 'w'))
+            json.dump(dict(product='foxgate', fault='timeout', during=dict(vpn=dict(blocked=True), tor=dict(blocked=True),
+                           residential=dict(blocked=False, decision_ms=12000))), open(os.path.join(tmp, 'failure', 'foxgate-timeout.json'), 'w'))
+            json.dump(dict(run_id='1-detection', environment=dict(started='2026-10-06T22:25:25+00:00')), open(os.path.join(tmp, 'manifest.json'), 'w'))
+            page, height = overview.build([tmp])
+            self.assertIn('Detection and false positives', page)
+            self.assertIn('When detection services fail', page)
+            self.assertIn('FoxGate', page)
+            self.assertGreater(height, 600)
+            # Only the newest Connection Guard is drawn.
+            self.assertEqual(overview.newest_only(['connection-guard-candidate', 'connection-guard', 'foxgate']),
+                             ['connection-guard-candidate', 'foxgate'])
+            self.assertIsNone(__import__('re').search(r'\b\d{1,3}(\.\d{1,3}){3}\b', page.split('</style>', 1)[1]))
+
+    def test_version_order(self):
+        from bench import overview
+        self.assertLess(overview.version_key('1.2.0-pre10'), overview.version_key('1.2.0'))
+        self.assertLess(overview.version_key('0.5.1'), overview.version_key('0.6.0'))
+
+
+class ProviderQuota(unittest.TestCase):
+    def test_three_limits_in_a_row_end_the_day(self):
+        from bench import providers as p
+        calls = []
+
+        def fetch(url, headers):
+            calls.append(url)
+            raise urllib.error.HTTPError(url, 429, 'Too Many Requests', {}, None)
+        service = p.Service('t', 'T', lambda ip, k: f'https://example.invalid/{ip}', p.parse_letter('Y', 'N'), interval=0)
+        items = [dict(id=f's{i}', ip=f'192.0.2.{i}', cohort='x', label='vpn') for i in range(10)]
+        out, _ = p.run_service(service, items, sleep=lambda s: None, fetch=fetch)
+        self.assertEqual(len(calls), 6)  # three subjects, each asked twice
+        self.assertTrue(all(r['error'] == 'rate_limited' for r in out))
+
+    def test_proxycheck_limit_message_is_a_rate_limit(self):
+        from bench import providers as p
+        service = p.BY_ID['proxycheck']
+        rec, _ = p.query(service, dict(id='s', ip='192.0.2.1', cohort='x', label='vpn'), '',
+                         fetch=lambda url, headers: (200, b'{"status":"denied","message":"1,000 free queries exhausted. Daily limit reached."}'))
+        self.assertEqual(rec['error'], 'rate_limited')

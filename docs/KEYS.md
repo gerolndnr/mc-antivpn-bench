@@ -16,6 +16,17 @@ gh secret set VPNAPI_KEY -R gerolndnr/mc-antivpn-bench
 
 `gh` asks for the value interactively, so it never lands in your shell history.
 
+The `providers` family (METHODOLOGY 7.9) also measures services that only answer with a free key. Each is optional; a service without its key is skipped and listed as such:
+
+| Secret | Where | Free tier |
+| --- | --- | --- |
+| `PROVIDER_KEY_IPAPI_IS` | <https://ipapi.is/> | 1,000 queries per day, commercial use allowed |
+| `PROVIDER_KEY_IPLOCATE` | <https://www.iplocate.io/> | 1,000 queries per day |
+| `PROVIDER_KEY_IP2LOCATION` | <https://www.ip2location.io/> | 50,000 per month; open proxies only on free plans |
+| `PROVIDER_KEY_IPHUB` | <https://iphub.info/> | 1,000 queries per day |
+
+`VPNAPI_KEY` is reused. In this family keys go straight to their own service, not through the interposer; they appear in no result file.
+
 For local runs, put the keys in `.env` (git-ignored) and pass `--env-file .env` to `docker run`.
 
 The keys are passed only to the interposer process. Product configurations receive canaries, and logs and results redact both the canary and the real value. A full detection pass uses about 692 queries per provider.

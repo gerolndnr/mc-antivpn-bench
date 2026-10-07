@@ -1,0 +1,41 @@
+name: overview
+
+# Redraws docs/overview/ (the graphic at the top of the README) from the newest complete result of every family
+# after each benchmark run, and commits it when it changed. Reads only the public `results-public` artifacts.
+on:
+  workflow_run:
+    workflows: [benchmark]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: overview
+  cancel-in-progress: false
+
+jobs:
+  overview:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && contains(fromJSON('["workflow_dispatch","schedule"]'), github.event.workflow_run.event))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Draw
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=harness python -m bench.latest --repo "$GITHUB_REPOSITORY" --output docs/overview
+      - name: Commit when changed
+        run: |
+          git add docs/overview
+          if git diff --cached --quiet; then echo "overview unchanged"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Overview from runs $(python -c 'import json; print(", ".join(sorted({r for v in json.load(open("docs/overview/latest.json"))["runs"].values() for r in v})))')"
+          git push
