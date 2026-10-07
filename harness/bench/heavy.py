@@ -320,6 +320,7 @@ PROVIDER_QUOTAS = {
     'api.ipapi.is': dict(limit=1000, window_s=86400, source='ipapi.is pricing: 1,000 free requests per day'),
     'free.freeipapi.com': dict(limit=60, window_s=60, source='freeipapi.com: 60 requests per minute (free)'),
     'freeipapi.com': dict(limit=60, window_s=60, source='freeipapi.com: 60 requests per minute (free)'),
+    'funkemunky.cc': dict(limit=20000, window_s=30 * 86400, source='KauriVPN config.yml: 20,000 free queries (window not documented; modelled per 30 days)'),
 }
 
 

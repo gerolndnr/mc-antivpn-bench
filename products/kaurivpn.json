@@ -1,0 +1,63 @@
+{
+  "id": "kaurivpn",
+  "name": "KauriVPN",
+  "relationship": "Independent third party (funkemunky / Brighten Development). Its only detection service, funkemunky.cc, is run by the same author.",
+  "license": "Apache-2.0",
+  "source": "https://github.com/funkemunky/AntiVPN",
+  "listing": "https://modrinth.com/plugin/kauri-antivpn",
+  "pins": {
+    "paper": "kauri-antivpn-1.10.1.1",
+    "folia": "kauri-antivpn-1.10.1.2",
+    "velocity": "kauri-antivpn-1.10.1.1",
+    "bungee": "kauri-antivpn-1.10.1.1"
+  },
+  "previous_pins": {
+    "paper": "kauri-antivpn-1.10.0",
+    "velocity": "kauri-antivpn-1.10.0"
+  },
+  "data_dir": {
+    "paper": "KauriVPN",
+    "folia": "KauriVPN",
+    "velocity": "kaurivpn",
+    "bungee": "KauriVPN"
+  },
+  "config": "config.yml",
+  "ready_pattern": null,
+  "profiles": {
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded: kickPlayers true, keyless funkemunky.cc lookups (20,000 free queries), results cached in H2."
+    },
+    "enforce": {
+      "edits": [],
+      "note": "Enforces out of the box (kickPlayers: true); no step needed."
+    },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [],
+      "note": "No ProxyCheck support: KauriVPN asks only its own service, whose key field (license) is a paid licence. Measured as enforce."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [],
+      "note": "No ProxyCheck or VPNAPI key fields; the paid funkemunky.cc licence is not a free key. Measured as enforce."
+    }
+  },
+  "redis": null,
+  "redis_note": "No Redis option (H2, MySQL or MongoDB). Redis test not applicable.",
+  "commands": {
+    "reload": "antivpn reload",
+    "inspect": [
+      "antivpn"
+    ]
+  },
+  "lookup_hosts": [
+    "funkemunky.cc"
+  ],
+  "documented_failure_policy": "Not documented.",
+  "telemetry": [
+    "bStats (bstats: true) - blocked like every product's telemetry"
+  ],
+  "list_sources": [],
+  "list_sources_note": "Downloads no lists; every check is a funkemunky.cc lookup (prefixWhitelists exempts names starting with '*', which no benchmark player uses)."
+}

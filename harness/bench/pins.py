@@ -15,6 +15,8 @@ MATRIX = {
     'foxgate': ['1.2.0-pre10', '1.2.0-pre9'],
     'proxyshield': ['2.5.1+paper', '2.5.1+folia', '2.5.1+velocity', '2.5.1+bungee', '2.4.1+paper', '2.4.1+velocity'],
     'vpnguard': ['1.2.0', '1.1.1'],
+    # 1.10.1.2 is published for Folia only; the other platforms run 1.10.1.1 (universal JAR).
+    'kauri-antivpn': ['1.10.1.2', '1.10.1.1', '1.10.0'],
 }
 
 

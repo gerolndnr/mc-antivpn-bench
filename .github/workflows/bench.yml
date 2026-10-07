@@ -76,10 +76,13 @@ jobs:
             echo "family=detection" >> "$GITHUB_OUTPUT"
             echo "chunk=$k/4" >> "$GITHUB_OUTPUT"
             echo "profiles=proxycheck_key" >> "$GITHUB_OUTPUT"
+            # The chunk series of 7-10 Oct started with these five; products added later join the next series.
+            echo "products=connection-guard,connection-guard-candidate,foxgate,proxyshield,vpnguard" >> "$GITHUB_OUTPUT"
           else
             echo "family=${{ inputs.family }}" >> "$GITHUB_OUTPUT"
             echo "chunk=${{ inputs.detection_chunk }}" >> "$GITHUB_OUTPUT"
             echo "profiles=${{ inputs.detection_profiles }}" >> "$GITHUB_OUTPUT"
+            echo "products=${{ inputs.products }}" >> "$GITHUB_OUTPUT"
           fi
       - name: Host description
         run: |
@@ -118,7 +121,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/work"
           [ "${{ steps.nightly.outputs.skip }}" = "true" ] && exit 0
           args="run ${{ steps.nightly.outputs.family }} --run-id $RUN_ID"
-          [ -n "${{ inputs.products }}" ] && args="$args --products ${{ inputs.products }}"
+          [ -n "${{ steps.nightly.outputs.products }}" ] && args="$args --products ${{ steps.nightly.outputs.products }}"
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
           docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
             -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e PROVIDER_KEY_IPAPI_IS -e PROVIDER_KEY_IPLOCATE \
