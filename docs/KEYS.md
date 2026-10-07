@@ -22,7 +22,7 @@ gh secret set VPNAPI_KEY -R gerolndnr/mc-antivpn-bench
 gh secret set PROXYCHECK_KEY_2 -R gerolndnr/mc-antivpn-bench
 ```
 
-Without it, a manual `use_keys` run falls back to `PROXYCHECK_KEY`.
+Without it, a manual `use_keys` run falls back to `PROXYCHECK_KEY`. The `providers` family sends a ProxyCheck key only from `PROXYCHECK_KEY_2`; without it, it asks ProxyCheck keyless.
 
 The `providers` family (METHODOLOGY 7.9) also measures services that only answer with a free key. Each is optional; a service without its key is skipped and listed as such:
 

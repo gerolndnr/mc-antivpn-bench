@@ -152,6 +152,8 @@ jobs:
           # key when it is set, so it never spends the nightly chunks' daily quota (docs/KEYS.md).
           PROXYCHECK_KEY: ${{ github.event_name == 'schedule' && secrets.PROXYCHECK_KEY || (inputs.use_keys && (secrets.PROXYCHECK_KEY_2 || secrets.PROXYCHECK_KEY)) || '' }}
           VPNAPI_KEY: ${{ (github.event_name == 'schedule' || inputs.use_keys) && secrets.VPNAPI_KEY || '' }}
+          # providers family: ProxyCheck gets a key only from the second key, never from the nightly chunks' key.
+          BENCH_PROVIDERS_PROXYCHECK_KEY: ${{ github.event_name != 'schedule' && inputs.use_keys && secrets.PROXYCHECK_KEY_2 != '' && '1' || '' }}
           # providers family: optional free keys (set by the owner); a service without its key is skipped.
           PROVIDER_KEY_IPAPI_IS: ${{ secrets.PROVIDER_KEY_IPAPI_IS }}
           PROVIDER_KEY_IPLOCATE: ${{ secrets.PROVIDER_KEY_IPLOCATE }}

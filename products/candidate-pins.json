@@ -124,5 +124,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.6.1-candidate-76665cc": {
+    "project": "connectionguard",
+    "version": "0.6.1-SNAPSHOT",
+    "path": "candidates/connection-guard-0.6.1-SNAPSHOT-76665cc.jar",
+    "sha256": "3d7b41340adc106c41b9352349bdfd747b995aa6740deeedf1c22c49252e0aa6",
+    "filename": "connection-guard-0.6.2-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard master 76665cc502fe8ef69c9909e1ef341b9c8c76a506 (#84 false positives + #85 competitor migrations + #86 everyday-joins speed), CI run 37685719241 artifact. The build calls itself 0.6.2-SNAPSHOT; the maintainer confirms that is a naming error being reverted and the code is 0.6.1.",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }

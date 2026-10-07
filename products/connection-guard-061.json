@@ -1,15 +1,15 @@
 {
   "id": "connection-guard-061",
-  "name": "Connection Guard 0.6.1 candidate (feffbfb)",
-  "relationship": "Release candidate of Connection Guard 0.6.1 (PR #84 head feffbfb), shown as \"Connection Guard v0.6.1\" in the README overview. Same adapter as 0.6.0.",
+  "name": "Connection Guard 0.6.1 candidate (76665cc)",
+  "relationship": "Release candidate of Connection Guard 0.6.1 (master 76665cc: PR #84, #85, #86; earlier measured at PR #84 head feffbfb), shown as \"Connection Guard v0.6.1\" in the README overview. Same adapter as 0.6.0.",
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
   "pins": {
-    "paper": "connectionguard-0.6.1-candidate-feffbfb",
-    "folia": "connectionguard-0.6.1-candidate-feffbfb",
-    "velocity": "connectionguard-0.6.1-candidate-feffbfb",
-    "bungee": "connectionguard-0.6.1-candidate-feffbfb"
+    "paper": "connectionguard-0.6.1-candidate-76665cc",
+    "folia": "connectionguard-0.6.1-candidate-76665cc",
+    "velocity": "connectionguard-0.6.1-candidate-76665cc",
+    "bungee": "connectionguard-0.6.1-candidate-76665cc"
   },
   "previous_pins": {
     "paper": "connectionguard-0.6.0-candidate-c4b67eb",
