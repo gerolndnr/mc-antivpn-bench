@@ -741,7 +741,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                           'Each service at its own quota; hosting alone is not a hit. Flag rates of all addresses; unanswered counts as not flagged.',
                           ['Service', 'Score', 'VPN, Tor, proxies caught', 'True flags', 'Home and mobile refused', 'False flags', 'Answered',
                            'Median time', 'Access'],
-                          body, ['19%', '7%', '13%', '8%', '13%', '8%', '10%', '10%', '12%'], tag=f'{prov["meta"]["subjects"]} addresses')], '1fr')
+                          body, ['19%', '7%', '13%', '8%', '13%', '8%', '10%', '10%', '12%'], tag=f'{max((v["bad"] + v["good"] for v in prov["services"].values()), default=prov["meta"]["subjects"])} addresses')], '1fr')
 
     runs = ', '.join(sorted({str(m.get('run_id', '')).split('-')[0] for m in ms}))
     commits = sorted({(m['environment'].get('bench_commit') or '')[:7] for m in ms if m.get('environment')} - {''})
