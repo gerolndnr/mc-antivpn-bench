@@ -138,6 +138,10 @@ All outbound TCP of the product JVM is redirected by iptables to the **interpose
 
 **Label time.** VPN, Tor and proxy addresses change owners. Measurements must happen within 14 days of the build date, and the report states the gap.
 
+**Probes that do not leave from a home connection.** A volunteer tags a probe by where it stands, not by how it reaches the internet. A home or mobile probe whose public address belongs to a privacy relay network (Cloudflare WARP, Akamai's iCloud Private Relay) or to a cloud or hosting network (list in `bench/dataset.py`, networks only) is no home connection:
+- From v2 such probes are left out when the home and mobile groups are drawn.
+- In earlier versions they are moved to an ungraded group at evaluation: "privacy relay" or "tunnel through a data centre". The table shows who blocks them, without an accent and outside every total and rate. Letting a privacy relay in or not is a policy choice: Connection Guard's default lets WARP in, most detection services call it a VPN.
+
 **Stale addresses** (`bench.freshness`). Tor exits and public proxies come and go within days, faster than the 14 days above. For every run, the start time decides which of them still count:
 - A Tor exit counts only if it is on the Tor Project's exit list as published at the run start (the newest CollecTor exit-list file before it).
 - A proxy counts only if it is on proxifly's list in its newest version before the run start. Every proxy of the dataset is on that list, and it is the one source list that is both updated and keeps its history. vakhov's list has not changed since February 2026, and monosans keeps no history.
@@ -376,7 +380,10 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 - the methodology
 - a published result
 
+- a label of the dataset: evidence that an address was not what its label says when it was measured
+
 **What happens next.**
+- A contested label goes into [`datasets/contested.json`](datasets/contested.json) with the reason, the evidence, who reported it and when. A contested address counts for no one in every table: flagging it is neither credited nor docked. The graphic says how many were left out.
 - A contested profile is re-measured with both the original and the proposed configuration.
 - Both results are published, with the product author's statement linked, before any "corrected" headline replaces the old one.
 
@@ -405,6 +412,7 @@ The adapters for products without public source code are written from their publ
 - **2026-10-08, adaptive pacing in every family** (7.1). The learned watch window and the answer-based command wait apply to all families, not only detection. Load shapes, recovery delays and the start-up quiet window are unchanged.
 - **2026-10-08, adaptive detection pacing** (7.1). Every subject used to wait for the slowest product and gave every admitted player 8 s, so a full pass took 80-90 minutes even for products that decide at login. Products now walk the subjects on their own, with a learned watch window and an interval that backs off on detection-service errors. Earlier runs used the fixed pacing.
 - **2026-10-08, Connection Guard 0.6.1 candidate re-pinned at master 76665cc** (JAR sha256 3d7b4134…0aa6). It adds the everyday-joins speed work (#86) and the competitor migrations (#85) to the feffbfb candidate. The JAR calls itself 0.6.2-SNAPSHOT; the maintainer confirmed that is a naming error and the code is 0.6.1. Every family that feeds the graphic is measured again for this build; the feffbfb runs stay in the history.
+- **2026-10-08, relay and data-centre probes, contested addresses** (owner decision, after zowi's author checked the two home addresses zowi flagged). In v1, two home probes leave through Cloudflare WARP and one mobile probe through a Vultr server; they move to the ungraded groups (section 6). The other flagged home address is also a MysteriumVPN exit, last seen six hours before the run; it is the first entry of `datasets/contested.json` (section 10). zowi has no false flag left in the run of 7 October.
 - **2026-10-08, a login the proxy cuts off is no refusal.** Velocity closes a login after its 30 s read timeout without a disconnect message. The client recorded that as `DENY_LOGIN`, the class of a product's refusal. Detection is unaffected (every refusal there carries the product's own message), but in the 1,000-player wave FoxGate's 845 and AdvancedAntiVPN's 520 "refused" home players were most likely cut off by the proxy, not refused by the product. Such logins are now `CLOSED`, undecided; the graphic says how many wave players were cut off. Performance is re-measured with every plugin in one run.
 - **2026-10-08, dataset v2: daily Tor exits and proxies, weekly core** (owner decision). See "Versions and cadence" in section 6. The 11 to 13 October keyed series is replaced by the weekly series; KauriVPN, AdvancedAntiVPN and the Connection Guard 0.6.1 candidate already have complete keyed runs on v1.
 - **2026-10-08, stale Tor exits and proxies no longer count** (owner decision, after a question from zowi's author). A Tor Project check of the four Tor exits zowi "missed" showed that all four had left the Tor network before the run (last seen 3 to 5 October). Of the 80 Tor exits, 16 to 19 were gone by the runs of 7 October; of the 100 proxies, 10 to 13 were no longer on proxifly's list. Services and plugins that still flagged them were credited, up-to-date ones docked. See "Stale addresses" in section 6.

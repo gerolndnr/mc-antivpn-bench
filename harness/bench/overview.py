@@ -27,6 +27,8 @@ PRODUCT_ORDER = ['connection-guard-061', 'connection-guard-candidate', 'connecti
 CATCH = [('commercial_vpn', 'Commercial VPNs'), ('fresh_vpn', 'Newly added VPN servers'), ('vpn_v6', 'VPNs over IPv6'),
          ('tor', 'Tor exits'), ('proxy', 'Public proxies')]
 SPARE = [('residential', 'Home connections'), ('residential_v6', 'Home connections, IPv6'), ('mobile_cgnat', 'Mobile networks')]
+# Volunteers' probes that do not leave from a home connection (bench.dataset.ungraded): shown, never graded.
+UNGRADED = [('privacy_relay', 'Privacy relay (Cloudflare WARP)'), ('tunnel', 'Tunnel through a data centre')]
 FAULTS = [('control', 'Services healthy'), ('timeout', 'Services time out'), ('http_429', 'Rate limited (429)'),
           ('malformed', 'Broken answers'), ('incomplete', 'Cut-off answers')]
 PLATFORMS = [('paper', 'Paper'), ('folia', 'Folia'), ('velocity', 'Velocity'), ('bungee', 'BungeeCord')]
@@ -156,13 +158,16 @@ def detection(dirs):
         manifest = os.path.join(d, 'manifest.json')
         manifest = json.load(open(manifest)) if os.path.exists(manifest) else {}
         env = manifest.get('environment') or {}
-        # Stable ids, so products measured on different dataset versions meet on the addresses they share.
-        ids = dataset.stable_ids(dataset.run_version(manifest))
+        # Stable ids, so products measured on different dataset versions meet on the addresses they share; probes
+        # that leave through a relay or a data centre move to an ungraded group.
+        version = dataset.run_version(manifest)
+        ids, items = dataset.stable_ids(version), dataset.items_by_id(version)
         for r in records([d], 'detection'):
             if 'rows' not in r:
                 continue
-            by.setdefault(r.get('profile', 'enforce'), []).extend(dict(row, subject=ids.get(row['subject'], row['subject']))
-                                                                  for row in r['rows'])
+            by.setdefault(r.get('profile', 'enforce'), []).extend(
+                dict(row, subject=ids.get(row['subject'], row['subject']),
+                     cohort=(dataset.ungraded(items.get(row['subject'])) or (row['cohort'],))[0]) for row in r['rows'])
             if (env.get('keys_present') or {}).get('proxycheck') is False and r.get('profile', 'enforce') == 'enforce':
                 keyless |= {p for row in r['rows'] for p in row['products']}
     if not by:
@@ -182,12 +187,13 @@ def detection(dirs):
     unshared = {sid for sid, r in final.items() if set(r['products']) != everyone}
     # Tor exits and proxies that had left their list when one of these runs started count for no one (bench.freshness).
     stale = freshness.stale(dirs)
-    for sid in set(stale) | unshared:
+    disputed = set(dataset.contested()) & set(final)
+    for sid in set(stale) | unshared | disputed:
         final.pop(sid, None)
     rows = list(final.values())
     products = sorted({p for r in rows for p in r['products']}, key=lambda p: PRODUCT_ORDER.index(p) if p in PRODUCT_ORDER else 99)
     cohorts = {}
-    for cid, _ in CATCH + SPARE:
+    for cid, _ in CATCH + SPARE + UNGRADED:
         subset = [r for r in rows if r['cohort'] == cid]
         if subset:
             cohorts[cid] = dict(n=len(subset), blocked={p: sum(1 for r in subset if r['products'].get(p, {}).get('blocked')) for p in products})
@@ -195,7 +201,7 @@ def detection(dirs):
     # plugins that ask ProxyCheck: their own free daily quota ends their lookups, the others' did not.
     unnormalized = {p for p in keyless if 'proxycheck.io' in (adapter_of(p).get('lookup_hosts') or [])}
     return dict(profile=profile, subjects=len(rows), products=products, cohorts=cohorts, unnormalized=unnormalized,
-                stale=stale_counts(stale), unshared=len(unshared - set(stale)))
+                stale=stale_counts(stale), unshared=len(unshared - set(stale)), contested=len(disputed))
 
 
 def stale_note(counts):
@@ -298,11 +304,15 @@ def providers(dirs):
             answers.append((path, dataset.stable_ids(dataset.run_version(json.load(open(manifest)) if os.path.exists(manifest) else {}))))
     if answers:
         from .score import score, score_range, wilson
+        contested = dataset.contested()
         by_service = {}
         for path, ids in answers:
             for line in open(path):
                 row = json.loads(line)
                 row['id'] = ids.get(row['id'], row['id'])
+                # Relay and data-centre probes are not graded; contested addresses count for no one.
+                if dataset.ungraded(dataset.by_stable_id().get(row['id'])) or row['id'] in contested:
+                    continue
                 if row['service'] in summary['services'] and row['id'] not in stale:
                     by_service.setdefault(row['service'], []).append(row)
         # Every service is counted on the same addresses: those every one of them was asked about.
@@ -635,6 +645,14 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                 share = {pid: tot[pid] / n if n else None for pid in cols}
                 w = best(only(share), low, pct)
                 body.append(('', [td(label)] + [td('–' if share[pid] is None else pct(share[pid]), 'best' if pid in w else '') for pid in cols]))
+        # Volunteers' probes that leave through a privacy relay or a data centre: whether to let them in is policy.
+        loose = [(cid, label) for cid, label in UNGRADED if cid in det['cohorts']]
+        if loose:
+            body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">Not graded · blocking these is a policy choice</td>']))
+            for cid, label in loose:
+                c = det['cohorts'][cid]
+                body.append(('', [td(f'{esc(label)}<span class="frac">{c["n"]}</span>')] +
+                             [td(f'{c["blocked"][pid]} blocked') for pid in cols]))
         profile = {'enforce': 'as shipped, no API keys', 'proxycheck_key': 'same free ProxyCheck key for every plugin',
                    'free_keys': 'free keys'}.get(det['profile'], det['profile'])
         bare = [pid for pid in cols if pid in det.get('unnormalized', set())]
@@ -649,6 +667,11 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
                               f'Not counted: {gone} of the dataset that had left the Tor exit list or the proxy list by the start of '
                               'a run shown here. Flagging them is neither right nor wrong any more.</td>']))
+        if det.get('contested'):
+            n = det['contested']
+            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                              f'Not counted: {n} contested address{"es" if n != 1 else ""} whose label was shown not to hold when measured '
+                              '(datasets/contested.json, with the evidence).</td>']))
         late = [pid for pid in cols if after_join(pid)]
         if late:
             who = ', '.join(names[pid].split('\n')[0] for pid in late)

@@ -57,6 +57,19 @@ TARGETS = dict(commercial_vpn=125, fresh_vpn=60, tor=80, proxy=100, residential=
                residential_v6=60, vpn_v6=40)
 HOME_TAGS = {'home', 'dsl', 'cable', 'fibre', 'ftth', 'adsl', 'vdsl', 'docsis', 'gpon'}
 MOBILE_TAGS = {'lte', '4g', '5g', 'mobile', 'starlink', 'cgnat', '3g'}
+# A volunteer's probe whose public address belongs to one of these networks does not reach the internet from a home
+# connection, whatever its tags say. Privacy relays: blocking them is a policy choice, not right or wrong. Data
+# centres: the probe tunnels out through a rented server. Both are left out of the home and mobile groups (build) and
+# reported apart, ungraded (evaluation of earlier versions). The list names networks, never addresses.
+RELAY_ASNS = {13335: 'Cloudflare (WARP)', 36183: 'Akamai (iCloud Private Relay)'}
+HOSTING_ASNS = {16509: 'Amazon', 14618: 'Amazon', 15169: 'Google', 396982: 'Google Cloud', 8075: 'Microsoft', 31898: 'Oracle',
+                14061: 'DigitalOcean', 63949: 'Akamai Linode', 20473: 'Vultr', 24940: 'Hetzner', 213230: 'Hetzner Cloud',
+                16276: 'OVH', 12876: 'Scaleway', 51167: 'Contabo', 40021: 'Contabo', 60068: 'Datacamp', 212238: 'Datacamp',
+                9009: 'M247', 396356: 'Latitude', 36352: 'ColoCrossing', 8100: 'QuadraNet', 53667: 'FranTech',
+                197540: 'netcup', 202425: 'IP Volume', 62240: 'Clouvider', 136787: 'TEFINCOM', 141039: 'Tefincom',
+                46562: 'Performive', 8560: 'IONOS', 45102: 'Alibaba Cloud', 37963: 'Alibaba Cloud', 132203: 'Tencent Cloud',
+                45090: 'Tencent Cloud', 55990: 'Huawei Cloud', 136907: 'Huawei Cloud'}
+CONTESTED = os.path.join(ROOT, 'datasets', 'contested.json')
 EXCLUDE_TAGS = {'datacentre', 'datacenter', 'data-center', 'core', 'vps', 'cloud', 'hosting', 'colo', 'ixp',
                 'anchor', 'vpn', 'tor', 'academic', 'office', 'business'}
 
@@ -372,6 +385,10 @@ def sample_ripe(src, rng, date, infrastructure):
         if v4ip in infrastructure or v6ip in infrastructure:
             conflicts += 1
             continue
+        if probe.get('asn_v4') in RELAY_ASNS or probe.get('asn_v4') in HOSTING_ASNS:
+            v4ip = None  # its IPv4 leaves through a relay or a data centre; its IPv6 may still be a home address
+        if probe.get('asn_v6') in RELAY_ASNS or probe.get('asn_v6') in HOSTING_ASNS:
+            v6ip = None
         is_mobile = bool(tags & MOBILE_TAGS)
         is_home = bool(tags & HOME_TAGS)
         if v4ip and public_ip(v4ip) and 'system-ipv4-works' in tags:
@@ -603,6 +620,50 @@ def core_of(version):
         return 'v1'
     path = os.path.join(version_dir(version), 'manifest.json')
     return json.load(open(path)).get('core', version) if os.path.exists(path) else version
+
+
+def ungraded(entry):
+    """(cohort, reason) for a home or mobile item that leaves through a privacy relay or a data centre, else None."""
+    if not entry or entry.get('source') != 'ripe-atlas':
+        return None
+    asn = (entry.get('evidence') or {}).get('asn')
+    if asn in RELAY_ASNS:
+        return 'privacy_relay', f'leaves through {RELAY_ASNS[asn]}'
+    if asn in HOSTING_ASNS:
+        return 'tunnel', f'leaves through a data centre ({HOSTING_ASNS[asn]})'
+    return None
+
+
+_BY_ID = {}
+
+
+def items_by_id(version):
+    if version not in _BY_ID:
+        _BY_ID[version] = {e['id']: e for e in public_items(version)}
+    return _BY_ID[version]
+
+
+_ALL = {}
+
+
+def by_stable_id():
+    """Stable id -> public entry over v1 and every v2 day."""
+    if not _ALL:
+        versions = ['v1'] + sorted(d for d in (os.listdir(V2) if os.path.isdir(V2) else [])
+                                   if os.path.exists(os.path.join(V2, d, 'dataset.public.jsonl')))
+        for version in versions:
+            ids = stable_ids(version)
+            for native, entry in items_by_id(version).items():
+                _ALL.setdefault(ids[native], entry)
+    return _ALL
+
+
+def contested():
+    """Stable id -> entry of every contested address (datasets/contested.json): a label shown not to hold when it was
+    measured, with evidence. Contested addresses count for no one."""
+    if not os.path.exists(CONTESTED):
+        return {}
+    return {e['id']: e for e in json.load(open(CONTESTED))['addresses']}
 
 
 def run_version(manifest):

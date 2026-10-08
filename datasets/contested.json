@@ -1,0 +1,15 @@
+{
+  "note": "Addresses whose label was shown not to hold when they were measured (METHODOLOGY 10, right of reply). They count for no one: flagging them is neither credited nor docked. Ids are stable ids (bench.dataset.stable_id); volunteers' addresses are never listed, only their RIPE Atlas probe.",
+  "addresses": [
+    {
+      "id": "residential-b511d27eb5",
+      "cohort": "residential",
+      "ripe_atlas_probe": 26606,
+      "label": "non_vpn (home connection, fibre/FTTH, AS7642, Maldives)",
+      "reason": "The address is also a MysteriumVPN exit: anyone on Mysterium can come in through it.",
+      "evidence": "Last seen as a Mysterium exit on 2026-10-07 03:45:07 UTC (record from a licensed Mysterium scan), six hours before the provider run of 2026-10-07 09:40 UTC; the address matches the probe's in the RIPE Atlas archive of 2026-10-04. funkemunky also flags it. Mysterium's public node list carries no addresses, so the record cannot be reproduced independently.",
+      "reported_by": "zowi.gay's author",
+      "reported_on": "2026-10-08"
+    }
+  ]
+}

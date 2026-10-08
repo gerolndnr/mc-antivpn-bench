@@ -690,6 +690,33 @@ class DatasetVersions(unittest.TestCase):
             latest.runs, latest.dataset.public_items, latest.dataset.core_of = saved
 
 
+class UngradedAndContested(unittest.TestCase):
+    """A probe leaving through WARP is shown apart and not graded; a contested address counts for no one."""
+
+    def test_relay_probe_moves_to_its_group_and_contested_drops_out(self):
+        from bench import overview
+        run = os.path.join(tempfile.mkdtemp(), 'run')
+        os.makedirs(os.path.join(run, 'detection'))
+        json.dump(dict(products=['foxgate'], environment=dict(started='2026-10-07T09:40:16+00:00')),
+                  open(os.path.join(run, 'manifest.json'), 'w'))
+        # v1 ids: 0366 leaves through Cloudflare WARP, 0377 is contested (Mysterium exit), 0001 is an ordinary home.
+        rows = [dict(subject=sid, cohort='residential', label='non_vpn', attempt=0, products={'foxgate': dict(blocked=True)})
+                for sid in ('residential-0366', 'residential-0377', 'residential-0001')]
+        json.dump(dict(profile='enforce', rows=rows), open(os.path.join(run, 'detection', 'enforce.json'), 'w'))
+        saved = os.environ.get('BENCH_FRESHNESS')
+        os.environ['BENCH_FRESHNESS'] = 'off'
+        try:
+            det = overview.detection([run])
+        finally:
+            if saved is None:
+                os.environ.pop('BENCH_FRESHNESS')
+            else:
+                os.environ['BENCH_FRESHNESS'] = saved
+        self.assertEqual(det['cohorts']['privacy_relay'], dict(n=1, blocked={'foxgate': 1}))
+        self.assertEqual(det['cohorts']['residential'], dict(n=1, blocked={'foxgate': 1}))
+        self.assertEqual(det['contested'], 1)
+
+
 class StaleAddresses(unittest.TestCase):
     """bench.freshness: a Tor exit that had left the exit list when a run started counts for no one."""
 
