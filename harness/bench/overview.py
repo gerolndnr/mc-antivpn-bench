@@ -17,6 +17,8 @@ import shutil
 import statistics
 import subprocess
 
+from . import freshness
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 WIDTH = 1600
@@ -167,6 +169,10 @@ def detection(dirs):
             if row['attempt'] >= attempts.get((row['subject'], pid), -1):
                 attempts[(row['subject'], pid)] = row['attempt']
                 entry['products'][pid] = result
+    # Tor exits and proxies that had left their list when one of these runs started count for no one (bench.freshness).
+    stale = freshness.stale(dirs)
+    for sid in stale:
+        final.pop(sid, None)
     rows = list(final.values())
     products = sorted({p for r in rows for p in r['products']}, key=lambda p: PRODUCT_ORDER.index(p) if p in PRODUCT_ORDER else 99)
     cohorts = {}
@@ -177,7 +183,24 @@ def detection(dirs):
     # Measured without the free ProxyCheck key that keyless ProxyCheck requests otherwise get (METHODOLOGY 7.1), for
     # plugins that ask ProxyCheck: their own free daily quota ends their lookups, the others' did not.
     unnormalized = {p for p in keyless if 'proxycheck.io' in (adapter_of(p).get('lookup_hosts') or [])}
-    return dict(profile=profile, subjects=len(rows), products=products, cohorts=cohorts, unnormalized=unnormalized)
+    return dict(profile=profile, subjects=len(rows), products=products, cohorts=cohorts, unnormalized=unnormalized,
+                stale=stale_counts(stale))
+
+
+def stale_note(counts):
+    """'14 Tor exits and 5 public proxies' from stale counts, or ''."""
+    names = (('tor', 'Tor exit', 'Tor exits'), ('proxy', 'public proxy', 'public proxies'))
+    parts = [f'{counts[c]} {one if counts[c] == 1 else many}' for c, one, many in names if counts.get(c)]
+    return ' and '.join(parts)
+
+
+def stale_counts(stale):
+    """Stale subjects per cohort ('tor', 'proxy'), from their ids."""
+    out = {}
+    for sid in stale:
+        cohort = sid.rsplit('-', 1)[0]
+        out[cohort] = out.get(cohort, 0) + 1
+    return out
 
 
 def failure(dirs):
@@ -246,11 +269,38 @@ def redis(dirs):
 
 
 def providers(dirs):
+    """The services summary. When some Tor exits or proxies were stale at a run start (bench.freshness), every
+    service is recounted from its answers without them."""
     for d in dirs:
         path = os.path.join(d, 'providers', 'summary.json')
         if os.path.exists(path):
-            return json.load(open(path))
-    return None
+            summary = json.load(open(path))
+            break
+    else:
+        return None
+    stale = freshness.stale(dirs)
+    answers = [os.path.join(d, 'providers', 'answers.jsonl') for d in dirs]
+    answers = [a for a in answers if os.path.exists(a)]
+    if stale and answers:
+        from .score import score, score_range, wilson
+        by_service = {}
+        for a in answers:
+            for line in open(a):
+                row = json.loads(line)
+                if row['service'] in summary['services'] and row['id'] not in stale:
+                    by_service.setdefault(row['service'], []).append(row)
+        for sid, rows in by_service.items():
+            # Only the counts change; who the service is, how it was asked and its answer times stay as recorded.
+            bad = [r for r in rows if r['label'] != 'non_vpn']
+            good = [r for r in rows if r['label'] == 'non_vpn']
+            entry = dict(summary['services'][sid], subjects=len(rows), answered=sum('verdict' in r for r in rows),
+                         bad=len(bad), caught=sum(r.get('verdict') == 'positive' for r in bad),
+                         good=len(good), refused=sum(r.get('verdict') == 'positive' for r in good))
+            entry.update(caught_ci=wilson(entry['caught'], entry['bad']), refused_ci=wilson(entry['refused'], entry['good']))
+            entry.update(score=score(entry), score_range=score_range(entry))
+            summary['services'][sid] = entry
+    summary['stale'] = stale_counts(stale)
+    return summary
 
 
 def measured_dates(ms):
@@ -573,6 +623,11 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                               f'{esc(who)}: measured in a later run without the free ProxyCheck key that keyless ProxyCheck requests got in '
                               'the others\' run, so ProxyCheck answered it only its free 100 a day. Replaced by the keyed result once every '
                               'plugin has one (13 October).</td>']))
+        gone = stale_note(det.get('stale') or {})
+        if gone:
+            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                              f'Not counted: {gone} of the dataset that had left the Tor exit list or the proxy list by the start of '
+                              'a run shown here. Flagging them is neither right nor wrong any more.</td>']))
         late = [pid for pid in cols if after_join(pid)]
         if late:
             who = ', '.join(names[pid].split('\n')[0] for pid in late)
@@ -674,6 +729,10 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                       td(fmt_ms(v['ms_p50']), 'best' if s in ws else ''),
                       td('local lists, no quota' if v.get('local') else 'key' if v['keyed'] else 'keyless', 'best' if s in wa else '')])
                 for s, v in services]
+        gone = stale_note(prov.get('stale') or {})
+        if gone:
+            body.append(('', [f'<td colspan="9" class="na" style="white-space:normal;font-size:12.5px;height:44px">Not counted: {gone} '
+                              'of the dataset that had left the Tor exit list or the proxy list by the start of a run shown here.</td>']))
         if any(v.get('own') for _, v in services):
             body.append(('', [f'<td colspan="9" class="na" style="white-space:normal;font-size:12.5px;height:44px">Own: Connection Guard Intel is the '
                               'benchmark author\'s project. Its VPN and Tor lists come from the same sources that label those addresses, so '

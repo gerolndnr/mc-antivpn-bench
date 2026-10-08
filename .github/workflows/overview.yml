@@ -30,10 +30,11 @@ jobs:
       - name: Draw
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}  # bench.freshness reads proxifly's list history
         run: PYTHONPATH=harness python -m bench.latest --repo "$GITHUB_REPOSITORY" --output docs/overview
       - name: Commit when changed
         run: |
-          git add docs/overview
+          git add docs/overview datasets/detection-v1/freshness
           if git diff --cached --quiet; then echo "overview unchanged"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

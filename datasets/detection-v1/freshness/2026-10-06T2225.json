@@ -1,0 +1,39 @@
+{
+  "proxy": {
+    "committed": "2026-10-06T21:00:10Z",
+    "listed": 8020,
+    "source": "github.com/proxifly/free-proxy-list proxies/all/data.txt at d26a1aeeae89314aa5db8015092d12fd2b134f6b"
+  },
+  "stale": {
+    "proxy-0265": "not on proxifly's list at the run start",
+    "proxy-0270": "not on proxifly's list at the run start",
+    "proxy-0296": "not on proxifly's list at the run start",
+    "proxy-0304": "not on proxifly's list at the run start",
+    "proxy-0310": "not on proxifly's list at the run start",
+    "proxy-0316": "not on proxifly's list at the run start",
+    "proxy-0324": "not on proxifly's list at the run start",
+    "proxy-0327": "not on proxifly's list at the run start",
+    "proxy-0337": "not on proxifly's list at the run start",
+    "proxy-0348": "not on proxifly's list at the run start",
+    "proxy-0349": "not on proxifly's list at the run start",
+    "tor-0572": "not on the Tor exit list at the run start",
+    "tor-0580": "not on the Tor exit list at the run start",
+    "tor-0582": "not on the Tor exit list at the run start",
+    "tor-0585": "not on the Tor exit list at the run start",
+    "tor-0604": "not on the Tor exit list at the run start",
+    "tor-0608": "not on the Tor exit list at the run start",
+    "tor-0615": "not on the Tor exit list at the run start",
+    "tor-0627": "not on the Tor exit list at the run start",
+    "tor-0631": "not on the Tor exit list at the run start",
+    "tor-0633": "not on the Tor exit list at the run start",
+    "tor-0634": "not on the Tor exit list at the run start",
+    "tor-0635": "not on the Tor exit list at the run start",
+    "tor-0641": "not on the Tor exit list at the run start",
+    "tor-0651": "not on the Tor exit list at the run start"
+  },
+  "started": "2026-10-06T22:25:25+00:00",
+  "tor": {
+    "exits": 1271,
+    "source": "https://collector.torproject.org/ exit list 2026-10-06-22-10-12"
+  }
+}

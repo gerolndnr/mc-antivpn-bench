@@ -647,6 +647,48 @@ class OverviewJobNeedsNoPackages(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class StaleAddresses(unittest.TestCase):
+    """bench.freshness: a Tor exit that had left the exit list when a run started counts for no one."""
+
+    def test_stale_tor_exit_is_left_out_of_detection_and_services(self):
+        from bench import freshness, overview
+        base = tempfile.mkdtemp()
+        saved = freshness.RECORDS
+        freshness.RECORDS = os.path.join(base, 'freshness')
+        os.makedirs(freshness.RECORDS)
+        started = '2026-10-07T09:40:16+00:00'
+        json.dump(dict(started=started, stale={'tor-0001': 'not on the Tor exit list at the run start'}),
+                  open(freshness.record_path(freshness.parse_time(started)), 'w'))
+        run = os.path.join(base, 'run')
+        os.makedirs(os.path.join(run, 'detection'))
+        os.makedirs(os.path.join(run, 'providers'))
+        json.dump(dict(products=['foxgate'], environment=dict(started=started)), open(os.path.join(run, 'manifest.json'), 'w'))
+        rows = [dict(subject=f'tor-000{i}', cohort='tor', label='tor', attempt=0, products={'foxgate': dict(blocked=i == 2)})
+                for i in (1, 2)]
+        json.dump(dict(profile='enforce', rows=rows), open(os.path.join(run, 'detection', 'enforce.json'), 'w'))
+        entry = dict(name='zowi', caught=1, bad=2, refused=0, good=0, subjects=2, answered=2, ms_p50=100)
+        json.dump(dict(meta=dict(started=started, subjects=2), services=dict(zowi=entry), chains=[]),
+                  open(os.path.join(run, 'providers', 'summary.json'), 'w'))
+        with open(os.path.join(run, 'providers', 'answers.jsonl'), 'w') as handle:
+            for i, verdict in ((1, 'positive'), (2, 'negative')):
+                handle.write(json.dumps(dict(service='zowi', id=f'tor-000{i}', cohort='tor', label='tor', verdict=verdict)) + '\n')
+        saved_env = os.environ.get('BENCH_FRESHNESS')
+        os.environ['BENCH_FRESHNESS'] = 'off'
+        try:
+            det = overview.detection([run])
+            prov = overview.providers([run])
+        finally:
+            freshness.RECORDS = saved
+            if saved_env is None:
+                os.environ.pop('BENCH_FRESHNESS')
+            else:
+                os.environ['BENCH_FRESHNESS'] = saved_env
+        self.assertEqual(det['cohorts']['tor'], dict(n=1, blocked={'foxgate': 1}))
+        self.assertEqual(det['stale'], {'tor': 1})
+        self.assertEqual((prov['services']['zowi']['caught'], prov['services']['zowi']['bad']), (0, 1))
+        self.assertEqual(overview.stale_note(prov['stale']), '1 Tor exit')
+
+
 class ServiceDownDuringRun(unittest.TestCase):
     def test_ten_timeouts_in_a_row_stop_the_service(self):
         from bench import providers as p

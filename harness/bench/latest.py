@@ -38,8 +38,17 @@ def gh(*args):
 
 
 def runs(repo, limit):
-    data = json.loads(gh('api', f'repos/{repo}/actions/workflows/bench.yml/runs?status=success&per_page={limit}'))
-    return [r for r in data.get('workflow_runs', []) if r.get('event') in ('workflow_dispatch', 'schedule')]
+    """The newest `limit` successful manual and nightly runs, newest first. Paged: pushes also start the workflow
+    (contract tests only), and a busy day must not push a plugin's only result of a family out of reach."""
+    out, page = [], 1
+    while len(out) < limit:
+        data = json.loads(gh('api', f'repos/{repo}/actions/workflows/bench.yml/runs?status=success&per_page=100&page={page}'))
+        batch = data.get('workflow_runs', [])
+        out += [r for r in batch if r.get('event') in ('workflow_dispatch', 'schedule')]
+        if len(batch) < 100:
+            break
+        page += 1
+    return out[:limit]
 
 
 def download(repo, run_id, base):
@@ -103,7 +112,7 @@ def detection_passes(folder, total):
     return out
 
 
-def select(repo, base, limit=60):
+def select(repo, base, limit=250):
     """{family: {product: [(run_id, folder, paths)]}} and the providers folder."""
     total = dataset_size()
     chosen = {family: {} for family in FAMILIES if family not in ('providers', 'detection')}
@@ -139,7 +148,10 @@ def select(repo, base, limit=60):
                 series.setdefault(k, (run_id, folder, path))
                 if len(series) == int(n):
                     done[profile] = [(r, f, [p]) for _, (r, f, p) in sorted(series.items())]
-    measured = [p for p, profiles in detection.items() if any(x in profiles for x in HEADLINE)]
+    # Only the plugins the graphic shows (newest version each) decide whether the keyed profile is complete: an older
+    # version without a keyed run is not drawn, so it must not hold the others back.
+    shown = set(overview.newest_only(list(detection)))
+    measured = [p for p, profiles in detection.items() if p in shown and any(x in profiles for x in HEADLINE)]
     profile = next((x for x in HEADLINE if measured and all(x in detection[p] for p in measured)), 'enforce')
     chosen['detection'] = {p: profiles[profile] for p, profiles in detection.items() if profile in profiles}
     return chosen, providers, profile
@@ -186,7 +198,7 @@ def merge(chosen, providers, profile, base):
         os.makedirs(os.path.join(target, 'providers'), exist_ok=True)
         if os.path.exists(os.path.join(folder, 'manifest.json')):
             shutil.copy(os.path.join(folder, 'manifest.json'), target)
-        services = {}
+        services, kept = {}, []
         dirs['providers'] = [target]
         for sid, (rid, src, entry, meta) in providers['services'].items():
             entry = dict(entry)
@@ -203,8 +215,16 @@ def merge(chosen, providers, profile, base):
                         shutil.copy(os.path.join(src, 'manifest.json'), extra)
                     dirs['providers'].append(extra)
             services[sid] = entry
+            # The answers behind the entry, so the overview can recount it without stale addresses (bench.freshness).
+            source = os.path.join(src, 'providers', 'answers.jsonl')
+            if os.path.exists(source):
+                with open(source) as answers:
+                    kept.extend(line for line in answers if json.loads(line).get('service') == sid)
         with open(os.path.join(target, 'providers', 'summary.json'), 'w') as handle:
             json.dump(dict(newest, services=services), handle)
+        if kept:
+            with open(os.path.join(target, 'providers', 'answers.jsonl'), 'w') as handle:
+                handle.writelines(kept)
     return dirs
 
 
@@ -219,7 +239,7 @@ def main():
     parser = argparse.ArgumentParser(prog='bench.latest')
     parser.add_argument('--repo', required=True)
     parser.add_argument('--output', required=True)
-    parser.add_argument('--limit', type=int, default=60)
+    parser.add_argument('--limit', type=int, default=250)
     args = parser.parse_args()
     labels_path = os.path.join(args.output, 'labels.json')
     labels = json.load(open(labels_path)) if os.path.exists(labels_path) else {}

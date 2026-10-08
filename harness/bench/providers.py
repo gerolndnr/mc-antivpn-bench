@@ -25,6 +25,7 @@ import urllib.parse
 import urllib.request
 
 from . import scenarios
+from . import score as score_module
 from .score import REFUSAL_WEIGHT, SPEED_POINTS_MAX, SPEED_POINTS_PER_S, rank_key, score, score_range, unavailable
 
 UA = 'mc-antivpn-bench provider comparison (https://github.com/gerolndnr/mc-antivpn-bench)'
@@ -341,14 +342,7 @@ def intel_answers(lists, items):
     return out
 
 
-def wilson(k, n, z=1.96):
-    if not n:
-        return None
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
-    return [round(max(0.0, c - h), 4), round(min(1.0, c + h), 4)]
+wilson = score_module.wilson
 
 
 def summarize(records, items):

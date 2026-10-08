@@ -1,5 +1,18 @@
 """Provider score (METHODOLOGY 7.9), without dependencies: the README overview job imports it with bare Python."""
 
+import math
+
+
+def wilson(k, n, z=1.96):
+    """95 % Wilson interval of k out of n, as [low, high]."""
+    if not n:
+        return None
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return [round(max(0.0, c - h), 4), round(min(1.0, c + h), 4)]
+
 
 # Score (METHODOLOGY 7.9): 100 x (share caught - 3 x share of home and mobile players refused), minus 5 points per second
 # of median answer time (at most 10), floored at 0. Unanswered addresses already count as not caught, so quotas and

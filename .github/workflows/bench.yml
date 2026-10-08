@@ -173,6 +173,8 @@ jobs:
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Overview graphic of this run
         if: always() && steps.nightly.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}  # bench.freshness reads proxifly's list history
         run: |
           [ -d "results/$RUN_ID" ] || exit 0
           sudo chown -R "$(id -u)" "results/$RUN_ID"
