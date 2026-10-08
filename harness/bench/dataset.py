@@ -531,6 +531,9 @@ def build_day(date=None):
     core = [json.loads(line) for line in open(core_private(week))]
     version = date.isoformat()
     out = os.path.join(V2, version)
+    if os.path.exists(os.path.join(out, 'manifest.json')):
+        print(f'{version} exists; a version is built once')
+        return version
     src = Sources(out)
     rng = random.Random(seed_of(version))
     tor, tor_set = sample_tor(src, rng)
