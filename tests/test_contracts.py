@@ -587,13 +587,13 @@ class ReadmeOverviewSelection(unittest.TestCase):
         base = tempfile.mkdtemp()
         self.run_folder(base, 2, ['kaurivpn'], 'enforce')
         self.run_folder(base, 1, ['connection-guard', 'foxgate'], 'enforce')
-        saved = latest.runs, latest.dataset_size
+        saved = latest.runs, latest.dataset.public_items
         latest.runs = lambda repo, limit: [dict(id=2), dict(id=1)]
-        latest.dataset_size = lambda: 3
+        latest.dataset.public_items = lambda version: [{}] * 3
         try:
             chosen, providers, profile = latest.select('x', base)
         finally:
-            latest.runs, latest.dataset_size = saved
+            latest.runs, latest.dataset.public_items = saved
         self.assertEqual(sorted(chosen['functional']), ['connection-guard', 'foxgate', 'kaurivpn'])
         self.assertEqual(sorted(chosen['detection']), ['connection-guard', 'foxgate', 'kaurivpn'])
         self.assertEqual(profile, 'enforce')
@@ -604,13 +604,13 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.run_folder(base, 3, ['connection-guard', 'foxgate'], 'proxycheck_key')
         self.run_folder(base, 2, ['kaurivpn'], 'enforce')
         self.run_folder(base, 1, ['connection-guard', 'foxgate'], 'enforce')
-        saved = latest.runs, latest.dataset_size
+        saved = latest.runs, latest.dataset.public_items
         latest.runs = lambda repo, limit: [dict(id=3), dict(id=2), dict(id=1)]
-        latest.dataset_size = lambda: 3
+        latest.dataset.public_items = lambda version: [{}] * 3
         try:
             chosen, _, profile = latest.select('x', base)
         finally:
-            latest.runs, latest.dataset_size = saved
+            latest.runs, latest.dataset.public_items = saved
         self.assertEqual(profile, 'enforce')
         self.assertEqual(chosen['detection']['connection-guard'][0][0], '1')
 
@@ -645,6 +645,49 @@ class OverviewJobNeedsNoPackages(unittest.TestCase):
         env = dict(os.environ, PYTHONPATH=os.path.join(ROOT, 'harness'))
         result = subprocess.run([sys.executable, '-c', code], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class DatasetVersions(unittest.TestCase):
+    """Dataset v2: stable ids across versions; the README compares plugins on one core, the newest complete one."""
+
+    def test_stable_id_follows_the_address_and_never_holds_a_volunteer_address(self):
+        from bench import dataset
+        tor = dict(cohort='tor', source='torproject-bulk-exit-list', ip='192.0.2.7', family=4, evidence={})
+        self.assertEqual(dataset.stable_id(tor), dataset.stable_id(dict(tor, evidence=dict(x=1))))
+        self.assertNotEqual(dataset.stable_id(tor), dataset.stable_id(dict(tor, ip='192.0.2.8')))
+        home = dict(cohort='residential', source='ripe-atlas', ip='198.51.100.4', family=4, evidence=dict(probe_id=42))
+        moved = dict(home, ip='198.51.100.99')  # the probe got a new address: same probe, same id
+        self.assertEqual(dataset.stable_id(home), dataset.stable_id(moved))
+        self.assertNotIn('198.51', dataset.stable_id(home))
+
+    def test_readme_waits_until_every_plugin_is_on_the_new_core(self):
+        from bench import latest
+        base = tempfile.mkdtemp()
+
+        def run(run_id, version, products):
+            folder = os.path.join(base, str(run_id))
+            os.makedirs(os.path.join(folder, 'detection'))
+            json.dump(dict(products=products, environment=dict(started='2026-10-12T00:30:00+00:00', dataset=version)),
+                      open(os.path.join(folder, 'manifest.json'), 'w'))
+            rows = [dict(subject=f's{i}', cohort='tor', label='tor', attempt=0, products={p: dict(blocked=True) for p in products})
+                    for i in range(3)]
+            json.dump(dict(profile='proxycheck_key', chunk=None, rows=rows),
+                      open(os.path.join(folder, 'detection', 'proxycheck_key.json'), 'w'))
+        run(1, 'v1', ['foxgate', 'kaurivpn'])
+        run(2, '2026-10-12', ['kaurivpn'])
+        saved = latest.runs, latest.dataset.public_items, latest.dataset.core_of
+        latest.dataset.public_items = lambda version: [{}] * 3
+        latest.dataset.core_of = lambda version: 'v1' if version == 'v1' else '2026-W42'
+        try:
+            latest.runs = lambda repo, limit: [dict(id=2), dict(id=1)]
+            chosen, _, _ = latest.select('x', base)
+            self.assertEqual({p: s[0][0] for p, s in chosen['detection'].items()}, {'foxgate': '1', 'kaurivpn': '1'})
+            run(3, '2026-10-13', ['foxgate'])
+            latest.runs = lambda repo, limit: [dict(id=3), dict(id=2), dict(id=1)]
+            chosen, _, _ = latest.select('x', base)
+            self.assertEqual({p: s[0][0] for p, s in chosen['detection'].items()}, {'foxgate': '3', 'kaurivpn': '2'})
+        finally:
+            latest.runs, latest.dataset.public_items, latest.dataset.core_of = saved
 
 
 class StaleAddresses(unittest.TestCase):

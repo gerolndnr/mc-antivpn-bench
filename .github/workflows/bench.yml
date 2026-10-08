@@ -42,6 +42,9 @@ on:
       state_from_run:
         description: Workflow run id whose recorded provider answers to reuse (empty = start fresh)
         default: ''
+      dataset:
+        description: Detection dataset version (v1, or a v2 day YYYY-MM-DD; empty = the newest day)
+        default: ''
       use_keys:
         description: Pass the API keys (ProxyCheck from PROXYCHECK_KEY_2 when set, so the nightly key's quota stays untouched)
         type: boolean
@@ -75,28 +78,27 @@ jobs:
         id: nightly
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            # Keyed chunk series: start day, number of chunks (one per UTC day), products. A product added later joins
-            # a later series. 11-13 Oct: about 3 ProxyCheck queries per subject (AdvancedAntiVPN, Connection Guard 0.6.1,
-            # baseline), so 231 subjects a day stay under one free key's 1,000.
-            day=$(date -u +%Y-%m-%d)
-            series=""
-            for s in "2026-10-07 4 connection-guard,connection-guard-candidate,foxgate,proxyshield,vpnguard" \
-                     "2026-10-11 3 kaurivpn,advancedantivpn,connection-guard-061"; do
-              set -- $s
-              k=$(( ( $(date -u -d "$day" +%s) - $(date -u -d "$1" +%s) ) / 86400 ))
-              if [ "$k" -ge 0 ] && [ "$k" -lt "$2" ]; then series="$k/$2 $3"; fi
-            done
-            if [ -z "$series" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-            set -- $series
+            # Weekly keyed series (METHODOLOGY 7.1): Monday to Friday, one fifth of the dataset a night, each night on
+            # that day's dataset version (same core all week, that day's Tor exits and proxies). Chunks split by the
+            # stable id, so the five nights cover the core once. About 6 ProxyCheck queries per subject (baseline and
+            # five plugins that ask it) x 139 subjects stay under one free key's 1,000 a day.
+            dow=$(date -u +%u)
+            if [ "$dow" -gt 5 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
             echo "family=detection" >> "$GITHUB_OUTPUT"
-            echo "chunk=$1" >> "$GITHUB_OUTPUT"
+            echo "chunk=$(( dow - 1 ))/5" >> "$GITHUB_OUTPUT"
             echo "profiles=proxycheck_key" >> "$GITHUB_OUTPUT"
-            echo "products=$2" >> "$GITHUB_OUTPUT"
+            echo "products=connection-guard-061,foxgate,proxyshield,vpnguard,kaurivpn,advancedantivpn" >> "$GITHUB_OUTPUT"
+            echo "dataset=$(cat datasets/detection-v2/CURRENT)" >> "$GITHUB_OUTPUT"
           else
             echo "family=${{ inputs.family }}" >> "$GITHUB_OUTPUT"
             echo "chunk=${{ inputs.detection_chunk }}" >> "$GITHUB_OUTPUT"
             echo "profiles=${{ inputs.detection_profiles }}" >> "$GITHUB_OUTPUT"
             echo "products=${{ inputs.products }}" >> "$GITHUB_OUTPUT"
+            echo "dataset=${{ inputs.dataset }}" >> "$GITHUB_OUTPUT"
+          fi
+          # Empty: the newest v2 day (or v1 before the first v2 build).
+          if ! grep -q '^dataset=.' "$GITHUB_OUTPUT"; then
+            echo "dataset=$(cat datasets/detection-v2/CURRENT 2>/dev/null || echo v1)" >> "$GITHUB_OUTPUT"
           fi
       - name: Host description
         run: |
@@ -144,8 +146,11 @@ jobs:
             | tar xzf - -C "$RUNNER_TEMP/work/state"
       - name: Materialize dataset (RIPE Atlas archive)
         run: |
-          docker run --rm -v "$PWD:/bench" -e PYTHONPATH=/bench/harness --entrypoint python3 mc-antivpn-bench:ci \
-            -m bench.dataset materialize
+          # v1 always (the performance wave is drawn around its home addresses), and the run's version.
+          for version in v1 ${{ steps.nightly.outputs.dataset }}; do
+            docker run --rm -v "$PWD:/bench" -e PYTHONPATH=/bench/harness --entrypoint python3 mc-antivpn-bench:ci \
+              -m bench.dataset materialize "$version"
+          done
       - name: Run
         env:
           # Nightly chunks always get the keys; a manual run only with use_keys. A manual run uses the second ProxyCheck
@@ -160,6 +165,7 @@ jobs:
           PROVIDER_KEY_IP2LOCATION: ${{ secrets.PROVIDER_KEY_IP2LOCATION }}
           PROVIDER_KEY_IPHUB: ${{ secrets.PROVIDER_KEY_IPHUB }}
           BENCH_PROVIDER_SERVICES: ${{ inputs.services }}
+          BENCH_DATASET: ${{ steps.nightly.outputs.dataset }}
         run: |
           mkdir -p "$RUNNER_TEMP/work"
           [ "${{ steps.nightly.outputs.skip }}" = "true" ] && exit 0
@@ -168,7 +174,7 @@ jobs:
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
           docker run --rm --cap-add NET_ADMIN -v "$PWD:/bench" -v "$RUNNER_TEMP/work:/work" \
             -e PYTHONPATH=/bench/harness -e PROXYCHECK_KEY -e VPNAPI_KEY -e PROVIDER_KEY_IPAPI_IS -e PROVIDER_KEY_IPLOCATE \
-            -e PROVIDER_KEY_IP2LOCATION -e PROVIDER_KEY_IPHUB -e BENCH_PROVIDER_SERVICES -e BENCH_PROVIDERS_PROXYCHECK_KEY -e GITHUB_SHA -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
+            -e PROVIDER_KEY_IP2LOCATION -e PROVIDER_KEY_IPHUB -e BENCH_PROVIDER_SERVICES -e BENCH_PROVIDERS_PROXYCHECK_KEY -e BENCH_DATASET -e GITHUB_SHA -e BENCH_IMAGE -e BENCH_HOST_DESCRIPTION \
             -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_PERF_ROUNDS="${{ inputs.perf_rounds || '3' }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Overview graphic of this run

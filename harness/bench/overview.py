@@ -17,7 +17,7 @@ import shutil
 import statistics
 import subprocess
 
-from . import freshness
+from . import dataset, freshness
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
@@ -151,11 +151,15 @@ def detection(dirs):
     by, keyless = {}, set()
     for d in dirs:
         manifest = os.path.join(d, 'manifest.json')
-        env = (json.load(open(manifest)).get('environment') or {}) if os.path.exists(manifest) else {}
+        manifest = json.load(open(manifest)) if os.path.exists(manifest) else {}
+        env = manifest.get('environment') or {}
+        # Stable ids, so products measured on different dataset versions meet on the addresses they share.
+        ids = dataset.stable_ids(dataset.run_version(manifest))
         for r in records([d], 'detection'):
             if 'rows' not in r:
                 continue
-            by.setdefault(r.get('profile', 'enforce'), []).extend(r['rows'])
+            by.setdefault(r.get('profile', 'enforce'), []).extend(dict(row, subject=ids.get(row['subject'], row['subject']))
+                                                                  for row in r['rows'])
             if (env.get('keys_present') or {}).get('proxycheck') is False and r.get('profile', 'enforce') == 'enforce':
                 keyless |= {p for row in r['rows'] for p in row['products']}
     if not by:
@@ -169,9 +173,13 @@ def detection(dirs):
             if row['attempt'] >= attempts.get((row['subject'], pid), -1):
                 attempts[(row['subject'], pid)] = row['attempt']
                 entry['products'][pid] = result
+    # Every product is counted on the same addresses: those measured for all of them (runs on different dataset
+    # versions share the week's core and part of the day's Tor exits and proxies).
+    everyone = {p for r in final.values() for p in r['products']}
+    unshared = {sid for sid, r in final.items() if set(r['products']) != everyone}
     # Tor exits and proxies that had left their list when one of these runs started count for no one (bench.freshness).
     stale = freshness.stale(dirs)
-    for sid in stale:
+    for sid in set(stale) | unshared:
         final.pop(sid, None)
     rows = list(final.values())
     products = sorted({p for r in rows for p in r['products']}, key=lambda p: PRODUCT_ORDER.index(p) if p in PRODUCT_ORDER else 99)
@@ -184,7 +192,7 @@ def detection(dirs):
     # plugins that ask ProxyCheck: their own free daily quota ends their lookups, the others' did not.
     unnormalized = {p for p in keyless if 'proxycheck.io' in (adapter_of(p).get('lookup_hosts') or [])}
     return dict(profile=profile, subjects=len(rows), products=products, cohorts=cohorts, unnormalized=unnormalized,
-                stale=stale_counts(stale))
+                stale=stale_counts(stale), unshared=len(unshared - set(stale)))
 
 
 def stale_note(counts):
@@ -279,17 +287,25 @@ def providers(dirs):
     else:
         return None
     stale = freshness.stale(dirs)
-    answers = [os.path.join(d, 'providers', 'answers.jsonl') for d in dirs]
-    answers = [a for a in answers if os.path.exists(a)]
-    if stale and answers:
+    answers = []
+    for d in dirs:
+        path = os.path.join(d, 'providers', 'answers.jsonl')
+        manifest = os.path.join(d, 'manifest.json')
+        if os.path.exists(path):
+            answers.append((path, dataset.stable_ids(dataset.run_version(json.load(open(manifest)) if os.path.exists(manifest) else {}))))
+    if answers:
         from .score import score, score_range, wilson
         by_service = {}
-        for a in answers:
-            for line in open(a):
+        for path, ids in answers:
+            for line in open(path):
                 row = json.loads(line)
+                row['id'] = ids.get(row['id'], row['id'])
                 if row['service'] in summary['services'] and row['id'] not in stale:
                     by_service.setdefault(row['service'], []).append(row)
+        # Every service is counted on the same addresses: those every one of them was asked about.
+        shared = set.intersection(*({r['id'] for r in rows} for rows in by_service.values())) if by_service else set()
         for sid, rows in by_service.items():
+            rows = [r for r in rows if r['id'] in shared]
             # Only the counts change; who the service is, how it was asked and its answer times stay as recorded.
             bad = [r for r in rows if r['label'] != 'non_vpn']
             good = [r for r in rows if r['label'] == 'non_vpn']

@@ -27,7 +27,7 @@ The newest complete result of every family, redrawn after each run by [overview.
 | Minecraft 1.21.11 client (PROXY v2 subject address; login, configuration, play) | [harness/bench/mcclient.py](harness/bench/mcclient.py) |
 | Egress interposer (record once and serve to all products, fault injection, canary keys) | [harness/bench/interposer.py](harness/bench/interposer.py) |
 | Product adapters (pins, profiles, documented switches) | [products/](products) |
-| Labelled detection dataset v1 (692 addresses, provenance per item) | [datasets/detection-v1](datasets/detection-v1) |
+| Labelled detection dataset: 692 addresses, provenance per item; Tor exits and proxies renewed daily, the rest weekly | [datasets/detection-v2](datasets/detection-v2) (v1: [datasets/detection-v1](datasets/detection-v1)) |
 | Test families | [scenarios.py](harness/bench/scenarios.py), [heavy.py](harness/bench/heavy.py) |
 | Detection services on their own, including Connection Guard Intel, and lookup-chain replays | [providers.py](harness/bench/providers.py) |
 | Overview graphic (end of every run, and the README via the newest complete result per family) | [overview.py](harness/bench/overview.py), [latest.py](harness/bench/latest.py), [overview.yml](.github/workflows/overview.yml) |

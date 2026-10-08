@@ -12,13 +12,15 @@ import shutil
 
 import yaml
 
+from . import dataset
 from . import mcclient
 from . import products
 from .pacing import observed, watch
 from .engine import Backend, Instance, ProductNotLoaded, clean_install_rules, measurement_rules, product_errors, profile_edits
 
-PRIVATE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                       'cache', 'private', 'detection-v1.private.jsonl')
+# The dataset version this run uses (BENCH_DATASET, else the newest v2 day, else v1); recorded in the manifest.
+DATASET_VERSION = dataset.current()
+PRIVATE = dataset.private_path(DATASET_VERSION)
 OBSERVE_S = 8.0
 _name_counter = [0]
 

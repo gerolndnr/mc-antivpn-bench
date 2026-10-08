@@ -1,0 +1,40 @@
+name: dataset
+
+# Builds the day's detection dataset version (METHODOLOGY 6): the week's core (VPN servers, home and mobile probes) on
+# the first build of an ISO week, the day's Tor exits and proxies every day. Runs before the nightly benchmark (00:20
+# UTC) and commits datasets/detection-v2. Volunteers' addresses never leave the runner: the core's private file is
+# rebuilt from the public RIPE Atlas archive whenever it is needed.
+on:
+  schedule:
+    - cron: '5 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dataset
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}  # last-change dates of the GitHub-hosted proxy lists
+        run: PYTHONPATH=harness python -m bench.dataset build-day
+      - name: Commit
+        run: |
+          git add datasets/detection-v2
+          if git diff --cached --quiet; then echo "dataset unchanged"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Dataset $(cat datasets/detection-v2/CURRENT)"
+          git push

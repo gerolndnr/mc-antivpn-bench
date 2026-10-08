@@ -1,0 +1,1 @@
+{"url": "https://web.archive.org/cdx/search/cdx?url=api.mullvad.net/www/relays/all/&output=json&fl=timestamp,statuscode&filter=statuscode:200&from=2025", "fetched_at": "2026-10-08T15:43:18+00:00", "sha256": "995b7004d80c2cca1efc359e0feb9ea7757b9e6f65f2879b2b9b279f9ff97c48", "bytes": 263, "public": true}

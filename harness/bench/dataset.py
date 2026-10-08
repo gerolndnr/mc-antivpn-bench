@@ -20,6 +20,14 @@ only the probe id and snapshot date (rebuildable from the RIPE Atlas archive),
 never the address.
 
 Deterministic: the same snapshots and seed always yield the same sample.
+
+Versions (METHODOLOGY 6):
+  v1                     datasets/detection-v1, built once on 5 October 2026 (every run before v2)
+  v2 core, weekly        datasets/detection-v2/core/<ISO week>: VPN servers, home and mobile probes
+  v2 day, daily          datasets/detection-v2/<date>: that day's Tor exits and proxies + the week's core
+  datasets/detection-v2/CURRENT names the newest day; a run records the version it used.
+In v2 an address keeps its id across versions (stable_id), so runs on different days compare on the
+addresses they share.
 """
 import datetime
 import gzip
@@ -35,6 +43,11 @@ import urllib.request
 from .artifacts import ROOT, USER_AGENT
 
 OUT = os.path.join(ROOT, 'datasets', 'detection-v1')
+V2 = os.path.join(ROOT, 'datasets', 'detection-v2')
+PRIVATE_DIR = os.path.join(ROOT, 'cache', 'private')
+# A source list whose upstream file has not changed for this long no longer says what is listed today (vakhov's
+# proxy list had not changed for eight months when v1 used it).
+STALE_SOURCE_DAYS = 14
 CACHE = os.path.join(ROOT, 'cache', 'sources')
 SEED = 20261005
 MIN_FRESH_DAYS = 14
@@ -67,14 +80,17 @@ def fetch_with_retries(url, attempts=5):
 class Sources:
     """Fetches raw snapshots once, keeps them in the git-ignored cache, records provenance."""
 
-    def __init__(self):
-        os.makedirs(CACHE, exist_ok=True)
+    def __init__(self, out=OUT):
+        # v2 versions cache per version: a day must never reuse another day's Tor or proxy list.
+        self.cache = CACHE if out == OUT else os.path.join(CACHE, 'v2', os.path.relpath(out, V2))
+        os.makedirs(self.cache, exist_ok=True)
         self.records = {}
+        self.out = out
 
     def get(self, name, url, public=True):
-        # Public snapshots are committed (datasets/detection-v1/sources); everything else is cached.
-        committed = os.path.join(OUT, 'sources', name + '.gz')
-        path = committed if os.path.exists(committed) else os.path.join(CACHE, name + '.gz')
+        # Public snapshots are committed (<version>/sources); everything else is cached.
+        committed = os.path.join(self.out, 'sources', name + '.gz')
+        path = committed if os.path.exists(committed) else os.path.join(self.cache, name + '.gz')
         meta_path = path + '.json'
         if os.path.exists(path) and os.path.exists(meta_path):
             with gzip.open(path, 'rb') as handle:
@@ -87,6 +103,9 @@ class Sources:
                 data = gzip.decompress(data)
             meta = dict(url=url, fetched_at=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
                         sha256=hashlib.sha256(data).hexdigest(), bytes=len(data), public=public)
+            if public and self.out != OUT:
+                path, meta_path = committed, committed + '.json'
+                os.makedirs(os.path.dirname(path), exist_ok=True)
             with gzip.open(path, 'wb') as handle:
                 handle.write(data)
             with open(meta_path, 'w') as handle:
@@ -96,8 +115,9 @@ class Sources:
 
     def resolved(self, name, hostnames):
         """DNS A records, resolved once and frozen like any other snapshot."""
-        committed = os.path.join(OUT, 'sources', name + '.json')
-        path = committed if os.path.exists(committed) else os.path.join(CACHE, name + '.json')
+        committed = os.path.join(self.out, 'sources', name + '.json')
+        path = committed if os.path.exists(committed) or self.out != OUT else os.path.join(self.cache, name + '.json')
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         if not os.path.exists(path):
             out = {}
             for hostname in hostnames:
@@ -263,22 +283,17 @@ def probe_tags(probe):
 
 
 # ------------------------------------------------------------------ build
-def build():
-    rng = random.Random(SEED)
-    src = Sources()
-    now = datetime.datetime.now(datetime.timezone.utc)
+def item(cohort, label, candidate, source, extra=None):
+    return dict(cohort=cohort, label=label, ip=candidate['ip'], family=ipaddress.ip_address(candidate['ip']).version,
+                source=source, provider=candidate.get('provider'), country=candidate.get('country'),
+                evidence=dict(candidate.get('evidence', {}), **(extra or {})))
+
+
+def sample_vpn(src, rng, now):
+    """commercial_vpn, fresh_vpn and vpn_v6 items, every operator-listed address, and the fresh-rule stats."""
     items = []
-
-    def add(cohort, label, candidate, source, extra=None):
-        items.append(dict(cohort=cohort, label=label, ip=candidate['ip'],
-                          family=ipaddress.ip_address(candidate['ip']).version, source=source,
-                          provider=candidate.get('provider'), country=candidate.get('country'),
-                          evidence=dict(candidate.get('evidence', {}), **(extra or {}))))
-
-    # --- VPN, current lists
     v4, v6 = vpn_candidates(src)
-    fresh = []
-    fresh_meta = {}
+    fresh, fresh_meta = [], {}
     for provider in ('mullvad', 'pia', 'ivpn'):
         stamp, before = previous_ips(src, provider)
         if before is None:
@@ -299,55 +314,60 @@ def build():
                           bucket=lambda c: c['provider'])
     fresh_ips = {c['ip'] for c in fresh_picked}
     for candidate in fresh_picked:
-        add('fresh_vpn', 'vpn', candidate, candidate['provider'])
+        items.append(item('fresh_vpn', 'vpn', candidate, candidate['provider']))
     for provider in sorted(v4):
         pool = [c for c in v4[provider] if c['ip'] not in fresh_ips]
         if provider == 'nordvpn':
             pool = [c for c in pool if (now - datetime.datetime.fromisoformat(c['evidence']['created_at']).replace(
                 tzinfo=datetime.timezone.utc)).days > 90]
         for candidate in spread(pool, PER_PROVIDER, rng):
-            add('commercial_vpn', 'vpn', candidate, provider)
+            items.append(item('commercial_vpn', 'vpn', candidate, provider))
     pool = [c for provider in sorted(v6) for c in v6[provider]]
     for candidate in spread(pool, TARGETS['vpn_v6'], rng):
-        add('vpn_v6', 'vpn', candidate, candidate['provider'])
+        items.append(item('vpn_v6', 'vpn', candidate, candidate['provider']))
+    vpn_all = {c['ip'] for provider in v4 for c in v4[provider]} | {c['ip'] for p in v6 for c in v6[p]}
+    stats = dict(fresh=fresh_meta, candidates=dict(commercial_vpn={p: len(v) for p, v in v4.items()}, fresh=len(fresh)))
+    return items, vpn_all, stats
 
-    # --- Tor
+
+def sample_tor(src, rng):
     tor = src.get('tor-bulk', 'https://check.torproject.org/torbulkexitlist').decode().split()
-    tor_candidates = [dict(ip=ip, provider='tor', country=None) for ip in tor if public_ip(ip)]
-    for candidate in spread(tor_candidates, TARGETS['tor'], rng, key=lambda c: slash24(c['ip'])[:3]):
-        add('tor', 'tor', candidate, 'torproject-bulk-exit-list')
-    tor_set = set(tor)
+    candidates = [dict(ip=ip, provider='tor', country=None) for ip in tor if public_ip(ip)]
+    picked = spread(candidates, TARGETS['tor'], rng, key=lambda c: slash24(c['ip'])[:3])
+    return [item('tor', 'tor', c, 'torproject-bulk-exit-list') for c in picked], set(tor)
 
-    # --- Proxies: >= 2 independent, checked lists
-    lists = dict(
-        monosans='https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt',
-        proxifly='https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt',
-        vakhov='https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxylist.txt')
+
+PROXY_LISTS = dict(
+    monosans='https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt',
+    proxifly='https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt',
+    vakhov='https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxylist.txt')
+
+
+def sample_proxies(src, rng, exclude, lists=PROXY_LISTS):
+    """Open proxies on >= 2 of `lists`, outside `exclude` (Tor exits, VPN servers); every listed address."""
     seen = {}
     for name, url in lists.items():
         for line in src.get(f'proxy-{name}', url).decode('utf-8', 'replace').split():
             host = line.split('://')[-1].rsplit(':', 1)[0].strip('[]')
             if public_ip(host):
                 seen.setdefault(host, set()).add(name)
-    vpn_all = {c['ip'] for provider in v4 for c in v4[provider]} | {c['ip'] for p in v6 for c in v6[p]}
-    proxy_candidates = [dict(ip=ip, provider='open-proxy', country=None, evidence=dict(listed_by=sorted(names)))
-                        for ip, names in seen.items() if len(names) >= 2 and ip not in tor_set and ip not in vpn_all
-                        and ipaddress.ip_address(ip).version == 4]
-    for candidate in spread(proxy_candidates, TARGETS['proxy'], rng, key=lambda c: slash24(c['ip'])[:3]):
-        add('proxy', 'proxy', candidate, 'checked-public-proxy-lists')
-    proxy_set = set(seen)
+    candidates = [dict(ip=ip, provider='open-proxy', country=None, evidence=dict(listed_by=sorted(names)))
+                  for ip, names in seen.items() if len(names) >= 2 and ip not in exclude
+                  and ipaddress.ip_address(ip).version == 4]
+    picked = spread(candidates, TARGETS['proxy'], rng, key=lambda c: slash24(c['ip'])[:3])
+    return [item('proxy', 'proxy', c, 'checked-public-proxy-lists') for c in picked], set(seen), len(candidates)
 
-    # --- RIPE Atlas residential / mobile (never published with addresses)
-    probes = ripe_probes(src)
-    infrastructure = tor_set | proxy_set | vpn_all
+
+def sample_ripe(src, rng, date, infrastructure):
+    """residential, mobile_cgnat and residential_v6 items from the RIPE Atlas archive of `date`."""
+    probes = ripe_probes(src, date)
     conflicts = 0
     residential, mobile, residential6 = [], [], []
     for probe in probes:
         tags = probe_tags(probe)
         if tags & EXCLUDE_TAGS:
             continue
-        evidence = dict(probe_id=probe['id'], archive_date=RIPE_ARCHIVE_DATE,
-                        tags=sorted(tags & (HOME_TAGS | MOBILE_TAGS)))
+        evidence = dict(probe_id=probe['id'], archive_date=date, tags=sorted(tags & (HOME_TAGS | MOBILE_TAGS)))
         v4ip, v6ip = probe.get('address_v4'), probe.get('address_v6')
         if v4ip in infrastructure or v6ip in infrastructure:
             conflicts += 1
@@ -364,28 +384,231 @@ def build():
         if v6ip and public_ip(v6ip) and is_home and not is_mobile and 'system-ipv6-works' in tags:
             residential6.append(dict(ip=v6ip, provider=f'AS{probe.get("asn_v6")}', country=probe.get('country_code'),
                                      evidence=dict(evidence, asn=probe.get('asn_v6'))))
+    items = []
     for cohort, pool, per_asn in (('residential', residential, 2), ('mobile_cgnat', mobile, 3),
                                   ('residential_v6', residential6, 2)):
         for candidate in spread(pool, TARGETS[cohort], rng, per_bucket=per_asn, bucket=lambda c: c['provider']):
-            add(cohort, 'non_vpn', candidate, 'ripe-atlas')
+            items.append(item(cohort, 'non_vpn', candidate, 'ripe-atlas'))
+    return items, conflicts, dict(residential=len(residential), mobile=len(mobile), residential_v6=len(residential6))
 
-    # --- de-duplicate across cohorts (keep first)
-    unique, dropped = [], 0
-    seen_ips = set()
-    for item in items:
-        if item['ip'] in seen_ips:
-            dropped += 1
-            continue
-        seen_ips.add(item['ip'])
-        unique.append(item)
-    for index, item in enumerate(sorted(unique, key=lambda i: (i['cohort'], i['ip']))):
-        item['id'] = f'{item["cohort"]}-{index:04d}'
+
+def dedupe(items):
+    """Keep the first item per address."""
+    unique, seen = [], set()
+    for entry in items:
+        if entry['ip'] not in seen:
+            seen.add(entry['ip'])
+            unique.append(entry)
+    return unique, len(items) - len(unique)
+
+
+def build():
+    """v1 (5 October 2026). Kept for reference: v1 is rebuilt with `materialize`, not built again."""
+    rng = random.Random(SEED)
+    src = Sources()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    vpn, vpn_all, vpn_stats = sample_vpn(src, rng, now)
+    tor, tor_set = sample_tor(src, rng)
+    proxies, proxy_set, proxy_candidates = sample_proxies(src, rng, tor_set | vpn_all)
+    ripe, conflicts, ripe_stats = sample_ripe(src, rng, RIPE_ARCHIVE_DATE, tor_set | proxy_set | vpn_all)
+    unique, dropped = dedupe(vpn + tor + proxies + ripe)
+    for index, entry in enumerate(sorted(unique, key=lambda i: (i['cohort'], i['ip']))):
+        entry['id'] = f'{entry["cohort"]}-{index:04d}'
     unique.sort(key=lambda i: i['id'])
-    write_outputs(unique, src, dict(fresh=fresh_meta, residential_conflicts=conflicts, duplicates_dropped=dropped,
-                                    candidates=dict(commercial_vpn={p: len(v) for p, v in v4.items()},
-                                                    fresh=len(fresh), proxy=len(proxy_candidates),
-                                                    residential=len(residential), mobile=len(mobile),
-                                                    residential_v6=len(residential6))))
+    write_outputs(unique, src, dict(vpn_stats, residential_conflicts=conflicts, duplicates_dropped=dropped,
+                                    candidates=dict(vpn_stats['candidates'], proxy=proxy_candidates, **ripe_stats)))
+
+
+# ------------------------------------------------------------------ v2: weekly core, daily Tor and proxies
+def stable_id(entry):
+    """An id that stays with the address across versions: the cohort and a hash of the address, or of the RIPE Atlas
+    probe and address family for volunteers' addresses (their address never enters a public id)."""
+    if entry['source'] == 'ripe-atlas':
+        key = f'probe-{entry["evidence"]["probe_id"]}-v{entry["family"]}'
+    else:
+        key = str(ipaddress.ip_address(entry['ip']))
+    return f'{entry["cohort"]}-{hashlib.sha256(key.encode()).hexdigest()[:10]}'
+
+
+def iso_week(date):
+    year, week, _ = date.isocalendar()
+    return f'{year}-W{week:02d}'
+
+
+def seed_of(text):
+    return int(hashlib.sha256(f'{SEED}-{text}'.encode()).hexdigest()[:12], 16)
+
+
+def github_changed(url):
+    """The last commit date of a raw.githubusercontent.com file, or None for other hosts or on error."""
+    prefix = 'https://raw.githubusercontent.com/'
+    if not url.startswith(prefix):
+        return None
+    owner, repo, branch, path = url[len(prefix):].split('/', 3)
+    headers = {'User-Agent': USER_AGENT, 'Accept': 'application/vnd.github+json'}
+    if os.environ.get('GITHUB_TOKEN'):
+        headers['Authorization'] = f'Bearer {os.environ["GITHUB_TOKEN"]}'
+    request = urllib.request.Request(f'https://api.github.com/repos/{owner}/{repo}/commits?sha={branch}&path={path}&per_page=1',
+                                     headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            commits = json.loads(response.read())
+    except OSError:
+        return None
+    return commits[0]['commit']['committer']['date'] if commits else None
+
+
+def live_lists(now, lists=PROXY_LISTS):
+    """The proxy lists whose upstream file changed within STALE_SOURCE_DAYS, and why each other one was left out."""
+    keep, dropped = {}, {}
+    for name, url in lists.items():
+        changed = github_changed(url)
+        if changed and (now - datetime.datetime.fromisoformat(changed.replace('Z', '+00:00'))).days > STALE_SOURCE_DAYS:
+            dropped[name] = f'unchanged since {changed[:10]}'
+        else:
+            keep[name] = url
+    return keep, dropped
+
+
+def write_jsonl(path, items, public=True):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as handle:
+        for entry in items:
+            if public and entry['source'] == 'ripe-atlas':
+                entry = dict(entry)
+                entry.pop('ip')
+                entry['rebuild'] = dict(archive=ripe_archive_url(entry['evidence']['archive_date']),
+                                        probe_id=entry['evidence']['probe_id'], field=f'address_v{entry["family"]}')
+            handle.write(json.dumps(entry, sort_keys=True) + '\n')
+
+
+def build_core(date, now):
+    """The week's core: VPN servers and home and mobile probes (RIPE Atlas archive of the day before)."""
+    week = iso_week(date)
+    out = os.path.join(V2, 'core', week)
+    src = Sources(out)
+    rng = random.Random(seed_of(week))
+    vpn, vpn_all, vpn_stats = sample_vpn(src, rng, now)
+    archive = (date - datetime.timedelta(days=1)).isoformat()
+    # Probes on the day's Tor or proxy lists are dropped as in v1; the lists are read here, not kept in the core.
+    tor = {ip for ip in src.get('tor-bulk', 'https://check.torproject.org/torbulkexitlist', public=False).decode().split()}
+    ripe, conflicts, ripe_stats = sample_ripe(src, rng, archive, tor | vpn_all)
+    items, dropped = dedupe(vpn + ripe)
+    for entry in items:
+        entry['id'] = stable_id(entry)
+    items.sort(key=lambda i: i['id'])
+    write_jsonl(os.path.join(PRIVATE_DIR, f'detection-v2-core-{week}.private.jsonl'), items, public=False)
+    write_jsonl(os.path.join(out, 'core.public.jsonl'), items)
+    manifest = dict(schema=2, name=f'mc-antivpn-bench detection v2 core {week}', week=week, seed=seed_of(week),
+                    built_at=now.isoformat(timespec='seconds'), ripe_archive_date=archive,
+                    counts=counts_of(items), stats=dict(vpn_stats, residential_conflicts=conflicts, duplicates_dropped=dropped,
+                                                        candidates=dict(vpn_stats['candidates'], **ripe_stats)),
+                    vpn_addresses=sorted(vpn_all), sources=dict(sorted(src.records.items())))
+    with open(os.path.join(out, 'manifest.json'), 'w') as handle:
+        json.dump(manifest, handle, indent=2, sort_keys=True)
+        handle.write('\n')
+    return week
+
+
+def counts_of(items):
+    counts = {}
+    for entry in items:
+        counts[entry['cohort']] = counts.get(entry['cohort'], 0) + 1
+    return counts
+
+
+def build_day(date=None):
+    """The day's version: this week's core (built first if missing) + the day's Tor exits and proxies."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    date = date or now.date()
+    week = iso_week(date)
+    core_dir = os.path.join(V2, 'core', week)
+    if not os.path.exists(os.path.join(core_dir, 'manifest.json')):
+        build_core(date, now)
+    core_manifest = json.load(open(os.path.join(core_dir, 'manifest.json')))
+    if not os.path.exists(core_private(week)):
+        materialize_core(week)
+    core = [json.loads(line) for line in open(core_private(week))]
+    version = date.isoformat()
+    out = os.path.join(V2, version)
+    src = Sources(out)
+    rng = random.Random(seed_of(version))
+    tor, tor_set = sample_tor(src, rng)
+    lists, stale_lists = live_lists(now)
+    vpn_all = set(core_manifest['vpn_addresses'])
+    proxies, _, proxy_candidates = sample_proxies(src, rng, tor_set | vpn_all, lists)
+    daily, dropped = dedupe([e for e in tor + proxies if e['ip'] not in vpn_all])
+    for entry in daily:
+        entry['id'] = stable_id(entry)
+    items = sorted(core + daily, key=lambda i: i['id'])
+    private = private_path(version)
+    write_jsonl(private, items, public=False)
+    write_jsonl(os.path.join(out, 'dataset.public.jsonl'), items)
+    manifest = dict(schema=2, name=f'mc-antivpn-bench detection v2 {version}', version=version, core=week,
+                    seed=seed_of(version), built_at=now.isoformat(timespec='seconds'), counts=counts_of(items),
+                    total=len(items), stats=dict(proxy_candidates=proxy_candidates, proxy_lists=sorted(lists),
+                                                 proxy_lists_left_out=stale_lists, duplicates_dropped=dropped),
+                    sources=dict(sorted(src.records.items())),
+                    sha256_private=hashlib.sha256(open(private, 'rb').read()).hexdigest())
+    with open(os.path.join(out, 'manifest.json'), 'w') as handle:
+        json.dump(manifest, handle, indent=2, sort_keys=True)
+        handle.write('\n')
+    with open(os.path.join(V2, 'CURRENT'), 'w') as handle:
+        handle.write(version + '\n')
+    print(json.dumps(dict(version=version, core=week, counts=manifest['counts'], total=len(items),
+                          proxy_lists_left_out=stale_lists), indent=2))
+    return version
+
+
+def current():
+    """The version a run uses: BENCH_DATASET, else the newest v2 day, else v1."""
+    if os.environ.get('BENCH_DATASET'):
+        return os.environ['BENCH_DATASET']
+    path = os.path.join(V2, 'CURRENT')
+    return open(path).read().strip() if os.path.exists(path) else 'v1'
+
+
+def version_dir(version):
+    return OUT if version == 'v1' else os.path.join(V2, version)
+
+
+def private_path(version):
+    return os.path.join(PRIVATE_DIR, 'detection-v1.private.jsonl' if version == 'v1' else f'detection-v2-{version}.private.jsonl')
+
+
+def public_items(version):
+    """A version's public items (no volunteer addresses)."""
+    path = os.path.join(version_dir(version), 'dataset.public.jsonl')
+    return [json.loads(line) for line in open(path)] if os.path.exists(path) else []
+
+
+_STABLE = {}
+
+
+def stable_ids(version):
+    """{id in that version: stable id}. v2 ids are stable already; v1's are translated, so runs on v1 and v2 compare
+    on the addresses they share."""
+    if version not in _STABLE:
+        _STABLE[version] = {e['id']: (stable_id(e) if version == 'v1' else e['id']) for e in public_items(version)}
+    return _STABLE[version]
+
+
+def core_of(version):
+    """The core a version is built on: 'v1' for v1, else its ISO week. Versions with the same core share every VPN
+    server and probe."""
+    if version == 'v1':
+        return 'v1'
+    path = os.path.join(version_dir(version), 'manifest.json')
+    return json.load(open(path)).get('core', version) if os.path.exists(path) else version
+
+
+def run_version(manifest):
+    """The dataset version a run used (runs before v2 recorded none: v1)."""
+    return ((manifest or {}).get('environment') or {}).get('dataset') or 'v1'
+
+
+def core_private(week):
+    return os.path.join(PRIVATE_DIR, f'detection-v2-core-{week}.private.jsonl')
 
 
 def write_outputs(items, src, stats):
@@ -419,8 +642,40 @@ def write_outputs(items, src, stats):
     print(json.dumps(dict(counts=counts, total=len(items), stats=stats), indent=2))
 
 
-def materialize():
-    """Rebuild the private dataset (with addresses) from the public one + RIPE Atlas archive."""
+def with_addresses(public_path, src):
+    """The items of a public file with the volunteers' addresses put back from the RIPE Atlas archive."""
+    archives, private = {}, []
+    for line in open(public_path):
+        entry = json.loads(line)
+        rebuild = entry.pop('rebuild', None)
+        if rebuild:
+            date = entry['evidence']['archive_date']
+            if date not in archives:
+                payload = json.loads(src.get(f'ripe-archive-{date}', rebuild['archive'], public=False))
+                archives[date] = {p['id']: p for p in payload['results']}
+            entry['ip'] = archives[date][rebuild['probe_id']][rebuild['field']]
+        private.append(entry)
+    return private
+
+
+def materialize_core(week):
+    out = os.path.join(V2, 'core', week)
+    write_jsonl(core_private(week), with_addresses(os.path.join(out, 'core.public.jsonl'), Sources(out)), public=False)
+
+
+def materialize(version=None):
+    """Rebuild a version's private dataset (with addresses) from its public file + the RIPE Atlas archive."""
+    version = version or current()
+    if version != 'v1':
+        out = version_dir(version)
+        path = private_path(version)
+        write_jsonl(path, with_addresses(os.path.join(out, 'dataset.public.jsonl'), Sources(out)), public=False)
+        expected = json.load(open(os.path.join(out, 'manifest.json')))['sha256_private']
+        actual = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+        print(json.dumps(dict(version=version, sha256=actual, matches_manifest=actual == expected)))
+        if actual != expected:
+            sys.exit(f'materialized dataset {version} does not match its manifest hash')
+        return
     src = Sources()
     archives = {}
     private = []
@@ -449,7 +704,14 @@ def materialize():
 
 
 if __name__ == '__main__':
-    if sys.argv[1:] == ['build']:
+    command, args = (sys.argv[1:] or [''])[0], sys.argv[2:]
+    if command == 'build':
         build()
-    elif sys.argv[1:] == ['materialize']:
-        materialize()
+    elif command == 'build-day':
+        build_day(datetime.date.fromisoformat(args[0]) if args else None)
+    elif command == 'materialize':
+        materialize(args[0] if args else None)
+    elif command == 'current':
+        print(current())
+    else:
+        sys.exit('usage: python3 -m bench.dataset build-day [YYYY-MM-DD] | materialize [version] | current')

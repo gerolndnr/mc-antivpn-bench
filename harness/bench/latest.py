@@ -23,14 +23,13 @@ import shutil
 import subprocess
 import tempfile
 
-from . import overview, score
+from . import dataset, overview, score
 
 FAMILIES = ['functional', 'failure', 'redis', 'detection', 'performance', 'providers']
 # Result folders per family; the first one decides whether a run has a result for a product.
 FOLDERS = {'functional': ['platform', 'clean-install', 'upgrade', 'invalid-reload', 'secrets'], 'failure': ['failure'],
            'redis': ['redis'], 'detection': ['detection'], 'performance': ['performance'], 'providers': ['providers']}
 HEADLINE = ['proxycheck_key', 'enforce']
-DATASET = os.path.join(overview.ROOT, 'datasets', 'detection-v1', 'dataset.public.jsonl')
 
 
 def gh(*args):
@@ -74,11 +73,6 @@ def load(path):
         return None
 
 
-def dataset_size():
-    with open(DATASET) as handle:
-        return sum(1 for line in handle if line.strip())
-
-
 def product_files(folder, family):
     """{product: [paths]} of one run and family (performance: Velocity only)."""
     out = {}
@@ -114,10 +108,9 @@ def detection_passes(folder, total):
 
 def select(repo, base, limit=250):
     """{family: {product: [(run_id, folder, paths)]}} and the providers folder."""
-    total = dataset_size()
     chosen = {family: {} for family in FAMILIES if family not in ('providers', 'detection')}
-    detection = {}  # product -> profile -> [(run_id, folder, [paths])]
-    pending = {}  # (product, profile, n) -> {k: (run_id, folder, path)}
+    detection = {}  # product -> (profile, core) -> [(run_id, folder, [paths])]
+    pending = {}  # (product, profile, core, n) -> {k: (run_id, folder, path)}
     providers = None
     for run in runs(repo, limit):
         folder = download(repo, run['id'], base)
@@ -135,26 +128,31 @@ def select(repo, base, limit=250):
         for family in chosen:
             for product, files in product_files(folder, family).items():
                 chosen[family].setdefault(product, [(run_id, folder, files)])
-        for profile, chunk, path, products in detection_passes(folder, total):
+        version = dataset.run_version(manifest)
+        core = dataset.core_of(version)
+        for profile, chunk, path, products in detection_passes(folder, len(dataset.public_items(version))):
             for product in products:
                 done = detection.setdefault(product, {})
-                if profile in done:
+                if (profile, core) in done:
                     continue
                 if not chunk:
-                    done[profile] = [(run_id, folder, [path])]
+                    done[(profile, core)] = [(run_id, folder, [path])]
                     continue
                 k, n = chunk.split('/')
-                series = pending.setdefault((product, profile, n), {})
+                series = pending.setdefault((product, profile, core, n), {})
                 series.setdefault(k, (run_id, folder, path))
                 if len(series) == int(n):
-                    done[profile] = [(r, f, [p]) for _, (r, f, p) in sorted(series.items())]
-    # Only the plugins the graphic shows (newest version each) decide whether the keyed profile is complete: an older
-    # version without a keyed run is not drawn, so it must not hold the others back.
+                    done[(profile, core)] = [(r, f, [p]) for _, (r, f, p) in sorted(series.items())]
+    # The table compares the plugins it shows (newest version each; an older version is not drawn, so it must not hold
+    # the others back) on one dataset core: the newest core every one of them has a complete pass on, keyed if all
+    # have it there. A core every shown plugin lacks waits until all are measured on it.
     shown = set(overview.newest_only(list(detection)))
-    measured = [p for p, profiles in detection.items() if p in shown and any(x in profiles for x in HEADLINE)]
-    profile = next((x for x in HEADLINE if measured and all(x in detection[p] for p in measured)), 'enforce')
-    chosen['detection'] = {p: profiles[profile] for p, profiles in detection.items() if profile in profiles}
-    return chosen, providers, profile
+    measured = [p for p in detection if p in shown]
+    cores = sorted({c for p in measured for _, c in detection[p]}, key=lambda c: (c != 'v1', c), reverse=True)
+    pick = next(((x, c) for c in cores for x in HEADLINE if all((x, c) in detection[p] for p in measured)),
+                ('enforce', 'v1'))
+    chosen['detection'] = {p: detection[p][pick] for p in measured if pick in detection[p]}
+    return chosen, providers, pick[0]
 
 
 def merge(chosen, providers, profile, base):
@@ -216,10 +214,15 @@ def merge(chosen, providers, profile, base):
                     dirs['providers'].append(extra)
             services[sid] = entry
             # The answers behind the entry, so the overview can recount it without stale addresses (bench.freshness).
+            # Stable ids: services can come from runs on different dataset versions.
             source = os.path.join(src, 'providers', 'answers.jsonl')
             if os.path.exists(source):
+                ids = dataset.stable_ids(dataset.run_version(load(os.path.join(src, 'manifest.json')) or {}))
                 with open(source) as answers:
-                    kept.extend(line for line in answers if json.loads(line).get('service') == sid)
+                    for line in answers:
+                        row = json.loads(line)
+                        if row.get('service') == sid:
+                            kept.append(json.dumps(dict(row, id=ids.get(row['id'], row['id']))) + '\n')
         with open(os.path.join(target, 'providers', 'summary.json'), 'w') as handle:
             json.dump(dict(newest, services=services), handle)
         if kept:

@@ -31,8 +31,11 @@ from .pacing import (CALIBRATION, INTERVAL_MAX_S, INTERVAL_MIN_S, INTERVAL_START
                      PROBE_EVERY, Pacer, observed, watch)
 
 
-def dataset():
-    return [json.loads(line) for line in open(PRIVATE)]
+def dataset(version=None):
+    """The run's dataset, or another version's (performance draws its wave around v1's home addresses, so its
+    numbers stay comparable while the detection dataset is renewed)."""
+    from . import dataset as datasets
+    return [json.loads(line) for line in open(datasets.private_path(version) if version else PRIVATE)]
 
 
 def by_cohort(items, cohort, n, offset=0):
@@ -478,7 +481,7 @@ def unlisted_lookups(events, lookup_hosts, subject_ips):
 
 
 async def performance(runtime, recorder, canaries, product_ids, platform='velocity', rounds=3, profile='enforce'):
-    items = dataset()
+    items = dataset('v1')
     reference = by_cohort(items, 'residential', 1, 0)[0]
     burst_subjects = synthetic_subjects(items, 1000, SEED)
     seq_subjects = synthetic_subjects(items, 1100, SEED + 1)[1000:1100]

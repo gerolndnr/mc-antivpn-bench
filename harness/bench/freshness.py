@@ -11,7 +11,7 @@ direction: a plugin or service that still flags it is not credited, one that doe
   history). A proxy not in proxifly's newest version before the run start had dropped off it. vakhov's list has not
   changed since February 2026 and monosans keeps no history, so neither can say whether a proxy was still listed.
 
-Each check is written to datasets/<name>/freshness/<start>.json with its evidence, so it can be re-checked without the
+Each check is written to datasets/freshness/<start>[-<version>].json with its evidence, so it can be re-checked without the
 network; `python3 -m bench.freshness <start>...` computes missing ones.
 """
 import argparse
@@ -26,10 +26,9 @@ import time
 import urllib.error
 import urllib.request
 
-from . import artifacts
+from . import artifacts, dataset
 
-DATASET = os.path.join(artifacts.ROOT, 'datasets', 'detection-v1')
-RECORDS = os.path.join(DATASET, 'freshness')
+RECORDS = os.path.join(artifacts.ROOT, 'datasets', 'freshness')
 CACHE = os.path.join(artifacts.ROOT, 'cache', 'freshness')
 COLLECTOR = 'https://collector.torproject.org'
 PROXIFLY = ('proxifly/free-proxy-list', 'proxies/all/data.txt')
@@ -123,26 +122,23 @@ def proxifly_ips(start):
     return set(IP.findall(text)), dict(commit=sha, date=date)
 
 
-def subjects():
-    """The dataset's Tor exits and proxies with their (public) addresses."""
-    out = {}
-    with open(os.path.join(DATASET, 'dataset.public.jsonl')) as handle:
-        for line in handle:
-            item = json.loads(line)
-            if item['cohort'] in ('tor', 'proxy') and item.get('ip'):
-                out[item['id']] = (item['cohort'], str(ipaddress.ip_address(item['ip'])))
-    return out
+def subjects(version='v1'):
+    """A dataset version's Tor exits and proxies with their (public) addresses."""
+    return {item['id']: (item['cohort'], str(ipaddress.ip_address(item['ip']))) for item in dataset.public_items(version)
+            if item['cohort'] in ('tor', 'proxy') and item.get('ip')}
 
 
-def record_path(start):
-    return os.path.join(RECORDS, start.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H%M') + '.json')
+def record_path(start, version='v1'):
+    """v1 records are named by the run start alone (they came first); v2 records also by the version."""
+    stamp = start.astimezone(datetime.timezone.utc).strftime('%Y-%m-%dT%H%M')
+    return os.path.join(RECORDS, stamp + ('' if version == 'v1' else f'-{version}') + '.json')
 
 
-def check(start, network=True):
-    """The freshness record for a run started at `start`: the stale subject ids and the evidence. None when it is not
-    recorded and `network` is false."""
+def check(start, network=True, version='v1'):
+    """The freshness record for a run on `version` started at `start`: the stale subject ids (that version's ids) and
+    the evidence. None when it is not recorded and `network` is false."""
     start = parse_time(start)
-    path = record_path(start)
+    path = record_path(start, version)
     if os.path.exists(path):
         return json.load(open(path))
     if not network:
@@ -150,12 +146,12 @@ def check(start, network=True):
     exits, exit_file = tor_exits(start)
     proxies, version = proxifly_ips(start)
     stale = {}
-    for sid, (cohort, ip) in sorted(subjects().items()):
+    for sid, (cohort, ip) in sorted(subjects(version).items()):
         if cohort == 'tor' and ip not in exits:
             stale[sid] = 'not on the Tor exit list at the run start'
         if cohort == 'proxy' and ip not in proxies:
             stale[sid] = "not on proxifly's list at the run start"
-    record = dict(started=start.isoformat(), tor=dict(source=f'{COLLECTOR}/ exit list {exit_file}', exits=len(exits)),
+    record = dict(started=start.isoformat(), dataset=version, tor=dict(source=f'{COLLECTOR}/ exit list {exit_file}', exits=len(exits)),
                   proxy=dict(source=f'github.com/{PROXIFLY[0]} {PROXIFLY[1]} at {version["commit"]}', committed=version['date'],
                              listed=len(proxies)),
                   stale=stale)
@@ -167,34 +163,38 @@ def check(start, network=True):
 
 
 def starts(dirs):
-    """The start times of the runs in `dirs` (from their manifests)."""
-    out = []
+    """(start time, dataset version) of the runs in `dirs` (from their manifests)."""
+    out = set()
     for d in dirs:
         path = os.path.join(d, 'manifest.json')
-        started = ((json.load(open(path)).get('environment') or {}).get('started')) if os.path.exists(path) else None
+        manifest = json.load(open(path)) if os.path.exists(path) else {}
+        started = (manifest.get('environment') or {}).get('started')
         if started:
-            out.append(started)
-    return sorted(set(out))
+            out.add((started, dataset.run_version(manifest)))
+    return sorted(out)
 
 
 def stale(dirs):
-    """Subject id -> reason for every Tor exit and proxy that was stale at the start of any run in `dirs`. With
-    BENCH_FRESHNESS=off (tests, offline drawing), only already recorded checks are used."""
+    """Stable subject id -> reason for every Tor exit and proxy that was stale at the start of any run in `dirs`.
+    With BENCH_FRESHNESS=off (tests, offline drawing), only already recorded checks are used."""
     network = os.environ.get('BENCH_FRESHNESS', 'on') != 'off'
     out = {}
-    for started in starts(dirs):
-        record = check(started, network)
+    for started, version in starts(dirs):
+        record = check(started, network, version)
         if record:
+            ids = dataset.stable_ids(version)
             for sid, reason in record['stale'].items():
-                out.setdefault(sid, reason)
+                out.setdefault(ids.get(sid, sid), reason)
     return out
 
 
 def main():
     parser = argparse.ArgumentParser(prog='bench.freshness')
     parser.add_argument('starts', nargs='+', help='run start times (ISO 8601)')
-    for started in parser.parse_args().starts:
-        record = check(started)
+    parser.add_argument('--dataset', default='v1', help='dataset version of the runs')
+    args = parser.parse_args()
+    for started in args.starts:
+        record = check(started, version=args.dataset)
         tor = sum(1 for r in record['stale'].values() if 'Tor' in r)
         print(f'{record["started"]}: {tor} Tor exits and {len(record["stale"]) - tor} proxies stale '
               f'({record["tor"]["source"]}; {record["proxy"]["source"]})')

@@ -34,7 +34,7 @@ jobs:
         run: PYTHONPATH=harness python -m bench.latest --repo "$GITHUB_REPOSITORY" --output docs/overview
       - name: Commit when changed
         run: |
-          git add docs/overview datasets/detection-v1/freshness
+          git add docs/overview datasets/freshness
           if git diff --cached --quiet; then echo "overview unchanged"; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

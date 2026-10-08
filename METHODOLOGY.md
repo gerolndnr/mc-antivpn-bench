@@ -93,7 +93,25 @@ All outbound TCP of the product JVM is redirected by iptables to the **interpose
 - **Keys.** Real keys exist only in the interposer process (environment variables, never in a product JVM's environment). Product configurations hold format-compatible **canaries**. The interposer swaps a canary for the real key only toward the host that key belongs to. Everywhere else the canary stays, which is what makes leakage measurable (section 7.8).
 - **Unknown egress.** Hosts that match no rule are recorded and appear in the per-case egress log. Non-HTTP egress (raw TCP) is refused and logged.
 
-## 6. Detection dataset v1
+## 6. Detection dataset
+
+**Versions and cadence.** Addresses change at different speeds, so the dataset is renewed in parts (from 8 October 2026, `datasets/detection-v2/`):
+
+| Part | Renewed | Where |
+| --- | --- | --- |
+| Tor exits, public proxies | daily, at 00:05 UTC before the nightly run (`dataset` workflow) | `detection-v2/<date>/` |
+| VPN servers (commercial, new, IPv6), home and mobile probes | weekly, on the first build of an ISO week (RIPE Atlas archive of the day before) | `detection-v2/core/<year>-W<week>/` |
+| Freshness of Tor exits and proxies | at every run start (`bench.freshness`, below) | `datasets/freshness/` |
+
+- A day's version is the week's core plus that day's Tor exits and proxies; `detection-v2/CURRENT` names the newest. Each run records the version it used.
+- Sampling is deterministic per part (seed derived from `20261005` and the week or date). The cohorts, sizes and rules are those of v1 below.
+- An address keeps its id across versions (a hash of the address, or of the probe id and address family for volunteers). A table that combines runs counts every product on the addresses measured for all of them.
+- A table compares plugins on one core: the newest core on which every plugin shown has a complete pass (keyed if all have it there). Until every plugin is measured on a new core, the table stays on the previous one.
+- The performance family keeps drawing its join wave around v1's home addresses, so its numbers stay comparable while the detection dataset is renewed.
+- **Source gate.** A source list whose upstream file has not changed for more than 14 days is left out of the day's build, with the date in the manifest. vakhov's proxy list is left out for this reason; proxies then need to be on both monosans and proxifly.
+- `python3 -m bench.dataset build-day [date]` builds a version; `python3 -m bench.dataset materialize <version>` rebuilds its private file from the public one and the RIPE Atlas archive and checks the hash.
+
+**v1** (5 October 2026, every run before 8 October):
 
 [`datasets/detection-v1/`](datasets/detection-v1) contains 692 addresses. Ground truth comes **only** from the party that operates the address, never from a detection provider and never from agreement between providers.
 
@@ -124,7 +142,7 @@ All outbound TCP of the product JVM is redirected by iptables to the **interpose
 - A Tor exit counts only if it is on the Tor Project's exit list as published at the run start (the newest CollecTor exit-list file before it).
 - A proxy counts only if it is on proxifly's list in its newest version before the run start. Every proxy of the dataset is on that list, and it is the one source list that is both updated and keeps its history. vakhov's list has not changed since February 2026, and monosans keeps no history.
 - A stale address counts for no one, in either direction: flagging it is neither credited nor docked. When a table combines runs, an address stale at the start of any of them is left out for every product, so all products are counted on the same addresses.
-- Each check is committed with its evidence (exit-list file, proxifly commit) in `datasets/detection-v1/freshness/`; `python3 -m bench.freshness <start>` repeats it. The graphic says how many addresses were left out.
+- Each check is committed with its evidence (exit-list file, proxifly commit) in `datasets/freshness/`; `python3 -m bench.freshness <start>` repeats it. The graphic says how many addresses were left out.
 - The per-run report (`report.md` of each run) still counts the dataset as labelled.
 
 **Known limitations.**
@@ -182,7 +200,8 @@ Outcome classes (client-side, per join):
   - **Capacity of the shipped configuration (`enforce`).** Some products limit their own keyless lookups per day (Connection Guard: 100 ProxyCheck queries, counted locally). When that limit ends lookups, the product admits unchecked. The `enforce` pass reports when that happened, as the subject index from which no lookup was made, and the detection rates over all subjects, which then mix both effects.
   - **Detection quality per decision (`proxycheck_key`).** This is the headline for detection and false positives: every product gets the same free ProxyCheck key, so no product runs out of lookups during the 692 subjects.
   - `free_keys` adds VPNAPI and runs only if both keys are configured.
-  - **Quota-safe chunks.** All products share one free ProxyCheck key (1,000 queries per day) and query it in different formats, about 5 queries per subject. The `proxycheck_key` pass therefore runs in 4 nightly chunks (stable hash of the subject id, cohorts mixed), each after the key's daily reset. Within a subject every product is still measured in the same second; across chunks, provider data may drift by up to 3 days, which the report states.
+  - **Quota-safe chunks.** All products share one free ProxyCheck key (1,000 queries per day) and query it in different formats, about 5 queries per subject. The `proxycheck_key` pass therefore runs in nightly chunks (stable hash of the subject id, cohorts mixed), each after the key's daily reset. Within a subject every product is still measured in the same second; across chunks, provider data may drift by a few days, which the report states.
+  - **Weekly series** (from 12 October 2026): every week Monday to Friday, one fifth of the dataset a night, every plugin of the README, each night on that day's dataset version. The core is the same all week; each night measures that day's Tor exits and proxies.
 - **Hosting addresses.** Blocking datacenter addresses is a policy choice. The dataset has no hosting cohort, so "blocks hosting" never counts as either detection or false positive.
 
 ### 7.2 Failure safety (Velocity, `enforce`)
@@ -385,6 +404,7 @@ The adapters for products without public source code are written from their publ
 - **2026-10-08, adaptive pacing in every family** (7.1). The learned watch window and the answer-based command wait apply to all families, not only detection. Load shapes, recovery delays and the start-up quiet window are unchanged.
 - **2026-10-08, adaptive detection pacing** (7.1). Every subject used to wait for the slowest product and gave every admitted player 8 s, so a full pass took 80-90 minutes even for products that decide at login. Products now walk the subjects on their own, with a learned watch window and an interval that backs off on detection-service errors. Earlier runs used the fixed pacing.
 - **2026-10-08, Connection Guard 0.6.1 candidate re-pinned at master 76665cc** (JAR sha256 3d7b4134…0aa6). It adds the everyday-joins speed work (#86) and the competitor migrations (#85) to the feffbfb candidate. The JAR calls itself 0.6.2-SNAPSHOT; the maintainer confirmed that is a naming error and the code is 0.6.1. Every family that feeds the graphic is measured again for this build; the feffbfb runs stay in the history.
+- **2026-10-08, dataset v2: daily Tor exits and proxies, weekly core** (owner decision). See "Versions and cadence" in section 6. The 11 to 13 October keyed series is replaced by the weekly series; KauriVPN, AdvancedAntiVPN and the Connection Guard 0.6.1 candidate already have complete keyed runs on v1.
 - **2026-10-08, stale Tor exits and proxies no longer count** (owner decision, after a question from zowi's author). A Tor Project check of the four Tor exits zowi "missed" showed that all four had left the Tor network before the run (last seen 3 to 5 October). Of the 80 Tor exits, 16 to 19 were gone by the runs of 7 October; of the 100 proxies, 10 to 13 were no longer on proxifly's list. Services and plugins that still flagged them were credited, up-to-date ones docked. See "Stale addresses" in section 6.
   - The proxy check also found that vakhov's list, one of the three proxy sources, has not changed since February 2026. 61 proxies were in the dataset through proxifly and vakhov; the freshness check now relies on proxifly alone.
 - **2026-10-08, overview missed older results.** `bench.latest` read only the 60 newest runs. On 8 October that dropped FoxGate's, ProxyShield's and VPNGuard's only failure results out of the README graphic for one redraw. It now pages through all runs. The keyed detection profile is chosen by the plugins the graphic shows (newest version each), so an older version without a keyed run does not hold it back.

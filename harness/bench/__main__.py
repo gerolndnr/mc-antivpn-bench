@@ -1,7 +1,8 @@
 """mc-antivpn-bench command line (runs inside the benchmark container).
 
   python3 -m bench run <family> [--products a,b] [--platforms x,y] [--run-id ID]
-  python3 -m bench dataset build
+  python3 -m bench dataset build-day [YYYY-MM-DD]
+  python3 -m bench dataset materialize [version]
   python3 -m bench pins
 
 Families: functional (platforms, release, secrets), failure, performance, redis,
@@ -19,7 +20,7 @@ import subprocess
 import sys
 import time
 
-from . import artifacts, engine, private, products, scenarios
+from . import artifacts, dataset, engine, private, products, scenarios
 
 ROOT = artifacts.ROOT
 IPV4_ANY = __import__('re').compile(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])')
@@ -70,11 +71,14 @@ class Recorder:
         os.makedirs(self.public, exist_ok=True)
         os.makedirs(self.private, exist_ok=True)
         self.subject_map = {}
-        if os.path.exists(scenarios.PRIVATE):
-            for line in open(scenarios.PRIVATE):
+        # The run's dataset and v1 (the performance wave is drawn around v1's home addresses).
+        for path in dict.fromkeys([scenarios.PRIVATE, dataset.private_path('v1')]):
+            if not os.path.exists(path):
+                continue
+            for line in open(path):
                 item = json.loads(line)
                 for form in address_forms(item['ip']):
-                    self.subject_map[form] = f'<{item["id"]}>'
+                    self.subject_map.setdefault(form, f'<{item["id"]}>')
         self._sorted = sorted(self.subject_map, key=len, reverse=True)
 
     def redact(self, text):
@@ -121,7 +125,7 @@ def environment(canaries):
     commit = run('git', '-C', ROOT, 'rev-parse', 'HEAD')
     dirty = run('git', '-C', ROOT, 'status', '--porcelain')
     return dict(
-        started=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+        started=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'), dataset=scenarios.DATASET_VERSION,
         bench_commit=commit, bench_tree_dirty=bool(dirty), java=java, python=sys.version.split()[0],
         kernel=host_platform.release(), cpus=os.cpu_count(),
         memory_kb=int(open('/proc/meminfo').read().split()[1]) if os.path.exists('/proc/meminfo') else None,
@@ -248,17 +252,19 @@ def main():
     run.add_argument('--platforms')
     run.add_argument('--run-id')
     sub.add_parser('pins')
-    dataset = sub.add_parser('dataset')
-    dataset.add_argument('action', choices=['build'])
+    dataset_parser = sub.add_parser('dataset')
+    dataset_parser.add_argument('action', choices=['build-day', 'materialize'])
+    dataset_parser.add_argument('version', nargs='?')
     args = parser.parse_args()
     if args.command == 'run':
         asyncio.run(main_run(args))
     elif args.command == 'pins':
         from . import pins
         pins.main()
+    elif args.command == 'dataset' and args.action == 'build-day':
+        dataset.build_day(datetime.date.fromisoformat(args.version) if args.version else None)
     elif args.command == 'dataset':
-        from . import dataset
-        dataset.build()
+        dataset.materialize(args.version)
 
 
 if __name__ == '__main__':
