@@ -572,7 +572,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             checked = e['checked']
             note = (f'{num(checked)} of {num(e["subjects"])} looked up' if pid != 'none' and e['subjects'] else '')
             if e.get('cut_off'):
-                note += f' · {num(e["cut_off"])} cut off by the proxy'
+                note += f' · {num(e["cut_off"])} cut off'
             if after_join(pid):
                 rows.append((pid, names[pid], None, 'after join', 'lets everyone in, kicks later', False))
                 continue
@@ -581,7 +581,9 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         # "Looked up" counts players with at least one detection-service request; a player refused from a local list
         # (Connection Guard Intel) is decided without one.
         most = max([p[k]['checked'] or 0 for k, *_ in rows if k != 'none'] or [0])
-        card_a = bar_card('1,000 players join in 20 seconds', 'Time until the plugin decides, 95th percentile, among those that looked up the most players.',
+        cut = any(p[k].get('cut_off') for k, *_ in rows if k in p)
+        card_a = bar_card('1,000 players join in 20 seconds', 'Time until the plugin decides, 95th percentile, among those that looked up the most players.'
+                          + (' Cut off: the proxy closed the login after 30 s, before the plugin decided.' if cut else ''),
                           rows, low=True, cap=30000, tag=platform.capitalize() + (f' · median of {rounds} rounds' if rounds > 1 else ''),
                           eligible={k for k, *_ in rows if k != 'none' and not after_join(k) and (p[k]['checked'] or 0) >= 0.95 * most})
         metrics = [('Single join, p95', 'cold_p95', fmt_ms, True), ('Repeat join, p50', 'warm_p50', fmt_ms, True),
