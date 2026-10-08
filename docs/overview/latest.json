@@ -25,25 +25,52 @@
       "advancedantivpn": [
         "37624132539"
       ],
+      "connection-guard": [
+        "37593590733"
+      ],
       "connection-guard-061": [
         "37686834253"
       ],
       "connection-guard-candidate": [
         "37622124772"
       ],
+      "foxgate": [
+        "37593590733"
+      ],
       "kaurivpn": [
         "37624132539"
+      ],
+      "proxyshield": [
+        "37593590733"
+      ],
+      "vpnguard": [
+        "37593590733"
       ]
     },
     "functional": {
       "advancedantivpn": [
         "37623812928"
       ],
+      "connection-guard": [
+        "37324690915"
+      ],
       "connection-guard-061": [
         "37686823637"
       ],
+      "connection-guard-candidate": [
+        "37421189254"
+      ],
+      "foxgate": [
+        "37324690915"
+      ],
       "kaurivpn": [
         "37623812928"
+      ],
+      "proxyshield": [
+        "37324690915"
+      ],
+      "vpnguard": [
+        "37324690915"
       ]
     },
     "performance": {
@@ -126,8 +153,23 @@
       ]
     },
     "redis": {
+      "connection-guard": [
+        "37540313410"
+      ],
       "connection-guard-061": [
         "37686828860"
+      ],
+      "connection-guard-candidate": [
+        "37540313410"
+      ],
+      "foxgate": [
+        "37315216380"
+      ],
+      "proxyshield": [
+        "37315216380"
+      ],
+      "vpnguard": [
+        "37315216380"
       ]
     }
   },
@@ -138,11 +180,14 @@
       "37686850997"
     ],
     "failure": [
+      "37593590733",
       "37622124772",
       "37624132539",
       "37686834253"
     ],
     "functional": [
+      "37324690915",
+      "37421189254",
       "37623812928",
       "37686823637"
     ],
@@ -156,6 +201,8 @@
       "37694899385"
     ],
     "redis": [
+      "37315216380",
+      "37540313410",
       "37686828860"
     ]
   }
