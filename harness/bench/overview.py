@@ -138,7 +138,10 @@ def performance(dirs):
                         values.append(v)
                 return med(values)
             out.setdefault(platform, {})[pid] = dict(
-                rounds=len(rounds), burst_p95=m('burst', 'decision_ms', 'p95'), burst_p50=m('burst', 'decision_ms', 'p50'),
+                rounds=len(rounds), burst_p95=m('burst', 'decision_ms', 'p95'),
+                # Wave players the proxy cut off without a product decision (CLOSED, TIMEOUT; recorded from 8 October 2026).
+                cut_off=med([sum(((r.get('burst') or {}).get('outcomes') or {}).get(k, 0) for k in ('CLOSED', 'TIMEOUT'))
+                             for r in rounds if r.get('burst')]) or None, burst_p50=m('burst', 'decision_ms', 'p50'),
                 checked=m('burst', 'subjects_with_lookup'), subjects=m('burst', 'distinct_subjects'),
                 cold_p95=m('cold', 'decision_ms', 'p95'), warm_p50=m('warm', 'decision_ms', 'p50'),
                 stampede=m('stampede', 'lookup_requests'), start=m('start', 'ready_s'),
@@ -558,6 +561,8 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                 continue
             checked = e['checked']
             note = (f'{num(checked)} of {num(e["subjects"])} looked up' if pid != 'none' and e['subjects'] else '')
+            if e.get('cut_off'):
+                note += f' · {num(e["cut_off"])} cut off by the proxy'
             if after_join(pid):
                 rows.append((pid, names[pid], None, 'after join', 'lets everyone in, kicks later', False))
                 continue

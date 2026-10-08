@@ -10,6 +10,8 @@ place a product can refuse a player:
 * DENY_PLAY    joined, then kicked inside the observation window (e.g. async checks)
 * ALLOW        still in the world when the observation window ends
 * TIMEOUT      no decision before the hard deadline (a hung login)
+* CLOSED       the connection was closed before Login Success without a disconnect message: no product decision
+               (Velocity closes a login after its 30 s read timeout this way)
 * ERROR        protocol or socket failure not attributable to the product
 
 Timestamps are monotonic nanoseconds relative to the TCP connect.
@@ -18,6 +20,7 @@ import asyncio
 import hashlib
 import ipaddress
 import json
+import re
 import struct
 import time
 import uuid
@@ -164,7 +167,11 @@ async def admit(port, subject_ip, name, *, observe_s=8.0, deadline_s=30.0, host=
                 packet_id, data = await connection.read_packet()
                 if packet_id == 0x00:
                     mark('decided')
-                    return 'DENY_LOGIN', text_of(read_string(data)[0])
+                    reason = text_of(read_string(data)[0])
+                    # The proxy's own timeout message is not a product's refusal.
+                    if re.fullmatch(r'\s*(read )?timed out\.?\s*', reason, re.IGNORECASE):
+                        return 'CLOSED', f'proxy: {reason}'
+                    return 'DENY_LOGIN', reason
                 if packet_id == 0x03:
                     connection.threshold = read_varint_bytes(data)[0]
                 elif packet_id == 0x04:
@@ -246,8 +253,9 @@ async def admit(port, subject_ip, name, *, observe_s=8.0, deadline_s=30.0, host=
     except asyncio.TimeoutError:
         outcome, reason = 'TIMEOUT', f'no decision within {deadline_s}s'
     except asyncio.IncompleteReadError:
-        # The server closed without a disconnect packet; classify by phase reached.
-        outcome = 'DENY_PLAY' if 'joined' in marks else 'DENY_CONFIG' if 'login_success' in marks else 'DENY_LOGIN'
+        # The server closed without a disconnect packet; classify by phase reached. Before Login Success that is no
+        # refusal message at all (a proxy timeout, a crash): CLOSED, undecided rather than blocked.
+        outcome = 'DENY_PLAY' if 'joined' in marks else 'DENY_CONFIG' if 'login_success' in marks else 'CLOSED'
         reason = 'connection closed without disconnect packet'
         mark('decided')
     except (OSError, ValueError, zlib.error, struct.error) as error:

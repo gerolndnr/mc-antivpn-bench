@@ -124,7 +124,7 @@ def detection_tables(records, lines, csv_rows):
             for product in products:
                 results = [r['products'][product] for r in subset if product in r['products']]
                 k = sum(1 for r in results if r['blocked'])
-                undecided[product] += sum(1 for r in results if r['outcome'] in ('TIMEOUT', 'ERROR'))
+                undecided[product] += sum(1 for r in results if r['outcome'] in ('TIMEOUT', 'CLOSED', 'ERROR'))
                 cells.append(pct(k, len(results)))
                 csv_rows.append(dict(profile=profile, cohort=cohort, product=product, blocked=k, n=len(results)))
             for baseline in ('proxycheck', 'vpnapi'):

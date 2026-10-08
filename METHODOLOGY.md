@@ -167,6 +167,7 @@ Outcome classes (client-side, per join):
 | `DENY_PLAY` | joined, then kicked within the 8 s observation window |
 | `ALLOW` | still in the world after 8 s |
 | `TIMEOUT` | no decision within the deadline |
+| `CLOSED` | connection closed before Login Success without a disconnect message, or with the proxy's own "Timed out": no product decision (from 8 October 2026; before, `DENY_LOGIN`) |
 | `ERROR` | protocol or socket failure |
 
 `blocked` means any `DENY_*` class. *Decision time* runs from TCP connect to the disconnect (for `DENY_LOGIN`) or to Login Success.
@@ -190,7 +191,7 @@ Outcome classes (client-side, per join):
   - **Detection rate** = blocked / n for `vpn`, `tor` and `proxy` cohorts.
   - **False-positive rate** = blocked / n for `non_vpn` cohorts.
   - Each rate is reported per cohort and per product with a Wilson 95 % interval.
-  - `TIMEOUT` and `ERROR` stay in the denominator (counted as not blocked for detection, not counted as a false positive) and are reported separately as *undecided*.
+  - `TIMEOUT`, `CLOSED` and `ERROR` stay in the denominator (counted as not blocked for detection, not counted as a false positive) and are reported separately as *undecided*.
 - **Provider-side errors.** If any provider answered 429 or ≥ 500 for a subject, that subject is re-measured once, after 90 s, on freshly started instances (so product caches cannot answer). Both attempts are kept in the raw rows. The headline uses the retry.
 - **Baselines.**
   - ProxyCheck is "blocked" when `proxy == "yes"`.
@@ -404,6 +405,7 @@ The adapters for products without public source code are written from their publ
 - **2026-10-08, adaptive pacing in every family** (7.1). The learned watch window and the answer-based command wait apply to all families, not only detection. Load shapes, recovery delays and the start-up quiet window are unchanged.
 - **2026-10-08, adaptive detection pacing** (7.1). Every subject used to wait for the slowest product and gave every admitted player 8 s, so a full pass took 80-90 minutes even for products that decide at login. Products now walk the subjects on their own, with a learned watch window and an interval that backs off on detection-service errors. Earlier runs used the fixed pacing.
 - **2026-10-08, Connection Guard 0.6.1 candidate re-pinned at master 76665cc** (JAR sha256 3d7b4134…0aa6). It adds the everyday-joins speed work (#86) and the competitor migrations (#85) to the feffbfb candidate. The JAR calls itself 0.6.2-SNAPSHOT; the maintainer confirmed that is a naming error and the code is 0.6.1. Every family that feeds the graphic is measured again for this build; the feffbfb runs stay in the history.
+- **2026-10-08, a login the proxy cuts off is no refusal.** Velocity closes a login after its 30 s read timeout without a disconnect message. The client recorded that as `DENY_LOGIN`, the class of a product's refusal. Detection is unaffected (every refusal there carries the product's own message), but in the 1,000-player wave FoxGate's 845 and AdvancedAntiVPN's 520 "refused" home players were most likely cut off by the proxy, not refused by the product. Such logins are now `CLOSED`, undecided; the graphic says how many wave players were cut off. Performance is re-measured with every plugin in one run.
 - **2026-10-08, dataset v2: daily Tor exits and proxies, weekly core** (owner decision). See "Versions and cadence" in section 6. The 11 to 13 October keyed series is replaced by the weekly series; KauriVPN, AdvancedAntiVPN and the Connection Guard 0.6.1 candidate already have complete keyed runs on v1.
 - **2026-10-08, stale Tor exits and proxies no longer count** (owner decision, after a question from zowi's author). A Tor Project check of the four Tor exits zowi "missed" showed that all four had left the Tor network before the run (last seen 3 to 5 October). Of the 80 Tor exits, 16 to 19 were gone by the runs of 7 October; of the 100 proxies, 10 to 13 were no longer on proxifly's list. Services and plugins that still flagged them were credited, up-to-date ones docked. See "Stale addresses" in section 6.
   - The proxy check also found that vakhov's list, one of the three proxy sources, has not changed since February 2026. 61 proxies were in the dataset through proxifly and vakhov; the freshness check now relies on proxifly alone.
