@@ -1,0 +1,54 @@
+{
+  "built_at": "2026-10-10T05:42:46+00:00",
+  "core": "2026-W41",
+  "counts": {
+    "commercial_vpn": 125,
+    "fresh_vpn": 37,
+    "mobile_cgnat": 100,
+    "proxy": 100,
+    "residential": 150,
+    "residential_v6": 60,
+    "tor": 80,
+    "vpn_v6": 40
+  },
+  "name": "mc-antivpn-bench detection v2 2026-10-10",
+  "schema": 2,
+  "seed": 191919125035106,
+  "sha256_private": "9c9c814d387f73e3fdb401ded33659364967eaaf035da89480cf80014f828aea",
+  "sources": {
+    "proxy-monosans": {
+      "bytes": 15568,
+      "fetched_at": "2026-10-10T05:43:38+00:00",
+      "public": true,
+      "sha256": "f54d30ef6a5caeac4181e47bf0e0d71f8d68ff90eeb139563e9e15d282854289",
+      "url": "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt"
+    },
+    "proxy-proxifly": {
+      "bytes": 1460798,
+      "fetched_at": "2026-10-10T05:43:38+00:00",
+      "public": true,
+      "sha256": "7653ae0b6fc1ecc9c57122cc8515dd53ab75669fcc2fc4062dac7cc6be7a0cd6",
+      "url": "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt"
+    },
+    "tor-bulk": {
+      "bytes": 17139,
+      "fetched_at": "2026-10-10T05:43:36+00:00",
+      "public": true,
+      "sha256": "8122f9ca8023f37bb3b2958010105e7feafd72daf03992cd12dfef3bfbf5f639",
+      "url": "https://check.torproject.org/torbulkexitlist"
+    }
+  },
+  "stats": {
+    "duplicates_dropped": 0,
+    "proxy_candidates": 249,
+    "proxy_lists": [
+      "monosans",
+      "proxifly"
+    ],
+    "proxy_lists_left_out": {
+      "vakhov": "unchanged since 2026-02-07"
+    }
+  },
+  "total": 692,
+  "version": "2026-10-10"
+}
