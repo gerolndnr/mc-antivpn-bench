@@ -15,6 +15,7 @@
         "38365750001"
       ]
     },
+    "detection-optimal": {},
     "failure": {
       "advancedantivpn": [
         "37624132539"
@@ -24,9 +25,6 @@
       ],
       "connection-guard-061": [
         "37686834253"
-      ],
-      "connection-guard-candidate": [
-        "37622124772"
       ],
       "foxgate": [
         "38365765382"
@@ -68,14 +66,8 @@
       "advancedantivpn": [
         "37811653554"
       ],
-      "connection-guard": [
-        "37624137638"
-      ],
       "connection-guard-061": [
         "37811653554"
-      ],
-      "connection-guard-candidate": [
-        "37624137638"
       ],
       "foxgate": [
         "37811653554"
@@ -180,9 +172,9 @@
       "38365753848",
       "38365757487"
     ],
+    "detection-optimal": [],
     "failure": [
       "37317379098",
-      "37622124772",
       "37624132539",
       "37686834253",
       "38365765382"
@@ -194,7 +186,6 @@
       "38365761287"
     ],
     "performance": [
-      "37624137638",
       "37811653554"
     ],
     "providers": [
