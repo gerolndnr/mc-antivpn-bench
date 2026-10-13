@@ -142,5 +142,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.6.1-candidate-0b4757c": {
+    "project": "connectionguard",
+    "version": "0.6.1-SNAPSHOT",
+    "path": "candidates/connection-guard-0.6.1-SNAPSHOT-0b4757c.jar",
+    "sha256": "9a7b2604dfad3e4a6e7766ac6e31c715809f55c0ba14d36247edb02926dd13ff",
+    "filename": "connection-guard-0.6.1-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #92 head 0b4757ce9465425c10515ae08953ef48e0b1c52c (new-install order Intel, zowi, Blackbox confirmed, IPQuery; ProxyCheck off), CI run 38372814508 artifact (merge ref 72c495e)",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }

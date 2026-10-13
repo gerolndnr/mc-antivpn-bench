@@ -390,6 +390,8 @@ The adapters for products without public source code are written from their publ
 
 ## Corrections and changes after the first published run
 
+- **2026-10-13, Connection Guard candidate re-pinned at PR #92 head 0b4757c** (JAR sha256 9a7b2604…13ff, adapter `connection-guard-candidate`). The new-install order is Intel, zowi, Blackbox (confirmed), IPQuery, with ProxyCheck off. It is measured against 0.6.1 (76665cc) before release. The adapter is now `pre_release`: it never enters the README overview, also not when it has the same version number as the shown 0.6.1 build.
+
 - **2026-10-13, AdvancedAntiVPN's other services in `providers`** (owner request): GetIPIntel (contact e-mail, 500 a day; positive at 0.99 or more, negative below 0.90, the operator's own reading), IPHunter (free key; block 1 positive, as IPHub) and IPQualityScore (free key, 5,000 a month; AdvancedAntiVPN's shipped settings; a VPN, proxy or Tor flag is positive). Each is skipped until its key or contact is set (docs/KEYS.md).
 
 - **2026-10-13, no API keys for plugins** (owner decision). Keys are used only for the detection services measured on their own (`providers`, 7.9).
