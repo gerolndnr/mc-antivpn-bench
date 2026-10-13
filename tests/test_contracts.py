@@ -371,6 +371,17 @@ class Overview(unittest.TestCase):
         for name in run['env']:
             self.assertIn(f'-e {name}', run['run'], name)
 
+    def test_keys_reach_only_the_providers_family(self):
+        # Plugins never get an API key (METHODOLOGY 5); bench also drops them for every other family.
+        import yaml
+        path = os.path.join(os.path.dirname(__file__), '..', '.github', 'workflows', 'bench.yml')
+        run = next(s for s in yaml.safe_load(open(path))['jobs']['bench']['steps'] if s.get('name') == 'Run')
+        for name, value in run['env'].items():
+            if 'secrets.' in str(value):
+                self.assertTrue(str(value).startswith("${{ inputs.family == 'providers' &&"), name)
+        source = open(os.path.join(ROOT, 'harness', 'bench', '__main__.py')).read()
+        self.assertIn('os.environ.pop(name, None)', source)
+
     def test_overview_accent_follows_the_shown_value(self):
         from bench import overview
         self.assertEqual(overview.fmt_ms(2.04), '2.0 ms')
@@ -571,7 +582,8 @@ class ReadmeOverviewSelection(unittest.TestCase):
     def run_folder(self, base, run_id, products, detection_profile=None):
         folder = os.path.join(base, str(run_id))
         os.makedirs(os.path.join(folder, 'platform'))
-        json.dump(dict(products=products, environment=dict(started='2026-10-07T08:00:00+00:00')),
+        keys = dict(proxycheck=detection_profile == 'proxycheck_key', vpnapi=False)
+        json.dump(dict(products=products, environment=dict(started='2026-10-07T08:00:00+00:00', keys_present=keys)),
                   open(os.path.join(folder, 'manifest.json'), 'w'))
         for p in products:
             json.dump(dict(product=p, platform='paper', result=[]), open(os.path.join(folder, 'platform', f'{p}-paper.json'), 'w'))
@@ -598,7 +610,14 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.assertEqual(sorted(chosen['detection']), ['connection-guard', 'foxgate', 'kaurivpn'])
         self.assertEqual(profile, 'enforce')
 
-    def test_keyed_profile_only_once_every_product_has_it(self):
+    def test_runs_with_a_key_never_show_plugins(self):
+        from bench import latest
+        self.assertTrue(latest.keyed_run(dict(environment=dict(keys_present=dict(proxycheck=True, vpnapi=False)))))
+        self.assertTrue(latest.keyed_run(dict(environment={})))  # does not say: not shown
+        self.assertFalse(latest.keyed_run(dict(environment=dict(keys_present=dict(proxycheck=False, vpnapi=False)))))
+        self.assertFalse(latest.keyed_run(dict(family='providers', environment={})))
+
+    def test_keyed_runs_are_skipped_for_plugins(self):
         from bench import latest
         base = tempfile.mkdtemp()
         self.run_folder(base, 3, ['connection-guard', 'foxgate'], 'proxycheck_key')
@@ -613,6 +632,7 @@ class ReadmeOverviewSelection(unittest.TestCase):
             latest.runs, latest.dataset.public_items = saved
         self.assertEqual(profile, 'enforce')
         self.assertEqual(chosen['detection']['connection-guard'][0][0], '1')
+        self.assertEqual(chosen['functional']['connection-guard'][0][0], '1')
 
 
 class ProviderScore(unittest.TestCase):
@@ -667,12 +687,13 @@ class DatasetVersions(unittest.TestCase):
         def run(run_id, version, products):
             folder = os.path.join(base, str(run_id))
             os.makedirs(os.path.join(folder, 'detection'))
-            json.dump(dict(products=products, environment=dict(started='2026-10-12T00:30:00+00:00', dataset=version)),
+            json.dump(dict(products=products, environment=dict(started='2026-10-12T00:30:00+00:00', dataset=version,
+                                                                keys_present=dict(proxycheck=False, vpnapi=False))),
                       open(os.path.join(folder, 'manifest.json'), 'w'))
             rows = [dict(subject=f's{i}', cohort='tor', label='tor', attempt=0, products={p: dict(blocked=True) for p in products})
                     for i in range(3)]
-            json.dump(dict(profile='proxycheck_key', chunk=None, rows=rows),
-                      open(os.path.join(folder, 'detection', 'proxycheck_key.json'), 'w'))
+            json.dump(dict(profile='enforce', chunk=None, rows=rows),
+                      open(os.path.join(folder, 'detection', 'enforce.json'), 'w'))
         run(1, 'v1', ['foxgate', 'kaurivpn'])
         run(2, '2026-10-12', ['kaurivpn'])
         saved = latest.runs, latest.dataset.public_items, latest.dataset.core_of

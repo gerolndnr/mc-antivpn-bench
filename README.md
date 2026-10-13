@@ -56,7 +56,7 @@ PYTHONPATH=harness python3 -m bench run providers [--services blackbox,zowi] [--
 PYTHONPATH=harness python3 -m unittest discover -s tests -v
 ```
 
-Keys are optional. Without them the free-key profile and the VPNAPI baseline are skipped and reported as not measured. Keys reach only the interposer process: product configurations hold format-compatible canaries, which the interposer swaps for the real value only toward the provider that key belongs to.
+Plugins never get an API key: every plugin runs as shipped, keyless. Keys are used only by the `providers` family, which measures the detection services on their own ([docs/KEYS.md](docs/KEYS.md)). Product configurations in the secret-leakage test hold format-compatible canaries, which no provider accepts.
 
 ## Licences and redistribution
 

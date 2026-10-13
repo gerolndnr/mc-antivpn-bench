@@ -6,9 +6,10 @@ workflow runs.
 Reads, newest first, successful `benchmark` runs started by hand or by the schedule, and takes per family and per
 product the newest result of that product. A run that measured only some products (a product added later) therefore
 adds those products and leaves the others' results in place.
-  - Detection: a nightly chunk counts only together with the other chunks of the same series; a run limited to part
-    of the dataset never counts. The graphic shows the keyed profile (proxycheck_key) only once every product with a
-    detection result has it, and the keyless one (enforce) until then, so one table never mixes profiles.
+  - Plugins only from runs without API keys (METHODOLOGY 5): a run that had a key configured is skipped for every
+    plugin family, also the earlier `enforce` runs whose keyless ProxyCheck requests got the free key attached.
+  - Detection: the `enforce` profile. A chunk counts only together with the other chunks of the same series; a run
+    limited to part of the dataset never counts.
   - Performance on Velocity only.
   - Providers: per service the newest run in which it answered; a service that was down keeps its earlier result.
   - Never a run that measured an unreleased candidate (adapter `pre_release`).
@@ -29,7 +30,7 @@ FAMILIES = ['functional', 'failure', 'redis', 'detection', 'performance', 'provi
 # Result folders per family; the first one decides whether a run has a result for a product.
 FOLDERS = {'functional': ['platform', 'clean-install', 'upgrade', 'invalid-reload', 'secrets'], 'failure': ['failure'],
            'redis': ['redis'], 'detection': ['detection'], 'performance': ['performance'], 'providers': ['providers']}
-HEADLINE = ['proxycheck_key', 'enforce']
+HEADLINE = ['enforce']
 
 
 def gh(*args):
@@ -106,6 +107,14 @@ def detection_passes(folder, total):
     return out
 
 
+def keyed_run(manifest):
+    """A plugin run in which an API key was configured (or one that does not say): never shown for plugins."""
+    if manifest.get('family') == 'providers':
+        return False
+    present = (manifest.get('environment') or {}).get('keys_present')
+    return present is None or any(present.values())
+
+
 def select(repo, base, limit=250):
     """{family: {product: [(run_id, folder, paths)]}} and the providers folder."""
     chosen = {family: {} for family in FAMILIES if family not in ('providers', 'detection')}
@@ -118,6 +127,7 @@ def select(repo, base, limit=250):
         if any(pre_release(p) for p in manifest.get('products', [])):
             continue  # the README shows released versions only; a candidate's runs stay in their own overview
         run_id = str(run['id'])
+        keyed = keyed_run(manifest)
         summary = load(os.path.join(folder, 'providers', 'summary.json'))
         if summary and summary.get('services'):
             providers = providers or dict(newest=(run_id, folder, summary), services={})
@@ -125,6 +135,8 @@ def select(repo, base, limit=250):
                 taken = providers['services'].get(sid)
                 if taken is None or (score.unavailable(taken[2]) and not score.unavailable(entry)):
                     providers['services'][sid] = (run_id, folder, entry, summary.get('meta') or {})
+        if keyed:
+            continue  # plugins are shown only as measured without keys; the services above may use theirs
         for family in chosen:
             for product, files in product_files(folder, family).items():
                 chosen[family].setdefault(product, [(run_id, folder, files)])

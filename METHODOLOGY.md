@@ -10,7 +10,7 @@ The suite is written and run by the maintainers of **Connection Guard**, one of 
 
 1. **Unmodified products.** Every product is the published JAR, downloaded from its official listing and checked against the listing's checksum. No product is patched, decompiled or re-implemented inside the harness.
 2. **The same environment for everyone.** One container image, JDK, server build, client, set of subjects, fault model and latency model for every product, configured by data files in [`products/`](products). The harness has no product-specific code paths beyond those files.
-3. **Shipped and documented configurations only.** Products run as shipped, with the single step their own documentation names to switch on blocking, or with the same two free API keys added through their own documented key fields (section 4). No hand-tuning, and every edit is listed in the adapter.
+3. **Shipped and documented configurations only.** Products run as shipped, with the single step their own documentation names to switch on blocking (section 4). No plugin gets an API key (from 13 October 2026; before, also with the same two free keys added through their own documented key fields). No hand-tuning, and every edit is listed in the adapter.
 4. **Record once, serve to all.** When products send the same request to the same provider, they all get the same recorded answer (section 5). Time drift between products cannot favour anyone.
 5. **No combined score.** Every question is answered separately, per cohort, with its denominator, uncertainty and raw rows. The report never ranks products on a weighted total.
 6. **Everything public except volunteers' addresses.** Raw join rows, console logs and egress logs, all with subject addresses replaced by dataset ids. The adapters and this document are public too.
@@ -73,8 +73,8 @@ Either can be added through an adapter (section 10).
 | --- | --- | --- |
 | `shipped` | The JAR as downloaded, first start, nothing changed | clean install |
 | `enforce` | `shipped` plus the **one** step the product's own documentation names to make it refuse connections. CG: `operation.mode: ENFORCE`. VPNGuard: `join-enforcement.enabled: true` (= `/vpnkick on`). FoxGate and ProxyShield block out of the box, so no step. | headline detection, false positives, failure safety, performance, Redis, platforms, reload |
-| `proxycheck_key` | `enforce` plus the free ProxyCheck key only, set through each product's documented key field (all four support it) | detection quality per decision |
-| `free_keys` | `enforce` plus a free ProxyCheck key and a free VPNAPI key, set through each product's documented key fields. All four products support both. | second detection pass, secret leakage |
+| `proxycheck_key` | `enforce` plus the free ProxyCheck key only, set through each product's documented key field. **Not run since 13 October 2026:** plugins get no keys. | (was: detection quality per decision) |
+| `free_keys` | `enforce` plus a free ProxyCheck key and a free VPNAPI key, set through each product's documented key fields. Since 13 October 2026 only with canary keys, which no provider accepts. | secret leakage |
 
 Profiles are data in each adapter. Section 10 explains how to contest them.
 
@@ -88,9 +88,9 @@ All outbound TCP of the product JVM is redirected by iptables to the **interpose
 - **Downloaded lists** (Tor list, X4BNet, proxy lists) follow the same rule. Two products that use the same list see the same list content. Conditional request headers (`If-None-Match`, `If-Modified-Since`) are removed and `304` answers are never recorded, so every product always receives the full list body.
 - **Telemetry, updaters and library downloads are blocked during measurement.** These are bStats, Sentry, CG Cloud, GitHub/Spigot/Modrinth/Paper version APIs and Maven repositories. Libraries are installed in the product's first start (the installed template), and FoxGate's self-updater could otherwise replace the artifact under test. After every case the harness checks that the product JAR's SHA-256 is unchanged and that no new JAR appeared.
 - **Quota normalisation.**
-  - *ProxyCheck:* keyless ProxyCheck allows 100 queries per day per egress address. The benchmark sends more lookups in an hour than a typical server sees in days, which would exhaust that quota through benchmark volume rather than product behaviour. For a keyless ProxyCheck request, the interposer attaches the operator's free key upstream. The product's request, cache key and the answer's schema are unchanged; this applies to every product equally.
+  - *ProxyCheck:* keyless ProxyCheck allows 100 queries per day per egress address. **Since 13 October 2026 nothing is attached:** plugins get no key, so a plugin that asks ProxyCheck without a key gets its 100 answers a day, as on a real server. Detection therefore runs every plugin on a runner of its own (7.1), so plugins never share those 100. Before, the interposer attached the operator's free key to keyless ProxyCheck requests.
   - *Other keyless services:* the subject pace (one subject per 5 s) keeps all products together under ip-api's 45 requests per minute.
-- **Keys.** Real keys exist only in the interposer process (environment variables, never in a product JVM's environment). Product configurations hold format-compatible **canaries**. The interposer swaps a canary for the real key only toward the host that key belongs to. Everywhere else the canary stays, which is what makes leakage measurable (section 7.8).
+- **Keys.** Plugin runs get no real key: `bench` drops `PROXYCHECK_KEY` and `VPNAPI_KEY` before the interposer starts, for every family except `providers` (7.9), whatever the caller passed. Before 13 October 2026, real keys existed only in the interposer process (environment variables, never in a product JVM's environment). Product configurations hold format-compatible **canaries**. The interposer swaps a canary for the real key only toward the host that key belongs to. Everywhere else the canary stays, which is what makes leakage measurable (section 7.8).
 - **Unknown egress.** Hosts that match no rule are recorded and appear in the per-case egress log. Non-HTTP egress (raw TCP) is refused and logged.
 
 ## 6. Detection dataset
@@ -99,14 +99,14 @@ All outbound TCP of the product JVM is redirected by iptables to the **interpose
 
 | Part | Renewed | Where |
 | --- | --- | --- |
-| Tor exits, public proxies | daily, at 00:05 UTC before the nightly run (`dataset` workflow) | `detection-v2/<date>/` |
+| Tor exits, public proxies | daily, at 00:05 UTC; the nightly detection runs start when it is built (`dataset` workflow) | `detection-v2/<date>/` |
 | VPN servers (commercial, new, IPv6), home and mobile probes | weekly, on the first build of an ISO week (RIPE Atlas archive of the day before) | `detection-v2/core/<year>-W<week>/` |
 | Freshness of Tor exits and proxies | at every run start (`bench.freshness`, below) | `datasets/freshness/` |
 
 - A day's version is the week's core plus that day's Tor exits and proxies; `detection-v2/CURRENT` names the newest. Each run records the version it used.
 - Sampling is deterministic per part (seed derived from `20261005` and the week or date). The cohorts, sizes and rules are those of v1 below.
 - An address keeps its id across versions (a hash of the address, or of the probe id and address family for volunteers). A table that combines runs counts every product on the addresses measured for all of them.
-- A table compares plugins on one core: the newest core on which every plugin shown has a complete pass (keyed if all have it there). Until every plugin is measured on a new core, the table stays on the previous one.
+- A table compares plugins on one core: the newest core on which every plugin shown has a complete keyless pass. Until every plugin is measured on a new core, the table stays on the previous one; within a week it follows the newest night.
 - The performance family keeps drawing its join wave around v1's home addresses, so its numbers stay comparable while the detection dataset is renewed.
 - **Source gate.** A source list whose upstream file has not changed for more than 14 days is left out of the day's build, with the date in the manifest. vakhov's proxy list is left out for this reason; proxies then need to be on both monosans and proxifly.
 - `python3 -m bench.dataset build-day [date]` builds a version; `python3 -m bench.dataset materialize <version>` rebuilds its private file from the public one and the RIPE Atlas archive and checks the hash.
@@ -200,13 +200,10 @@ Outcome classes (client-side, per join):
 - **Baselines.**
   - ProxyCheck is "blocked" when `proxy == "yes"`.
   - VPNAPI is "blocked" when any of `security.vpn`, `proxy`, `tor` or `relay` is true.
-  - Both are queried through the same interposer.
-- **Two questions, two passes.**
-  - **Capacity of the shipped configuration (`enforce`).** Some products limit their own keyless lookups per day (Connection Guard: 100 ProxyCheck queries, counted locally). When that limit ends lookups, the product admits unchecked. The `enforce` pass reports when that happened, as the subject index from which no lookup was made, and the detection rates over all subjects, which then mix both effects.
-  - **Detection quality per decision (`proxycheck_key`).** This is the headline for detection and false positives: every product gets the same free ProxyCheck key, so no product runs out of lookups during the 692 subjects.
-  - `free_keys` adds VPNAPI and runs only if both keys are configured.
-  - **Quota-safe chunks.** All products share one free ProxyCheck key (1,000 queries per day) and query it in different formats, about 5 queries per subject. The `proxycheck_key` pass therefore runs in nightly chunks (stable hash of the subject id, cohorts mixed), each after the key's daily reset. Within a subject every product is still measured in the same second; across chunks, provider data may drift by a few days, which the report states.
-  - **Weekly series** (from 12 October 2026): every week Monday to Friday, one fifth of the dataset a night, every plugin of the README, each night on that day's dataset version. The core is the same all week; each night measures that day's Tor exits and proxies.
+  - Both are queried through the same interposer. Since 13 October 2026 neither is measured in plugin runs: VPNAPI needs a key, and a keyless ProxyCheck baseline would spend the plugin's 100 lookups. The `providers` family measures both on their own.
+- **One pass, as shipped (`enforce`, since 13 October 2026).** No plugin gets an API key. Some plugins limit their own keyless lookups per day (Connection Guard: 100 ProxyCheck queries, counted locally), and keyless ProxyCheck answers 100 a day per address anyway. When a limit ends lookups, the plugin decides with what it has left or admits unchecked; the detection rates over all subjects include that, as on a server with more than 100 new players a day. The pass reports the subject index from which no lookup was made.
+- **Nightly, one run per plugin.** When the day's dataset version is built (00:05 UTC), every plugin of the README gets a full pass on that version in a workflow run of its own, so on a runner and egress address of its own: plugins never share a keyless quota. "Record once, serve to all" (section 5) then holds within a plugin's run; plugins measured in different runs of the same night may get answers a few hours apart. Every night is complete on its own, so the README follows the newest night.
+- **Until 12 October 2026:** the headline was `proxycheck_key` (every plugin with the same free ProxyCheck key, run in nightly chunks under the key's 1,000 a day, from 12 October as a Monday-to-Friday series), with `enforce` as the capacity pass and `free_keys` as a second pass. Those results stay in their runs; the README no longer shows them.
 - **Hosting addresses.** Blocking datacenter addresses is a policy choice. The dataset has no hosting cohort, so "blocks hosting" never counts as either detection or false positive.
 
 ### 7.2 Failure safety (Velocity, `enforce`)
@@ -237,7 +234,7 @@ Outcome classes (client-side, per join):
 
 ### 7.3 Performance (Velocity, then Paper)
 
-- **Profiles.** `enforce` and `free_keys` are run as separate passes. Keyless defaults can carry a product-enforced daily quota (CG counts ProxyCheck's 100 keyless queries per day locally), which ends lookups during a long test. Under template replay no request reaches a real provider, so `free_keys` removes that confound without spending quota.
+- **Profiles.** `enforce` (until 13 October 2026 also `free_keys`, as a separate pass). Keyless defaults can carry a product-enforced daily quota (CG counts ProxyCheck's 100 keyless queries per day locally), which ends lookups during a long test. Under template replay no request reaches a real provider, so `free_keys` removes that confound without spending quota.
 - **Provider quotas.** Template replay enforces each provider's published free-tier limit (ip-api 45/min, ProxyCheck 1,000/day with key, VPNAPI 1,000/day, ipapi.is 1,000/day, freeipapi 60/min; list in `heavy.PROVIDER_QUOTAS` with sources) and answers 429 above it, as the real service would. Providers without a published limit are not limited, and the report names them. Without this, a product that fans out to many keyless services would appear to scale without limit in replay.
 - **Latency model.** Lookup APIs are served from **template replay**: each product's own recorded answer for one reference residential subject, with the subject address substituted. The added latency is log-normal, median 120 ms, p95 350 ms, seeded, and identical for every product. No request leaves the container. Subjects are synthetic addresses in the /12 networks around residential cohort addresses, never inside a volunteer's own /24. Published logs mask every address that is not a dataset id.
 - **Phases per round, each on a fresh instance:**
@@ -323,7 +320,7 @@ File permissions of the configured key files are reported for information. Every
 
 No plugin and no server: the harness sends every dataset address straight to each detection service and reads the answer the way the plugins do. This measures the data source, separately from any plugin's use of it.
 
-- **Fair use.** One request per second per service (1.5 s for IP-API, whose free limit is 45 a minute), an identifying User-Agent, the service's own daily quota as a hard stop. A `429` is retried once after 60 s. Keys are used only where configured (`docs/KEYS.md`); the shared `PROXYCHECK_KEY` is not used by this family, so its quota stays with the nightly detection chunks.
+- **Fair use.** One request per second per service (1.5 s for IP-API, whose free limit is 45 a minute), an identifying User-Agent, the service's own daily quota as a hard stop. A `429` is retried once after 60 s. Keys are used only where configured (`docs/KEYS.md`). This family is the only one that uses API keys; plugins never get one. ProxyCheck and VPNAPI get theirs with `use_keys` (ProxyCheck from `PROXYCHECK_KEY_2`, else `PROXYCHECK_KEY`).
 - **Order.** Cohorts are interleaved in a seeded order (seed `20261007`) in proportion to their size. A service whose quota is smaller than the dataset therefore answers a sample with every cohort in it. The unanswered rest is `not_queried`.
 - **Reading an answer.**
   - `positive`: any explicit VPN, proxy or Tor flag.
@@ -392,6 +389,12 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
 ## Corrections and changes after the first published run
+
+- **2026-10-13, no API keys for plugins** (owner decision). Keys are used only for the detection services measured on their own (`providers`, 7.9).
+  - Plugin runs drop any key before the interposer starts, and the workflow passes keys only to the `providers` family. Keyless ProxyCheck requests no longer get the free key attached (section 5).
+  - Detection runs nightly, as shipped (`enforce`), the full dataset, one workflow run per plugin, started when the day's dataset version is built. The keyed Monday-to-Friday series ends after two nights (12 and 13 October).
+  - The README shows plugins only from runs without a key. Measured again without one: every plugin's detection, and FoxGate's, ProxyShield's and VPNGuard's functional and failure results (runs 37540302788 and 37593590733 had keys configured). Performance (template replay, no real provider) and the other results already came from runs without keys.
+  - Plugins that ask ProxyCheck without a key get its 100 answers a day; the graphic says so under the detection table.
 
 - **2026-10-07, FoxGate adapter: `api.zowi.gay` was missing from `lookup_hosts`.** FoxGate asks it once per player address. Connection Guard's adapter listed the same host; FoxGate's did not.
   - *Performance* (run 37540317765): FoxGate's zowi lookups went to the live service instead of the simulated one, about 1,000 synthetic addresses at 50 a second, while every other service ran at the simulated latency. FoxGate's performance numbers of that run are not comparable.

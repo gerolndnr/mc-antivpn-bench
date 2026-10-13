@@ -143,8 +143,8 @@ def slide_detection(d):
     for p in sorted(det.get('unnormalized', set())):
         if p in cols and blocked[p] < n_bad / 2:
             marks[p] = '*'
-            notes.append(f'* {esc(names[p])}: measured without the free ProxyCheck key the others\' keyless requests got; its own free '
-                         'quotas ran out after about 100 players. A keyed run for every plugin replaces this.')
+            notes.append(f'* {esc(names[p])}: asks ProxyCheck without a key, as shipped; its free 100 lookups a day ran out '
+                         'after about 100 players.')
     for p in cols:
         if overview.after_join(p):
             marks[p] = marks.get(p, '') + '†'

@@ -118,6 +118,11 @@ async def baseline_query(host, path, timeout=20):
 async def baselines(subject, canaries):
     ip = subject['ip']
     out = {}
+    if not os.environ.get('PROXYCHECK_KEY'):
+        # Keyless, the baseline would spend the plugins' free 100 ProxyCheck lookups a day on this runner's address.
+        out['proxycheck'] = dict(status=None, decision=None, error='not measured: no key in plugin runs')
+        out['vpnapi'] = dict(status=None, decision=None, error='not measured: no key in plugin runs')
+        return out
     try:
         status, body = await baseline_query('proxycheck.io', f'/v2/{urllib.parse.quote(ip)}?vpn=1&asn=1&key='
                                                               f'{canaries["proxycheck"]}')

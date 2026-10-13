@@ -197,8 +197,8 @@ def detection(dirs):
         subset = [r for r in rows if r['cohort'] == cid]
         if subset:
             cohorts[cid] = dict(n=len(subset), blocked={p: sum(1 for r in subset if r['products'].get(p, {}).get('blocked')) for p in products})
-    # Measured without the free ProxyCheck key that keyless ProxyCheck requests otherwise get (METHODOLOGY 7.1), for
-    # plugins that ask ProxyCheck: their own free daily quota ends their lookups, the others' did not.
+    # Measured without any key (METHODOLOGY 5), for plugins that ask ProxyCheck: its free 100 lookups a day per server
+    # end their lookups.
     unnormalized = {p for p in keyless if 'proxycheck.io' in (adapter_of(p).get('lookup_hosts') or [])}
     return dict(profile=profile, subjects=len(rows), products=products, cohorts=cohorts, unnormalized=unnormalized,
                 stale=stale_counts(stale), unshared=len(unshared - set(stale)), contested=len(disputed))
@@ -661,9 +661,9 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         if bare and det['profile'] == 'enforce':
             who = ', '.join(names[pid] for pid in bare)
             body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
-                              f'{esc(who)}: measured in a later run without the free ProxyCheck key that keyless ProxyCheck requests got in '
-                              'the others\' run, so ProxyCheck answered it only its free 100 a day. Replaced by the keyed result once every '
-                              'plugin has one (13 October).</td>']))
+                              f'{esc(who)} ask{"s" if len(bare) == 1 else ""} ProxyCheck without a key, as shipped. ProxyCheck answers '
+                              '100 such lookups a day per server; each plugin ran on a server of its own, and after its 100 '
+                              'ProxyCheck answered it no more, as on a busy real server.</td>']))
         gone = stale_note(det.get('stale') or {})
         if gone:
             body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'

@@ -1,11 +1,12 @@
 # Provider keys
 
-Two free keys enable the `free_keys` profile, the VPNAPI baseline and quota normalisation for keyless ProxyCheck (METHODOLOGY 5). Without them, those parts are reported as *not measured*.
+**Plugins never get an API key** (owner decision, 13 October 2026; METHODOLOGY 5). Keys are used only by the `providers` family, which measures the detection services on their own (METHODOLOGY 7.9). The workflow passes keys only to that family, and `bench` drops `PROXYCHECK_KEY` and `VPNAPI_KEY` for every other family before the interposer starts, so a plugin's request can never carry one.
 
-| Secret | Where | Free tier |
-| --- | --- | --- |
-| `PROXYCHECK_KEY` | <https://proxycheck.io/dashboard/> | 1,000 queries per day |
-| `VPNAPI_KEY` | <https://vpnapi.io/dashboard> | 1,000 queries per day |
+| Secret | Where | Free tier | Used by |
+| --- | --- | --- | --- |
+| `PROXYCHECK_KEY` | <https://proxycheck.io/dashboard/> | 1,000 queries per day | `providers` with `use_keys`, when `PROXYCHECK_KEY_2` is not set |
+| `PROXYCHECK_KEY_2` | a second ProxyCheck account | 1,000 queries per day | `providers` with `use_keys` |
+| `VPNAPI_KEY` | <https://vpnapi.io/dashboard> | 1,000 queries per day | `providers` with `use_keys` |
 
 Create the accounts yourself, then add the keys as repository secrets: *Settings → Secrets and variables → Actions → New repository secret*. Alternatively, run in your own terminal:
 
@@ -14,15 +15,7 @@ gh secret set PROXYCHECK_KEY -R gerolndnr/mc-antivpn-bench
 gh secret set VPNAPI_KEY -R gerolndnr/mc-antivpn-bench
 ```
 
-`gh` asks for the value interactively, so it never lands in your shell history.
-
-**A second ProxyCheck key (optional).** The weekly keyed detection series (Monday to Friday, one fifth of the dataset a night) uses `PROXYCHECK_KEY`, and one free key allows 1,000 queries a day. A manual run started with `use_keys` uses `PROXYCHECK_KEY_2` instead when it is set, so it never spends the nightly quota:
-
-```sh
-gh secret set PROXYCHECK_KEY_2 -R gerolndnr/mc-antivpn-bench
-```
-
-Without it, a manual `use_keys` run falls back to `PROXYCHECK_KEY`. The `providers` family sends a ProxyCheck key only from `PROXYCHECK_KEY_2`; without it, it asks ProxyCheck keyless.
+`gh` asks for the value interactively, so it never lands in your shell history. Without `use_keys`, the `providers` family asks ProxyCheck and VPNAPI keyless.
 
 The `providers` family (METHODOLOGY 7.9) also measures services that only answer with a free key. Each is optional; a service without its key is skipped and listed as such:
 
@@ -37,7 +30,7 @@ The `providers` family (METHODOLOGY 7.9) also measures services that only answer
 
 For local runs, put the keys in `.env` (git-ignored) and pass `--env-file .env` to `docker run`.
 
-The keys are passed only to the interposer process. Product configurations receive canaries, and logs and results redact both the canary and the real value. A full detection pass uses about 692 queries per provider.
+Until 13 October 2026, plugin runs could get the keys too: only in the interposer process, with canaries in the product configurations. The secret-leakage test still writes canaries into the configurations; no provider accepts them.
 
 ## Private artifacts (`ARTIFACT_KEY`)
 

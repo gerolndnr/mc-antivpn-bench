@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  schedule:
-    # Nightly detection chunks for the proxycheck_key profile: one chunk per UTC day keeps all
-    # products' ProxyCheck lookups under one free key's daily quota (see METHODOLOGY 7.1).
-    - cron: '20 0 * * *'
+  # Nightly detection (METHODOLOGY 7.1): once the day's dataset version is built, one run per plugin, without keys.
+  workflow_run:
+    workflows: [dataset]
+    types: [completed]
   workflow_dispatch:
     inputs:
       family:
@@ -46,7 +46,7 @@ on:
         description: Detection dataset version (v1, or a v2 day YYYY-MM-DD; empty = the newest day)
         default: ''
       use_keys:
-        description: Pass the API keys (ProxyCheck from PROXYCHECK_KEY_2 when set, so the nightly key's quota stays untouched)
+        description: providers family only - give ProxyCheck and VPNAPI their key (plugins never get a key)
         type: boolean
         default: false
 
@@ -56,6 +56,7 @@ permissions:
 
 jobs:
   contracts:
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,8 +66,31 @@ jobs:
       - run: pip install cryptography==43.0.3 pyyaml==6.0.2 h2==4.1.0
       - run: PYTHONPATH=harness python -m unittest discover -s tests -v
 
+  # Every plugin gets a run (and so a runner, with its own address) of its own: five of them ask ProxyCheck without a
+  # key, which answers 100 lookups a day per address, so plugins sharing a runner would share those 100. All runs
+  # measure the same day's dataset version, pinned here.
+  nightly:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'schedule' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: One detection run per plugin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat datasets/detection-v2/CURRENT)
+          for product in connection-guard-061 foxgate proxyshield vpnguard kaurivpn advancedantivpn; do
+            gh workflow run bench.yml --ref main -f family=detection -f products="$product" -f detection_profiles=enforce -f dataset="$version"
+            echo "detection on $version: $product"
+          done
+
   bench:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'workflow_dispatch'
     needs: contracts
     runs-on: ubuntu-latest
     timeout-minutes: 350
@@ -74,32 +98,16 @@ jobs:
       RUN_ID: ${{ github.run_id }}-${{ inputs.family || 'detection' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Nightly chunk
+      - name: Inputs
         id: nightly
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            # Weekly keyed series (METHODOLOGY 7.1): Monday to Friday, one fifth of the dataset a night, each night on
-            # that day's dataset version (same core all week, that day's Tor exits and proxies). Chunks split by the
-            # stable id, so the five nights cover the core once. About 6 ProxyCheck queries per subject (baseline and
-            # five plugins that ask it) x 139 subjects stay under one free key's 1,000 a day.
-            dow=$(date -u +%u)
-            if [ "$dow" -gt 5 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-            echo "family=detection" >> "$GITHUB_OUTPUT"
-            echo "chunk=$(( dow - 1 ))/5" >> "$GITHUB_OUTPUT"
-            echo "profiles=proxycheck_key" >> "$GITHUB_OUTPUT"
-            echo "products=connection-guard-061,foxgate,proxyshield,vpnguard,kaurivpn,advancedantivpn" >> "$GITHUB_OUTPUT"
-            echo "dataset=$(cat datasets/detection-v2/CURRENT)" >> "$GITHUB_OUTPUT"
-          else
-            echo "family=${{ inputs.family }}" >> "$GITHUB_OUTPUT"
-            echo "chunk=${{ inputs.detection_chunk }}" >> "$GITHUB_OUTPUT"
-            echo "profiles=${{ inputs.detection_profiles }}" >> "$GITHUB_OUTPUT"
-            echo "products=${{ inputs.products }}" >> "$GITHUB_OUTPUT"
-            echo "dataset=${{ inputs.dataset }}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "family=${{ inputs.family }}" >> "$GITHUB_OUTPUT"
+          echo "chunk=${{ inputs.detection_chunk }}" >> "$GITHUB_OUTPUT"
+          echo "profiles=${{ inputs.detection_profiles }}" >> "$GITHUB_OUTPUT"
+          echo "products=${{ inputs.products }}" >> "$GITHUB_OUTPUT"
           # Empty: the newest v2 day (or v1 before the first v2 build).
-          if ! grep -q '^dataset=.' "$GITHUB_OUTPUT"; then
-            echo "dataset=$(cat datasets/detection-v2/CURRENT 2>/dev/null || echo v1)" >> "$GITHUB_OUTPUT"
-          fi
+          dataset="${{ inputs.dataset }}"
+          echo "dataset=${dataset:-$(cat datasets/detection-v2/CURRENT 2>/dev/null || echo v1)}" >> "$GITHUB_OUTPUT"
       - name: Host description
         run: |
           echo "BENCH_HOST_DESCRIPTION=GitHub-hosted $(nproc) vCPU, $(free -g | awk '/Mem/{print $2}') GB, $(lscpu | sed -n 's/Model name: *//p')" >> "$GITHUB_ENV"
@@ -153,22 +161,20 @@ jobs:
           done
       - name: Run
         env:
-          # Nightly chunks always get the keys; a manual run only with use_keys. A manual run uses the second ProxyCheck
-          # key when it is set, so it never spends the nightly chunks' daily quota (docs/KEYS.md).
-          PROXYCHECK_KEY: ${{ github.event_name == 'schedule' && secrets.PROXYCHECK_KEY || (inputs.use_keys && (secrets.PROXYCHECK_KEY_2 || secrets.PROXYCHECK_KEY)) || '' }}
-          VPNAPI_KEY: ${{ (github.event_name == 'schedule' || inputs.use_keys) && secrets.VPNAPI_KEY || '' }}
-          # providers family: ProxyCheck gets a key only from the second key, never from the nightly chunks' key.
-          BENCH_PROVIDERS_PROXYCHECK_KEY: ${{ github.event_name != 'schedule' && inputs.use_keys && secrets.PROXYCHECK_KEY_2 != '' && '1' || '' }}
+          # Keys reach only the providers family (the detection services measured on their own, METHODOLOGY 7.9).
+          # Plugins never get a key; bench drops any it is given for the other families as well.
+          PROXYCHECK_KEY: ${{ inputs.family == 'providers' && inputs.use_keys && (secrets.PROXYCHECK_KEY_2 || secrets.PROXYCHECK_KEY) || '' }}
+          VPNAPI_KEY: ${{ inputs.family == 'providers' && inputs.use_keys && secrets.VPNAPI_KEY || '' }}
+          BENCH_PROVIDERS_PROXYCHECK_KEY: ${{ inputs.family == 'providers' && inputs.use_keys && '1' || '' }}
           # providers family: optional free keys (set by the owner); a service without its key is skipped.
-          PROVIDER_KEY_IPAPI_IS: ${{ secrets.PROVIDER_KEY_IPAPI_IS }}
-          PROVIDER_KEY_IPLOCATE: ${{ secrets.PROVIDER_KEY_IPLOCATE }}
-          PROVIDER_KEY_IP2LOCATION: ${{ secrets.PROVIDER_KEY_IP2LOCATION }}
-          PROVIDER_KEY_IPHUB: ${{ secrets.PROVIDER_KEY_IPHUB }}
+          PROVIDER_KEY_IPAPI_IS: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPAPI_IS || '' }}
+          PROVIDER_KEY_IPLOCATE: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPLOCATE || '' }}
+          PROVIDER_KEY_IP2LOCATION: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IP2LOCATION || '' }}
+          PROVIDER_KEY_IPHUB: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPHUB || '' }}
           BENCH_PROVIDER_SERVICES: ${{ inputs.services }}
           BENCH_DATASET: ${{ steps.nightly.outputs.dataset }}
         run: |
           mkdir -p "$RUNNER_TEMP/work"
-          [ "${{ steps.nightly.outputs.skip }}" = "true" ] && exit 0
           args="run ${{ steps.nightly.outputs.family }} --run-id $RUN_ID"
           [ -n "${{ steps.nightly.outputs.products }}" ] && args="$args --products ${{ steps.nightly.outputs.products }}"
           [ -n "${{ inputs.platforms }}" ] && args="$args --platforms ${{ inputs.platforms }}"
@@ -178,7 +184,7 @@ jobs:
             -e BENCH_DETECTION_LIMIT="${{ inputs.detection_limit }}" -e BENCH_PERF_PROFILES="${{ inputs.perf_profiles }}" -e BENCH_PERF_ROUNDS="${{ inputs.perf_rounds || '3' }}" -e BENCH_DETECTION_PROFILES="${{ steps.nightly.outputs.profiles }}" -e BENCH_DETECTION_CHUNK="${{ steps.nightly.outputs.chunk }}" \
             --entrypoint python3 mc-antivpn-bench:ci -m bench $args
       - name: Overview graphic of this run
-        if: always() && steps.nightly.outputs.skip != 'true'
+        if: always()
         env:
           GITHUB_TOKEN: ${{ github.token }}  # bench.freshness reads proxifly's list history
         run: |

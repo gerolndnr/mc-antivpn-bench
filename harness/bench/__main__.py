@@ -198,6 +198,11 @@ async def main_run(args):
     recorder = Recorder(run_id)
     if args.family == 'providers':
         return providers_run(args, run_id, recorder)
+    # Plugins never get an API key (METHODOLOGY 5): keys are for the providers family only. Dropped here, before the
+    # interposer starts, so no request of a plugin (nor the baselines) can carry one, whatever the caller passed.
+    from .servers import SECRET_ENV
+    for name in SECRET_ENV:
+        os.environ.pop(name, None)
     canaries_path = os.path.join(engine.WORK, 'state', 'canaries.json')
     os.makedirs(os.path.dirname(canaries_path), exist_ok=True)
     if os.path.exists(canaries_path):
