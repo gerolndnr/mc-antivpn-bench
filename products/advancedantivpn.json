@@ -62,6 +62,22 @@
         }
       ],
       "note": "enforce + the free ProxyCheck and VPNAPI keys through their documented key fields."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "Services.ProxyCheck.Key": "{canary:proxycheck}",
+            "Services.VPNAPI.Key": "{canary:vpnapi}",
+            "Services.IPHub.Enabled": true,
+            "Services.IPHub.Key": "{canary:iphub}",
+            "Flagged Threshold": 2
+          }
+        }
+      ],
+      "note": "Best documented configuration (METHODOLOGY 4): IP-API, ProxyCheck and VPNAPI as in enforce, plus IPHub, each with a free key; Flagged Threshold stays 2. Simulated on the providers run of 13 Oct: 367 of 378 caught and 3 of 310 refused, against 358 and 3 for the enforce services with keys. GetIPIntel (500 a day, 15 a minute, real contact address required) and IPHunter (6.2 points in the providers run) are left off; IPQualityScore joins once its key is set."
     }
   },
   "redis": null,

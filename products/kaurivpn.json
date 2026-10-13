@@ -41,6 +41,11 @@
       "extends": "enforce",
       "edits": [],
       "note": "No ProxyCheck or VPNAPI key fields; the paid funkemunky.cc licence is not a free key. Measured as enforce."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [],
+      "note": "Same as enforce: KauriVPN asks only its author's service, and its key field is a paid licence, not a free key. Nothing to configure better."
     }
   },
   "redis": null,

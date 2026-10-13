@@ -64,6 +64,27 @@
         }
       ],
       "note": "Adds the free ProxyCheck and VPNAPI keys through the product's documented key fields."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn-failover.order": [
+              "zowi",
+              "blackbox",
+              "ipquery",
+              "proxycheck",
+              "ipcheck",
+              "ip-api"
+            ],
+            "provider.vpn.proxycheck.enabled": false,
+            "provider.vpn.blackbox.require-confirmation": true
+          }
+        }
+      ],
+      "note": "Best documented configuration (METHODOLOGY 4): failover order zowi, Blackbox (confirmed by Intel's hosting list), IPQuery; ProxyCheck off. In the providers runs of 7 and 13 Oct this caught 724 of 725 bad addresses and refused 2 of 616 clean ones; Blackbox before zowi refused none but caught 718 (99.0 vs 98.9 points, a tie). No free key improved it: every keyed service it supports (ProxyCheck, VPNAPI, IPHub) added refusals without catches. This is also the new-install order of PR #92."
     }
   },
   "redis": {

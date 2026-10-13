@@ -10,7 +10,7 @@ The suite is written and run by the maintainers of **Connection Guard**, one of 
 
 1. **Unmodified products.** Every product is the published JAR, downloaded from its official listing and checked against the listing's checksum. No product is patched, decompiled or re-implemented inside the harness.
 2. **The same environment for everyone.** One container image, JDK, server build, client, set of subjects, fault model and latency model for every product, configured by data files in [`products/`](products). The harness has no product-specific code paths beyond those files.
-3. **Shipped and documented configurations only.** Products run as shipped, with the single step their own documentation names to switch on blocking (section 4). No plugin gets an API key (from 13 October 2026; before, also with the same two free keys added through their own documented key fields). No hand-tuning, and every edit is listed in the adapter.
+3. **Shipped and documented configurations only.** Products run as shipped, with the single step their own documentation names to switch on blocking (section 4); that standard run gets no API key. A second run, `optimal`, uses each product's best documented configuration with free keys (section 4). The two are shown side by side, never mixed. Every edit is listed in the adapter.
 4. **Record once, serve to all.** When products send the same request to the same provider, they all get the same recorded answer (section 5). Time drift between products cannot favour anyone.
 5. **No combined score.** Every question is answered separately, per cohort, with its denominator, uncertainty and raw rows. The report never ranks products on a weighted total.
 6. **Everything public except volunteers' addresses.** Raw join rows, console logs and egress logs, all with subject addresses replaced by dataset ids. The adapters and this document are public too.
@@ -75,8 +75,18 @@ Either can be added through an adapter (section 10).
 | `enforce` | `shipped` plus the **one** step the product's own documentation names to make it refuse connections. CG: `operation.mode: ENFORCE`. VPNGuard: `join-enforcement.enabled: true` (= `/vpnkick on`). FoxGate and ProxyShield block out of the box, so no step. | headline detection, false positives, failure safety, performance, Redis, platforms, reload |
 | `proxycheck_key` | `enforce` plus the free ProxyCheck key only, set through each product's documented key field. **Not run since 13 October 2026:** plugins get no keys. | (was: detection quality per decision) |
 | `free_keys` | `enforce` plus a free ProxyCheck key and a free VPNAPI key, set through each product's documented key fields. Since 13 October 2026 only with canary keys, which no provider accepts. | secret leakage |
+| `optimal` | Each product's best configuration: only its own documented options and services, free keys in its documented key fields, chosen from the `providers` answers (7.9) by replaying the product's documented decision rule (failover order, or how many services must agree). The adapter's note gives the choice and the numbers. | second detection table, with keys (from 13 October 2026) |
 
 Profiles are data in each adapter. Section 10 explains how to contest them.
+
+**How `optimal` is chosen.**
+- Only options and services the product documents; nothing it would not let an operator do.
+- Free keys only (ProxyCheck, VPNAPI, IPHub, ipapi.is, IPLocate, IPQualityScore once set); no paid plan, no paid licence.
+- Choices are made on the `providers` runs of 7 and 13 October 2026 and measured afterwards on new nights. The detection runs share most of the core addresses with those runs, so the choice is fitted to part of the data it is measured on. The table says so.
+- Services left out on purpose:
+  - GetIPIntel: 500 a day, 15 a minute, and a real contact address that a burst could get banned.
+  - IPHunter: 6.2 points in the providers run.
+- A product's author can contest the choice (section 10).
 
 **Why "shipped" is not the headline.** Two products block nobody out of the box: CG in OBSERVE mode and VPNGuard with enforcement off. Calling that 0 % detection would measure a deliberate default, not the detection. The clean-install family still reports the as-shipped behaviour on its own.
 
@@ -203,6 +213,7 @@ Outcome classes (client-side, per join):
   - Both are queried through the same interposer. Since 13 October 2026 neither is measured in plugin runs: VPNAPI needs a key, and a keyless ProxyCheck baseline would spend the plugin's 100 lookups. The `providers` family measures both on their own.
 - **One pass, as shipped (`enforce`, since 13 October 2026).** No plugin gets an API key. Some plugins limit their own keyless lookups per day (Connection Guard: 100 ProxyCheck queries, counted locally), and keyless ProxyCheck answers 100 a day per address anyway. When a limit ends lookups, the plugin decides with what it has left or admits unchecked; the detection rates over all subjects include that, as on a server with more than 100 new players a day. The pass reports the subject index from which no lookup was made.
 - **Nightly, one run per plugin.** When the day's dataset version is built (00:05 UTC), every plugin of the README gets a full pass on that version in a workflow run of its own, so on a runner and egress address of its own: plugins never share a keyless quota. "Record once, serve to all" (section 5) then holds within a plugin's run; plugins measured in different runs of the same night may get answers a few hours apart. Every night is complete on its own, so the README follows the newest night.
+- **Best configuration with keys (`optimal`, from 13 October 2026).** Monday to Friday, a fifth of the dataset a night, every plugin in one run with the free keys. Splitting into fifths keeps all plugins within each key's daily quota (ProxyCheck 1,000). The week's five nights share one core; the table shows the newest complete week. It is the second detection table, beside the standard one, never merged with it.
 - **Until 12 October 2026:** the headline was `proxycheck_key` (every plugin with the same free ProxyCheck key, run in nightly chunks under the key's 1,000 a day, from 12 October as a Monday-to-Friday series), with `enforce` as the capacity pass and `free_keys` as a second pass. Those results stay in their runs; the README no longer shows them.
 - **Hosting addresses.** Blocking datacenter addresses is a policy choice. The dataset has no hosting cohort, so "blocks hosting" never counts as either detection or false positive.
 
@@ -389,6 +400,8 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
 ## Corrections and changes after the first published run
+
+- **2026-10-13, a second run with each plugin's best configuration and free keys** (owner decision). The standard run stays as shipped and keyless. Beside it, the `optimal` profile (section 4) runs Monday to Friday in fifths, all plugins in one keyed run, and gets its own detection table. Keys reach plugins only in a detection run of that profile alone; every other plugin run drops them (section 5). Clean installs now record the configuration files a product writes on its first start, the basis for these choices.
 
 - **2026-10-13, Connection Guard candidate re-pinned at PR #92 head 0b4757c** (JAR sha256 9a7b2604…13ff, adapter `connection-guard-candidate`). The new-install order is Intel, zowi, Blackbox (confirmed), IPQuery, with ProxyCheck off. It is measured against 0.6.1 (76665cc) before release. The adapter is now `pre_release`: it never enters the README overview, also not when it has the same version number as the shown 0.6.1 build.
 

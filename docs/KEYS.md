@@ -1,12 +1,16 @@
 # Provider keys
 
-**Plugins never get an API key** (owner decision, 13 October 2026; METHODOLOGY 5). Keys are used only by the `providers` family, which measures the detection services on their own (METHODOLOGY 7.9). The workflow passes keys only to that family, and `bench` drops `PROXYCHECK_KEY` and `VPNAPI_KEY` for every other family before the interposer starts, so a plugin's request can never carry one.
+**Where keys are used** (owner decisions, 13 October 2026):
+- The `providers` family measures the detection services on their own (METHODOLOGY 7.9).
+- The `optimal` detection series runs each plugin's best configuration with free keys (METHODOLOGY 4). It runs Monday to Friday, a fifth of the dataset a night.
+
+The standard plugin runs never get a key. The workflow passes keys only to those two, and `bench` drops every key for any other run before the interposer starts. In the optimal series, plugin configurations hold canaries, and the interposer swaps them for the real key only toward that key's own host.
 
 | Secret | Where | Free tier | Used by |
 | --- | --- | --- | --- |
-| `PROXYCHECK_KEY` | <https://proxycheck.io/dashboard/> | 1,000 queries per day | `providers` with `use_keys`, when `PROXYCHECK_KEY_2` is not set |
+| `PROXYCHECK_KEY` | <https://proxycheck.io/dashboard/> | 1,000 queries per day | the `optimal` series; `providers` only when `PROXYCHECK_KEY_2` is not set |
 | `PROXYCHECK_KEY_2` | a second ProxyCheck account | 1,000 queries per day | `providers` with `use_keys` |
-| `VPNAPI_KEY` | <https://vpnapi.io/dashboard> | 1,000 queries per day | `providers` with `use_keys` |
+| `VPNAPI_KEY` | <https://vpnapi.io/dashboard> | 1,000 queries per day | `providers` with `use_keys`, the `optimal` series |
 
 Create the accounts yourself, then add the keys as repository secrets: *Settings → Secrets and variables → Actions → New repository secret*. Alternatively, run in your own terminal:
 
