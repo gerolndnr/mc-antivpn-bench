@@ -401,6 +401,8 @@ The adapters for products without public source code are written from their publ
 
 ## Corrections and changes after the first published run
 
+- **2026-10-13, Connection Guard 0.6.1 released** (tag at 004d505, JAR sha256 c7eb9714…0446, as in the release's SHA256SUMS). Its plugin code is that of 46821a2 / a536f7a measured before; between them only the version, documentation and one test changed. The 0.6.1 column now pins the release JAR; runs on 46821a2 stay valid for it.
+
 - **2026-10-13, Connection Guard 0.6.1 measured at its release code** (master a536f7a, same tree as 46821a2; JAR sha256 bbab24ed…12eb). The README's Connection Guard column moves from 76665cc to it; every family that feeds the graphic is measured again. Its acceptance as a candidate: detection 363/364 caught and 2/310 refused (76665cc: 4), all failure, Redis, platform, install and upgrade checks passed, same-run performance equal to 76665cc.
 
 - **2026-10-13, a second run with each plugin's best configuration and free keys** (owner decision). The standard run stays as shipped and keyless. Beside it, the `optimal` profile (section 4) runs nightly in fifths, all plugins in one keyed run, and gets its own detection table. Keys reach plugins only in a detection run of that profile alone; every other plugin run drops them (section 5). Clean installs now record the configuration files a product writes on its first start, the basis for these choices.

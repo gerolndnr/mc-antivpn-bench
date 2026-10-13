@@ -1,15 +1,15 @@
 {
   "id": "connection-guard-061",
-  "name": "Connection Guard 0.6.1 (release code, 46821a2)",
-  "relationship": "Connection Guard 0.6.1 as released: master a536f7a, the same source tree as PR #92 head 46821a2 (new provider order, dashboard-managed order), shown as \"Connection Guard v0.6.1\" in the README overview. Earlier measured at 76665cc and feffbfb. Same adapter as 0.6.0.",
+  "name": "Connection Guard 0.6.1",
+  "relationship": "Connection Guard 0.6.1 as released (tag 0.6.1 at 004d505, published 13 Oct 2026); its plugin code is that of master a536f7a and PR #92 head 46821a2, measured before the release. Shown as \"Connection Guard v0.6.1\" in the README overview. Same adapter as 0.6.0.",
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
   "pins": {
-    "paper": "connectionguard-0.6.1-candidate-46821a2",
-    "folia": "connectionguard-0.6.1-candidate-46821a2",
-    "velocity": "connectionguard-0.6.1-candidate-46821a2",
-    "bungee": "connectionguard-0.6.1-candidate-46821a2"
+    "paper": "connectionguard-0.6.1",
+    "folia": "connectionguard-0.6.1",
+    "velocity": "connectionguard-0.6.1",
+    "bungee": "connectionguard-0.6.1"
   },
   "previous_pins": {
     "paper": "connectionguard-0.6.0-candidate-c4b67eb",
