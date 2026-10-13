@@ -23,9 +23,6 @@
     },
     "detection-optimal": {},
     "failure": {
-      "advancedantivpn": [
-        "37624132539"
-      ],
       "connection-guard": [
         "37317379098"
       ],
@@ -34,9 +31,6 @@
       ],
       "foxgate": [
         "38365765382"
-      ],
-      "kaurivpn": [
-        "37624132539"
       ],
       "proxyshield": [
         "38365765382"
@@ -183,7 +177,6 @@
     "detection-optimal": [],
     "failure": [
       "37317379098",
-      "37624132539",
       "38365765382",
       "38388533641"
     ],
