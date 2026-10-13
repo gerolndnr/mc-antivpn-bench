@@ -68,6 +68,13 @@ def pre_release(product_id):
     return os.path.exists(path) and bool(json.load(open(path)).get('pre_release'))
 
 
+def withheld(product_id):
+    """A product whose results are held back from the overview until a doubt about the measurement is resolved; the
+    adapter's `withheld` says why (METHODOLOGY, correction log). Its runs continue and stay in the run artifacts."""
+    path = os.path.join(overview.ROOT, 'products', f'{product_id}.json')
+    return os.path.exists(path) and bool(json.load(open(path)).get('withheld'))
+
+
 def load(path):
     try:
         with open(path) as handle:
@@ -169,6 +176,9 @@ def select(repo, base, limit=250):
         cores = sorted({c for p in measured for x, c in detection[p] if x in profiles}, key=lambda c: (c != 'v1', c), reverse=True)
         pick = next(((x, c) for c in cores for x in profiles if all((x, c) in detection[p] for p in measured)), fallback)
         return {p: detection[p][pick] for p in measured if pick in detection[p]}, pick
+    detection = {p: v for p, v in detection.items() if not withheld(p)}
+    for family in chosen:
+        chosen[family] = {p: v for p, v in chosen[family].items() if not withheld(p)}
     chosen['detection'], pick = table(HEADLINE, ('enforce', 'v1'))
     chosen['detection-optimal'], _ = table([OPTIMAL], None)
     return chosen, providers, pick[0]

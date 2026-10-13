@@ -85,6 +85,8 @@ class Recorder:
         """Dataset addresses become their ids; every other non-loopback address becomes <ip>; a bought product's
         buyer id becomes <purchaser>."""
         text = private.redact(text)
+        for name, value in engine.licence_values().items():
+            text = text.replace(value, f'<SECRET:{name}>')
         for ip in self._sorted:
             if ip in text:
                 text = text.replace(ip, self.subject_map[ip])
@@ -98,6 +100,8 @@ class Recorder:
         base = os.path.join(self.private, family)
         os.makedirs(base, exist_ok=True)
         if console is not None:
+            for key, value in engine.licence_values().items():
+                console = console.replace(value, f'<SECRET:{key}>')
             open(os.path.join(base, name + '.console.log'), 'w').write(console)
         if egress is not None:
             with open(os.path.join(base, name + '.egress.jsonl'), 'w') as handle:

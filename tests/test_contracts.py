@@ -1046,3 +1046,39 @@ class CommandSettle(unittest.TestCase):
         took, out = self.run_command([])
         self.assertEqual(out, [])
         self.assertGreaterEqual(took, 3.9)
+
+
+class JarvisMeasurement(unittest.TestCase):
+    def test_player_names_look_real_and_never_repeat(self):
+        from bench import scenarios
+        names = [scenarios.player_name(i) for i in range(5000)]
+        self.assertEqual(len(set(names)), len(names))
+        for name in names:
+            self.assertRegex(name, r'^[A-Za-z0-9_]{3,16}$')
+            self.assertNotRegex(name, r'\d{3,}')  # no series numbers like jarvis000123
+        self.assertNotEqual(scenarios.player('jarvis')[:6], 'jarvis')
+
+    def test_licence_key_goes_in_as_itself_and_is_masked_in_results(self):
+        env = engine.KEYS['jarvis'][0]
+        canaries = engine.make_canaries(seed=0)
+        old = os.environ.pop(env, None)
+        try:
+            self.assertEqual(engine.substitute('{licence:jarvis}', canaries), canaries['jarvis'])
+            os.environ[env] = 'REALKEY0123456789ABCDEF0123456789'
+            self.assertEqual(engine.substitute('{licence:jarvis}', canaries), 'REALKEY0123456789ABCDEF0123456789')
+            self.assertEqual(engine.substitute('{canary:proxycheck}', canaries), canaries['proxycheck'])
+            from bench.__main__ import Recorder
+            recorder = Recorder.__new__(Recorder)
+            recorder.subject_map, recorder._sorted = {}, []
+            self.assertEqual(recorder.redact('key: REALKEY0123456789ABCDEF0123456789'), 'key: <SECRET:jarvis>')
+        finally:
+            os.environ.pop(env, None)
+            if old is not None:
+                os.environ[env] = old
+
+    def test_withheld_products_stay_out_of_the_overview(self):
+        from bench import latest
+        self.assertTrue(latest.withheld('jarvis'))
+        self.assertFalse(latest.withheld('connection-guard-061'))
+        adapter = json.load(open(os.path.join(ROOT, 'products', 'jarvis.json')))
+        self.assertEqual(adapter['profiles']['enforce']['edits'][0]['set']['key'], '{licence:jarvis}')

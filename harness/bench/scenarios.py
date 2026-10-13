@@ -5,6 +5,8 @@ written next to it by the caller; records never contain real keys (the interpose
 redacts) and never contain residential addresses (subjects are referenced by id).
 """
 import asyncio
+import datetime
+import hashlib
 import json
 import os
 import re
@@ -34,9 +36,44 @@ def subjects(cohorts, per_cohort=1, offset=0):
     return out
 
 
-def player(prefix):
+# Player names look like real players' (an adjective, a noun, sometimes two digits), never like a series: a plugin
+# that judges names (Jarvis) flagged the former `<prefix>000123` names as bots. The same for every plugin.
+NAME_FIRST = ('Amber', 'Arctic', 'Ashen', 'Blue', 'Bold', 'Brave', 'Bright', 'Calm', 'Cedar', 'Cosmic', 'Crisp', 'Dark',
+              'Dusty', 'Early', 'Ember', 'Faint', 'Fancy', 'Fast', 'Frosty', 'Gentle', 'Ghost', 'Golden', 'Grand', 'Green',
+              'Happy', 'Hidden', 'Hollow', 'Icy', 'Iron', 'Jade', 'Jolly', 'Lazy', 'Little', 'Lone', 'Lucky', 'Lunar',
+              'Mellow', 'Misty', 'Mossy', 'Noble', 'Odd', 'Pale', 'Proud', 'Quick', 'Quiet', 'Rapid', 'Red', 'Rusty',
+              'Salty', 'Silent', 'Silver', 'Sleepy', 'Sly', 'Snowy', 'Solar', 'Stormy', 'Sunny', 'Swift', 'Tiny',
+              'Wild', 'Windy', 'Witty', 'Young', 'Zesty')
+NAME_SECOND = ('Badger', 'Bear', 'Beetle', 'Birch', 'Blaze', 'Boulder', 'Breeze', 'Brook', 'Cactus', 'Comet', 'Coral',
+               'Crow', 'Dragon', 'Falcon', 'Fern', 'Finch', 'Flame', 'Fox', 'Frog', 'Gecko', 'Golem', 'Hawk', 'Heron',
+               'Island', 'Jaguar', 'Kettle', 'Koala', 'Lantern', 'Lemur', 'Llama', 'Lynx', 'Maple', 'Meadow', 'Moose',
+               'Moth', 'Nugget', 'Oak', 'Otter', 'Owl', 'Panda', 'Pebble', 'Pepper', 'Pine', 'Pixel', 'Puffin',
+               'Quartz', 'Rabbit', 'Raven', 'River', 'Robin', 'Salmon', 'Shark', 'Sparrow', 'Spruce', 'Squid', 'Stone',
+               'Tiger', 'Toast', 'Turtle', 'Walrus', 'Willow', 'Wolf', 'Wombat', 'Yeti')
+_NAME_STYLES = 91  # no digits, or 10..99
+_NAME_TOTAL = len(NAME_FIRST) * len(NAME_SECOND) * _NAME_STYLES
+_NAME_STEP = 230365  # about 0.618 of _NAME_TOTAL and coprime to it: consecutive players get unrelated names
+
+
+def player_name(n):
+    """The n-th player name (unique for n below _NAME_TOTAL), valid in Minecraft (3-16 of A-Z, a-z, 0-9, _)."""
+    k = (n * _NAME_STEP) % _NAME_TOTAL
+    first, rest = k % len(NAME_FIRST), k // len(NAME_FIRST)
+    second, style = rest % len(NAME_SECOND), rest // len(NAME_SECOND)
+    digits = '' if style == 0 else str(style + 9)
+    if (first + second) % 3 == 0:
+        return f'{NAME_FIRST[first].lower()}_{NAME_SECOND[second].lower()}{digits}'[:16]
+    return f'{NAME_FIRST[first]}{NAME_SECOND[second]}{digits}'
+
+
+# Each run day starts elsewhere in the sequence, so a hosted service does not see the same names every night.
+_NAME_OFFSET = int(hashlib.sha256(datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d').encode()).hexdigest(), 16) % _NAME_TOTAL
+
+
+def player(prefix=None):
+    """A new player name; `prefix` (the product or phase) no longer shows in it."""
     _name_counter[0] += 1
-    return f'{prefix[:6]}{_name_counter[0]:06d}'[:16]
+    return player_name(_NAME_OFFSET + _name_counter[0])
 
 
 def blocked(outcome):

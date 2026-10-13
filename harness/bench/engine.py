@@ -52,7 +52,7 @@ def safe_name(name):
 
 
 def make_canaries(seed=None):
-    """Format-compatible fake keys. Real keys never enter a product configuration."""
+    """Format-compatible fake keys. Real API keys never enter a product configuration (licence keys: `substitute`)."""
     rng = secrets.SystemRandom() if seed is None else __import__('random').Random(seed)
     digits = lambda n: ''.join(rng.choice('0123456789') for _ in range(n))
     hexs = lambda n: ''.join(rng.choice('0123456789abcdef') for _ in range(n))
@@ -124,8 +124,17 @@ def set_path(data, dotted, value):
     node[keys[-1]] = value
 
 
+def licence_values():
+    """{name: real key} of the licence keys set in this run's environment."""
+    return {name: os.environ[KEYS[name][0]] for name in LICENCE_KEYS if os.environ.get(KEYS[name][0])}
+
+
 def substitute(value, canaries):
+    """`{canary:x}` becomes the canary of key x (the interposer swaps in the real key on the wire). `{licence:x}` becomes
+    the real licence key itself: a plugin that signs or verifies with its key locally (Jarvis) cannot work with a
+    canary (METHODOLOGY 4). Without the secret it falls back to the canary. Results mask the real key."""
     if isinstance(value, str):
+        value = re.sub(r'\{licence:(\w+)\}', lambda m: licence_values().get(m.group(1)) or canaries[m.group(1)], value)
         return re.sub(r'\{canary:(\w+)\}', lambda m: canaries[m.group(1)], value)
     return value
 

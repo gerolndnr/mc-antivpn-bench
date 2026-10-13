@@ -2,6 +2,7 @@
   "id": "jarvis",
   "name": "Jarvis AntiVPN",
   "relationship": "Independent third party (TheFlamingOMG / JarvisAntiVPN). A client for the hosted JarvisGuard service (jarvisguard.com); detection settings live in the account panel, not in the plugin.",
+  "withheld": "Held back from the overview since 13 Oct 2026. In run 38410963867 the JarvisGuard panel listed players as blocked whom the server let in, the plugin ran with a canary key it could not sign with, and the backend flagged the benchmark's player names (prefix and six digits) as suspicious. Measured again with the real licence key and realistic names before any Jarvis number is shown (METHODOLOGY, correction log).",
   "license": "All rights reserved (not redistributed by this benchmark)",
   "source": null,
   "listing": "https://modrinth.com/plugin/jarvis-antivpn",
@@ -22,7 +23,7 @@
   "ready_pattern": null,
   "licence_key": {
     "env": "PLUGIN_KEY_JARVIS",
-    "note": "Jarvis cannot check anyone without the licence key of a free JarvisGuard account, so the key is part of its one documented step to work (like enforce elsewhere) and is set in every profile from enforce on, also in the keyless standard run. The real key stays in the interposer; the configuration holds a canary."
+    "note": "Jarvis cannot check anyone without the licence key of a free JarvisGuard account, so the key is part of its one documented step to work (like enforce elsewhere) and is set in every profile from enforce on, also in the keyless standard run. It goes into config.yml as itself ({licence:jarvis}), not as a canary: the plugin signs and verifies with the key locally, and with a canary the backend rejected its credentials (HTTP 401) and its list signatures failed (run 38410963867). Results mask the key."
   },
   "profiles": {
     "shipped": {
@@ -34,7 +35,7 @@
         {
           "file": "config.yml",
           "set": {
-            "key": "{canary:jarvis}"
+            "key": "{licence:jarvis}"
           }
         }
       ],
