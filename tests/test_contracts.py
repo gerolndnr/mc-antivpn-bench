@@ -3,6 +3,7 @@
 These run without Docker, servers or network (CI job `contracts`).
 """
 import asyncio
+import glob
 import hashlib
 import ipaddress
 import json
@@ -392,8 +393,8 @@ class Overview(unittest.TestCase):
         run = next(s for s in yaml.safe_load(open(path))['jobs']['bench']['steps'] if s.get('name') == 'Run')
         for name, value in run['env'].items():
             value = str(value)
-            if 'secrets.' not in value:
-                continue
+            if 'secrets.' not in value or name.startswith('PLUGIN_KEY_'):
+                continue  # licence keys a plugin cannot work without go to every run (checked below)
             # Every secret is tied to the providers family or to a keyed detection run of the optimal profile alone.
             self.assertIn("inputs.family == 'providers'", value, name)
             others = value.replace("inputs.family == 'providers'", '')
@@ -402,6 +403,15 @@ class Overview(unittest.TestCase):
                 self.assertIn('inputs.use_keys', others, name)
         source = open(os.path.join(ROOT, 'harness', 'bench', '__main__.py')).read()
         self.assertIn('os.environ.pop(name, None)', source)
+        from bench import engine, latest
+        # Only declared licence keys are exempt, and only for plugins whose adapter names them.
+        self.assertEqual(set(engine.LICENCE_KEYS), set(latest.LICENCE_KEYS))
+        licence_env = {engine.KEYS[k][0] for k in engine.LICENCE_KEYS}
+        self.assertEqual({n for n in run['env'] if n.startswith('PLUGIN_KEY_')}, licence_env)
+        declared = {json.load(open(f)).get('licence_key', {}).get('env') for f in glob.glob(os.path.join(ROOT, 'products', '*.json'))
+                    if isinstance(json.load(open(f)), dict) and json.load(open(f)).get('licence_key')}
+        self.assertEqual(declared, licence_env)
+        self.assertFalse(latest.keyed_run(dict(environment=dict(keys_present=dict(proxycheck=False, jarvis=True)))))
 
     def test_only_the_optimal_detection_run_keeps_keys(self):
         from bench.__main__ import keyed_run_allowed

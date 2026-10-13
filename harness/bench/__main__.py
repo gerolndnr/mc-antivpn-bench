@@ -26,7 +26,7 @@ ROOT = artifacts.ROOT
 IPV4_ANY = __import__('re').compile(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])')
 IPV6_ANY = __import__('re').compile(r'(?<![\w:])[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}(?![\w:])')
 # The candidate stays in the default set while its pull request is open.
-ALL_PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn']
+ALL_PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn', 'jarvis']
 # Bought products join the default set only where their JAR was provided (bench/private.py).
 ALL_PRODUCTS += [p['product'] for key, p in private.pins().items() if private.available(key) and p['product'] not in ALL_PRODUCTS]
 ALL_PLATFORMS = ['paper', 'folia', 'velocity', 'bungee']
@@ -206,8 +206,10 @@ async def main_run(args):
     # here, before the interposer starts, so no request of a plugin (nor the baselines) can carry one.
     from .servers import SECRET_ENV
     if not keyed_run_allowed(args.family, os.environ.get('BENCH_DETECTION_PROFILES', '')):
+        licence = {engine.KEYS[k][0] for k in engine.LICENCE_KEYS}
         for name in SECRET_ENV:
-            os.environ.pop(name, None)
+            if name not in licence:
+                os.environ.pop(name, None)
     canaries_path = os.path.join(engine.WORK, 'state', 'canaries.json')
     os.makedirs(os.path.dirname(canaries_path), exist_ok=True)
     canaries = json.load(open(canaries_path)) if os.path.exists(canaries_path) else {}

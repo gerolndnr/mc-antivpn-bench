@@ -1,0 +1,76 @@
+{
+  "id": "jarvis",
+  "name": "Jarvis AntiVPN",
+  "relationship": "Independent third party (TheFlamingOMG / JarvisAntiVPN). A client for the hosted JarvisGuard service (jarvisguard.com); detection settings live in the account panel, not in the plugin.",
+  "license": "All rights reserved (not redistributed by this benchmark)",
+  "source": null,
+  "listing": "https://modrinth.com/plugin/jarvis-antivpn",
+  "pins": {
+    "paper": "jarvis-antivpn-0.5.26+paper",
+    "folia": "jarvis-antivpn-0.5.26+paper",
+    "velocity": "jarvis-antivpn-0.5.26+velocity",
+    "bungee": "jarvis-antivpn-0.5.26+bungee"
+  },
+  "pins_note": "One version number, three JARs (Paper/Folia, Velocity, BungeeCord). The listing advertises Velocity and BungeeCord; the Paper JAR declares Folia support.",
+  "data_dir": {
+    "paper": "Jarvis",
+    "folia": "Jarvis",
+    "velocity": "jarvis",
+    "bungee": "Jarvis"
+  },
+  "config": "config.yml",
+  "ready_pattern": null,
+  "licence_key": {
+    "env": "PLUGIN_KEY_JARVIS",
+    "note": "Jarvis cannot check anyone without the licence key of a free JarvisGuard account, so the key is part of its one documented step to work (like enforce elsewhere) and is set in every profile from enforce on, also in the keyless standard run. The real key stays in the interposer; the configuration holds a canary."
+  },
+  "profiles": {
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded: key CHANGE_ME, so it checks nobody and offers a linking URL in the console."
+    },
+    "enforce": {
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "key": "{canary:jarvis}"
+          }
+        }
+      ],
+      "note": "The licence key of a free JarvisGuard account in its documented key field (config.yml key, or /antivpn key). Detection settings are those of a new account panel, unchanged."
+    },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [],
+      "note": "No ProxyCheck key field: detection runs in the JarvisGuard backend. Measured as enforce."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [],
+      "note": "No other key fields. Measured as enforce."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [],
+      "note": "Same as enforce: every detection setting lives in the JarvisGuard panel, not in the plugin, and the panel is left at its defaults so the run stays reproducible from the plugin alone."
+    }
+  },
+  "redis": null,
+  "redis_note": "No Redis option in the plugin (state is held by the JarvisGuard backend). Redis test not applicable.",
+  "commands": {
+    "reload": "antivpn reload",
+    "inspect": [
+      "antivpn",
+      "antivpn stats"
+    ]
+  },
+  "lookup_hosts": [
+    "connector.jarvisguard.com"
+  ],
+  "documented_failure_policy": "Not documented in the plugin.",
+  "telemetry": [
+    "bStats - blocked like every product's telemetry",
+    "JarvisGuard backend sync (allowlist, blacklist, local denials, client config) - part of how it works"
+  ]
+}

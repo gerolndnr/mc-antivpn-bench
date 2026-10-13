@@ -31,7 +31,8 @@ FAMILIES = ['functional', 'failure', 'redis', 'detection', 'performance', 'provi
 FOLDERS = {'functional': ['platform', 'clean-install', 'upgrade', 'invalid-reload', 'secrets'], 'failure': ['failure'],
            'redis': ['redis'], 'detection': ['detection'], 'performance': ['performance'], 'providers': ['providers']}
 HEADLINE = ['enforce']
-OPTIMAL = 'optimal'  # each plugin's best configuration with free keys (METHODOLOGY 4)
+OPTIMAL = 'optimal'
+LICENCE_KEYS = ('jarvis',)  # engine.LICENCE_KEYS; latest stays importable without the harness packages  # each plugin's best configuration with free keys (METHODOLOGY 4)
 
 
 def gh(*args):
@@ -113,7 +114,8 @@ def keyed_run(manifest):
     if manifest.get('family') == 'providers':
         return False
     present = (manifest.get('environment') or {}).get('keys_present')
-    return present is None or any(present.values())
+    # A licence key a plugin cannot work without (Jarvis) does not make a run keyed (METHODOLOGY 4).
+    return present is None or any(v for k, v in present.items() if k not in LICENCE_KEYS)
 
 
 def select(repo, base, limit=250):

@@ -30,6 +30,24 @@
     "sha256": "4e1cb9d94c94d7bf3d6e1110382fbf9a44281afd980d9ba2af43c11cff623021",
     "url": "https://cdn.modrinth.com/data/KPyk9C50/versions/6EjDbOPt/FoxGate-Free.jar"
   },
+  "jarvis-antivpn-0.5.26+bungee": {
+    "bytes": 2536994,
+    "filename": "Jarvis-Bungee-0.5.26.jar",
+    "sha256": "b85d8b2a6916ab133a84ac8987678588db29133be34c2db7d3637e4578e062d0",
+    "url": "https://cdn.modrinth.com/data/HTRGHm9r/versions/Nd90toL5/Jarvis-Bungee-0.5.26.jar"
+  },
+  "jarvis-antivpn-0.5.26+paper": {
+    "bytes": 2493487,
+    "filename": "Jarvis-Paper-0.5.26.jar",
+    "sha256": "21ad9b84bf1ba87498a7bb253f65961d7ba0e5b15f55b610f97a9835dc31664f",
+    "url": "https://cdn.modrinth.com/data/HTRGHm9r/versions/EIYSaVwb/Jarvis-Paper-0.5.26.jar"
+  },
+  "jarvis-antivpn-0.5.26+velocity": {
+    "bytes": 1815621,
+    "filename": "Jarvis-Velocity-0.5.26.jar",
+    "sha256": "f94db8efdb0fbabaf0acd8f54ca338871113d3591675aba7aa79aebe37a46ef0",
+    "url": "https://cdn.modrinth.com/data/HTRGHm9r/versions/ozoftIsv/Jarvis-Velocity-0.5.26.jar"
+  },
   "paper-1.21.11-132": {
     "bytes": 54846016,
     "filename": "paper-1.21.11-132.jar",

@@ -59,14 +59,19 @@ def make_canaries(seed=None):
     alnum = lambda n: ''.join(rng.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') for _ in range(n))
     return dict(proxycheck=f'{digits(6)}-{digits(6)}-{digits(6)}-{digits(6)}', vpnapi=hexs(32),
                 # Keys the `optimal` profiles may use (METHODOLOGY 4); the same canary scheme as the two above.
-                iphub=f'MTAw{alnum(40)}', ipapi_is=hexs(16), iplocate=hexs(32), ipqs=alnum(32))
+                iphub=f'MTAw{alnum(40)}', ipapi_is=hexs(16), iplocate=hexs(32), ipqs=alnum(32),
+                # Licence keys a plugin cannot work without (products/<id>.json `licence_key`), in their format.
+                jarvis=hexs(32).upper())
 
 
 # Real key per canary: the environment variable it comes from and the only hosts it may be sent to.
 KEYS = dict(proxycheck=('PROXYCHECK_KEY', ['proxycheck.io']), vpnapi=('VPNAPI_KEY', ['vpnapi.io']),
             iphub=('PROVIDER_KEY_IPHUB', ['v2.api.iphub.info', 'iphub.info']), ipapi_is=('PROVIDER_KEY_IPAPI_IS', ['api.ipapi.is']),
             iplocate=('PROVIDER_KEY_IPLOCATE', ['iplocate.io', '*.iplocate.io']),
-            ipqs=('PROVIDER_KEY_IPQS', ['ipqualityscore.com', 'www.ipqualityscore.com']))
+            ipqs=('PROVIDER_KEY_IPQS', ['ipqualityscore.com', 'www.ipqualityscore.com']),
+            jarvis=('PLUGIN_KEY_JARVIS', ['connector.jarvisguard.com']))
+# Licence keys: part of a plugin's one documented step to work at all, so every run keeps them (METHODOLOGY 4).
+LICENCE_KEYS = ('jarvis',)
 
 
 def secrets_spec(canaries):

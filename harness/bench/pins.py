@@ -17,7 +17,10 @@ MATRIX = {
     'vpnguard': ['1.2.0', '1.1.1'],
     # 1.10.1.2 is published for Folia only; the other platforms run 1.10.1.1 (universal JAR).
     'kauri-antivpn': ['1.10.1.2', '1.10.1.1', '1.10.0'],
+    # One version number for three JARs; "+platform" picks the file of that loader.
+    'jarvis-antivpn': ['0.5.26+velocity', '0.5.26+bungee', '0.5.26+paper'],
 }
+LOADER = {'velocity': 'velocity', 'bungee': 'bungeecord', 'paper': 'paper', 'folia': 'folia'}
 
 
 def main():
@@ -28,6 +31,9 @@ def main():
         versions = json.load(urllib.request.urlopen(request, timeout=60))
         for number in wanted:
             match = [v for v in versions if v['version_number'] == number]
+            if not match and '+' in number:
+                base, platform = number.split('+', 1)
+                match = [v for v in versions if v['version_number'] == base and LOADER.get(platform) in v['loaders']]
             if not match:
                 sys.exit(f'{project} {number} is not published on Modrinth')
             version = match[0]

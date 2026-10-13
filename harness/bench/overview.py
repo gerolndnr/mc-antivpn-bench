@@ -22,7 +22,7 @@ from . import dataset, freshness
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 WIDTH = 1600
-PRODUCT_ORDER = ['connection-guard-061', 'connection-guard-candidate', 'connection-guard', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn',
+PRODUCT_ORDER = ['connection-guard-061', 'connection-guard-candidate', 'connection-guard', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn', 'jarvis',
                  'advancedantivpn']
 CATCH = [('commercial_vpn', 'Commercial VPNs'), ('fresh_vpn', 'Newly added VPN servers'), ('vpn_v6', 'VPNs over IPv6'),
          ('tor', 'Tor exits'), ('proxy', 'Public proxies')]

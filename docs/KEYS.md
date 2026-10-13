@@ -33,6 +33,17 @@ The `providers` family (METHODOLOGY 7.9) also measures services that only answer
 | `PROVIDER_KEY_IPQS` | <https://www.ipqualityscore.com/create-account> | 5,000 queries per month, so about one full run a week |
 | `PROVIDER_CONTACT_GETIPINTEL` | <https://getipintel.net/> (no account) | a real e-mail address you read, not a key; 500 queries per day, 15 a minute. A fake address gets the runner banned. |
 
+**Plugin licence keys.** A plugin that checks nobody without the licence key of a free account gets that key in every run (METHODOLOGY 2, "Licence keys"):
+
+| Secret | Plugin | Where |
+| --- | --- | --- |
+| `PLUGIN_KEY_JARVIS` | Jarvis AntiVPN | jarvisguard.com, free account; the licence key from its panel |
+
+```sh
+gh secret set PLUGIN_KEY_JARVIS -R gerolndnr/mc-antivpn-bench
+```
+
+
 IPHunter, IPQualityScore and GetIPIntel are the services AdvancedAntiVPN offers besides IP-API, ProxyCheck, VPNAPI and IPHub. They are queried with the settings AdvancedAntiVPN ships.
 
 `VPNAPI_KEY` is reused. In this family keys go straight to their own service, not through the interposer; they appear in no result file.

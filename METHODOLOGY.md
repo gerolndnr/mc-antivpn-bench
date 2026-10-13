@@ -20,12 +20,13 @@ The suite is written and run by the maintainers of **Connection Guard**, one of 
 
 | Product | Version | Source | Licence |
 | --- | --- | --- | --- |
-| Connection Guard | 0.6.1 candidate (PR #84, feffbfb; "v0.6.1" in the README overview), 0.6.0 (c4b67eb) and 0.5.1 | [Modrinth](https://modrinth.com/plugin/connectionguard), candidate from CI | MIT |
+| Connection Guard | 0.6.1 (release, measured at its release code 46821a2 before the tag), 0.6.0 (c4b67eb) and 0.5.1; candidates from CI | [Modrinth](https://modrinth.com/plugin/connectionguard), GitHub release | MIT |
 | FoxGate AntiVPN (free) | 1.2.0-pre10 | [Modrinth](https://modrinth.com/plugin/foxgate) | All rights reserved |
 | ProxyShield | 2.5.1 (native Paper/Folia/Velocity/Bungee builds) | [Modrinth](https://modrinth.com/plugin/proxyshield) | GPL-3.0 |
 | VPNGuard | 1.2.0 | [Modrinth](https://modrinth.com/plugin/vpnguard) | All rights reserved |
 | KauriVPN (Kauri AntiVPN) | 1.10.1.1; 1.10.1.2 on Folia (published for Folia only) | [Modrinth](https://modrinth.com/plugin/kauri-antivpn) | Apache-2.0 |
 | AdvancedAntiVPN | 2.31.8 (one JAR for Spigot/Paper, BungeeCord and Velocity) | [SpigotMC](https://www.spigotmc.org/resources/101081/), paid, bought | Commercial |
+| Jarvis AntiVPN | 0.5.26 (native Paper/Folia, Velocity and BungeeCord builds) | [Modrinth](https://modrinth.com/plugin/jarvis-antivpn) | All rights reserved |
 | Baseline: ProxyCheck.io API | v2, `vpn=1&asn=1` | direct | service |
 | Baseline: VPNAPI.io API | `/api/{ip}` | direct | service |
 
@@ -36,6 +37,8 @@ The suite is written and run by the maintainers of **Connection Guard**, one of 
 - CI downloads it only into the git-ignored cache. The public pin ([`products/private-pins.json`](products/private-pins.json)) names the version only.
 - Public logs show the buyer id as `<purchaser>`. A run whose public results still contain it uploads none ([`harness/bench/private.py`](harness/bench/private.py)).
 - Without the owner's copy the product is left out, so others cannot reproduce this row without buying it themselves.
+
+**Licence keys (Jarvis AntiVPN).** Jarvis is a client for the hosted JarvisGuard service and checks nobody without the licence key of a free account; every detection setting lives in that account's web panel. Its key is therefore part of the one documented step to make it work, like the enforcement switch of other products: it is set in every run, also in the keyless standard run, and a run counts as keyless when this is its only key. The benchmark owner created the account; its panel stays at the defaults of a new account. The real key exists only in the interposer; the configuration holds a canary that is swapped only toward `connector.jarvisguard.com`. Unlike v4Guard below, it needs no per-instance linking, so a fresh instance works from the key alone.
 
 **Not in v1:**
 - *AntiVPN-X*: no product of that name was found on Modrinth, Hangar, SpigotMC or GitHub on 2026-10-05.
@@ -400,6 +403,8 @@ Pass the published `answers.sqlite` (interposer state) to replay a run's provide
 The adapters for products without public source code are written from their published configuration files and observed behaviour. Their authors are invited to correct them.
 
 ## Corrections and changes after the first published run
+
+- **2026-10-13, Jarvis AntiVPN added** (owner request), 0.5.26 from Modrinth, with the licence key of a free JarvisGuard account in every run (section 2, "Licence keys"). It joins the nightly standard runs and the optimal series; its optimal profile equals enforce, since its settings live in the panel.
 
 - **2026-10-13, Connection Guard 0.6.1 released** (tag at 004d505, JAR sha256 c7eb9714…0446, as in the release's SHA256SUMS). Its plugin code is that of 46821a2 / a536f7a measured before; between them only the version, documentation and one test changed. The 0.6.1 column now pins the release JAR; runs on 46821a2 stay valid for it.
 
