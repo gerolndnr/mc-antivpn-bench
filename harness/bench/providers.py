@@ -530,6 +530,8 @@ def chain_report(name, chain, decisions, items, **options):
 CG_DEFAULT = ['intel', 'proxycheck', 'blackbox', 'zowi', 'ipquery', 'ip-api']
 # The 0.6.1 plan (delivery handoff of 7 Oct 2026): Intel's proxy list, Blackbox needs confirmation, IP-API off.
 CG_061_PLAN = ['intel', 'intel-proxy', 'proxycheck', 'blackbox', 'zowi', 'ipquery']
+# The next order (owner decision, 13 Oct 2026): zowi before Blackbox (with confirmation), ProxyCheck off by default.
+CG_NEXT = ['intel', 'intel-proxy', 'zowi', 'blackbox', 'ipquery']
 
 
 def chains(answers, items, lists, services):
@@ -544,6 +546,8 @@ def chains(answers, items, lists, services):
             if confirm:
                 out.append(chain_report('Connection Guard 0.6.1 plan', CG_061_PLAN,
                                         simulate(CG_061_PLAN, answers, items, lists, confirm, exhausted), items, **base))
+                out.append(chain_report('Connection Guard next: Intel, zowi, Blackbox, IPQuery', CG_NEXT,
+                                        simulate(CG_NEXT, answers, items, lists, confirm, exhausted), items, **base))
             without = [s for s in CG_DEFAULT if s != 'ip-api']
             out.append(chain_report('without IP-API', without, simulate(without, answers, items, lists, confirm, exhausted), items, **base))
             # Blackbox later: behind zowi, or last, where it is asked only when the others have no answer.
