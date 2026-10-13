@@ -205,12 +205,12 @@ def slide_wave(d):
         times.append(f'<div class="hbar narrow {"best" if p == fastest and not late else ""}"><div class="t"><div class="f" style="width:{0 if late else 100 * min(v, cap) / cap:.2f}%"></div></div>'
                      f'<div class="v">{"<span class=na>after join</span>" if late else t(v)}</div></div>')
     if len(nearly) == 1:
-        title = f'In a wave of {total:,} new players, only {names[nearly[0]]} checked nearly every player; the others skipped {100 - round(100 * max(looked[p] for p in timed if p not in nearly) / total)}% or more'
+        title = f'Stress test: of {total:,} new players at once, only {names[nearly[0]]} checked nearly every player; the others skipped {100 - round(100 * max(looked[p] for p in timed if p not in nearly) / total)}% or more'
     elif nearly:
-        title = f'In a wave of {total:,} new players, {names_list(names[p] for p in nearly)} checked nearly every player'
+        title = f'Stress test: of {total:,} new players at once, {names_list(names[p] for p in nearly)} checked nearly every player'
     else:
-        title = f'In a wave of {total:,} new players, no plugin checked nearly every player'
-    sub = (f'{total:,} new players join a Velocity proxy in 20 seconds. Detection services are simulated with the same delay and each '
+        title = f'Stress test: of {total:,} new players at once, no plugin checked nearly every player'
+    sub = (f'Stress test: {total:,} new players join a Velocity proxy in 20 seconds. Detection services are simulated with the same delay and each '
            'service\'s free-tier limit for every plugin. Median of three rounds.')
     body = f'''<div class="panels" style="grid-template-columns: 1.25fr 1fr">
 <div class="panel"><h3>Players checked <span>· asked about at a service or refused from the plugin's own list · higher is better</span></h3><div class="hbars">{''.join(rows)}</div></div>
@@ -334,7 +334,7 @@ def build(dirs, labels):
             print(f'{maker.__name__} skipped: {type(error).__name__}: {error}')
     if d['prov']:
         made.append(slide_providers(d))
-    findings = [(k, t) for k, (t, *_rest) in zip(['Detection', 'Join wave', 'Service outage', 'Platforms', 'Detection services'], made)]
+    findings = [(k, t) for k, (t, *_rest) in zip(['Detection', 'Stress test', 'Service outage', 'Platforms', 'Detection services'], made)]
     slides = [slide_summary(d, findings[:5])] + made
     return slides
 

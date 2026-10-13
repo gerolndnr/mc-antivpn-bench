@@ -603,11 +603,11 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                 note += f' · {num(e["cut_off"])} cut off'
             rows.append((pid, names[pid], checked, f'{num(checked)} of {num(n)}', note, False))
         cut = any(p[k].get('cut_off') for k, *_ in rows if k in p)
-        card_a = bar_card('1,000 players join in 20 seconds', 'Players checked, by a detection service or the plugin\'s own list. Unchecked players got in without an answer or were cut off. Higher is better.'
+        card_a = bar_card('Stress test: 1,000 players join in 20 seconds', 'Players checked, by a detection service or the plugin\'s own list. Unchecked players got in without an answer or were cut off. Higher is better.'
                           + (' Cut off: closed by the proxy after 30 s.' if cut else ''),
                           rows, low=False, wide=True, tag=platform.capitalize() + (f' · median of {rounds} rounds' if rounds > 1 else ''))
         metrics = [('Single join, p95', 'cold_p95', fmt_ms, True), ('Repeat join, p50', 'warm_p50', fmt_ms, True),
-                   ('Lookups, 100 same-IP joins', 'stampede', num, True), ('Players checked in the wave', 'checked', num, False),
+                   ('Lookups, 100 same-IP joins', 'stampede', num, True), ('Players checked in the stress test', 'checked', num, False),
                    ('Start-up', 'start', lambda v: '–' if v is None else f'{v:.1f} s', True)]
         cols = [pid for pid in products if pid in p]
         body = []
