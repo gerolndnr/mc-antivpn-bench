@@ -305,6 +305,20 @@ class Providers(unittest.TestCase):
         self.assertEqual(p.parse_ipquery(b'{"risk":{"is_vpn":false,"is_proxy":false,"is_tor":false,"is_datacenter":false}}', '')['verdict'], p.NEGATIVE)
         self.assertEqual(p.parse_iphub(b'{"block":2}', '')['verdict'], p.UNKNOWN)
         self.assertEqual(p.parse_iphub(b'{"block":1}', '')['verdict'], p.POSITIVE)
+        # AdvancedAntiVPN's other services.
+        self.assertEqual(p.parse_getipintel(b'{"status":"success","result":"0.995"}', '')['verdict'], p.POSITIVE)
+        self.assertEqual(p.parse_getipintel(b'{"status":"success","result":"0.93"}', '')['verdict'], p.UNKNOWN)
+        self.assertEqual(p.parse_getipintel(b'{"status":"success","result":"0.1"}', '')['verdict'], p.NEGATIVE)
+        self.assertIsNone(p.parse_getipintel(b'{"status":"error","result":"-6"}', ''))
+        with self.assertRaises(p.Limited):
+            p.parse_getipintel(b'{"status":"error","result":"-5"}', '')
+        self.assertEqual(p.parse_iphunter(b'{"status":"success","data":{"block":1}}', '')['verdict'], p.POSITIVE)
+        self.assertEqual(p.parse_iphunter(b'{"status":"success","data":{"block":0}}', '')['verdict'], p.NEGATIVE)
+        self.assertIsNone(p.parse_iphunter(b'{"status":"error","code":"Bad Ip Range"}', ''))
+        self.assertEqual(p.parse_ipqs(b'{"success":true,"proxy":true,"vpn":true,"tor":false}', '')['verdict'], p.POSITIVE)
+        self.assertEqual(p.parse_ipqs(b'{"success":true,"proxy":false,"vpn":false,"tor":false,"active_vpn":false,"active_tor":false}', '')['verdict'], p.NEGATIVE)
+        with self.assertRaises(p.Limited):
+            p.parse_ipqs(b'{"success":false,"message":"You have exceeded your request quota"}', '')
 
     def test_interleaved_order_is_stable_and_keeps_cohort_shares(self):
         items = [dict(id=f'{c}-{i}', cohort=c) for c, n in (('a', 60), ('b', 30), ('c', 10)) for i in range(n)]

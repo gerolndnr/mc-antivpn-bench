@@ -390,6 +390,8 @@ The adapters for products without public source code are written from their publ
 
 ## Corrections and changes after the first published run
 
+- **2026-10-13, AdvancedAntiVPN's other services in `providers`** (owner request): GetIPIntel (contact e-mail, 500 a day; positive at 0.99 or more, negative below 0.90, the operator's own reading), IPHunter (free key; block 1 positive, as IPHub) and IPQualityScore (free key, 5,000 a month; AdvancedAntiVPN's shipped settings; a VPN, proxy or Tor flag is positive). Each is skipped until its key or contact is set (docs/KEYS.md).
+
 - **2026-10-13, no API keys for plugins** (owner decision). Keys are used only for the detection services measured on their own (`providers`, 7.9).
   - Plugin runs drop any key before the interposer starts, and the workflow passes keys only to the `providers` family. Keyless ProxyCheck requests no longer get the free key attached (section 5).
   - Detection runs nightly, as shipped (`enforce`), the full dataset, one workflow run per plugin, started when the day's dataset version is built. The keyed Monday-to-Friday series ends after two nights (12 and 13 October).

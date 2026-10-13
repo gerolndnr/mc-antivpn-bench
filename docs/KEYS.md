@@ -25,6 +25,11 @@ The `providers` family (METHODOLOGY 7.9) also measures services that only answer
 | `PROVIDER_KEY_IPLOCATE` | <https://www.iplocate.io/> | 1,000 queries per day |
 | `PROVIDER_KEY_IP2LOCATION` | <https://www.ip2location.io/> | 50,000 per month; open proxies only on free plans |
 | `PROVIDER_KEY_IPHUB` | <https://iphub.info/> | 1,000 queries per day |
+| `PROVIDER_KEY_IPHUNTER` | <https://www.iphunter.info/user/register> | 1,000 queries per day (as AdvancedAntiVPN states) |
+| `PROVIDER_KEY_IPQS` | <https://www.ipqualityscore.com/create-account> | 5,000 queries per month, so about one full run a week |
+| `PROVIDER_CONTACT_GETIPINTEL` | <https://getipintel.net/> (no account) | a real e-mail address you read, not a key; 500 queries per day, 15 a minute. A fake address gets the runner banned. |
+
+IPHunter, IPQualityScore and GetIPIntel are the services AdvancedAntiVPN offers besides IP-API, ProxyCheck, VPNAPI and IPHub. They are queried with the settings AdvancedAntiVPN ships.
 
 `VPNAPI_KEY` is reused. In this family keys go straight to their own service, not through the interposer; they appear in no result file.
 

@@ -152,6 +152,46 @@ def parse_ipapi_is(body, ip):
     return verdict(vpn=_flag(r.get('is_vpn')), proxy=_flag(r.get('is_proxy')), tor=_flag(r.get('is_tor')), hosting=_flag(r.get('is_datacenter')))
 
 
+def parse_getipintel(body, ip):
+    r = json.loads(body)
+    try:
+        result = float(r.get('result'))
+    except (TypeError, ValueError):
+        return None
+    if result < 0:
+        # -5: over the limits (or the address is banned); the other codes are bad input or an outage.
+        if int(result) == -5:
+            raise Limited(r.get('message'))
+        return None
+    # The operator's own reading (getipintel.net): act above 0.99, review above 0.95, low risk below 0.90.
+    return _one_flag(True) if result >= 0.99 else _one_flag(False) if result < 0.90 else verdict()
+
+
+def parse_iphunter(body, ip):
+    r = json.loads(body)
+    if r.get('status') != 'success':
+        if 'limit' in str(r.get('code', '')).lower():
+            raise Limited(r.get('code'))
+        return None
+    block = (r.get('data') or {}).get('block')
+    # As IPHub: 1 = non-residential (hosting, VPN, proxy), 0 = residential, 2 = both.
+    if block not in (0, 1, 2):
+        return None
+    return _one_flag(True) if block == 1 else _one_flag(False) if block == 0 else verdict()
+
+
+def parse_ipqs(body, ip):
+    r = json.loads(body)
+    if not r.get('success'):
+        if any(w in str(r.get('message', '')).lower() for w in ('limit', 'exceeded', 'credits')):
+            raise Limited(r.get('message'))
+        return None
+    if 'proxy' not in r:
+        return None
+    return verdict(vpn=_flag(r.get('vpn')) or _flag(r.get('active_vpn')), proxy=_flag(r.get('proxy')),
+                   tor=_flag(r.get('tor')) or _flag(r.get('active_tor')))
+
+
 def parse_vpnapi(body, ip):
     s = json.loads(body).get('security')
     if not s:
@@ -180,7 +220,7 @@ class Service:
         if not self.key_env:
             return ''
         if self.id == 'proxycheck' and os.environ.get('BENCH_PROVIDERS_PROXYCHECK_KEY') != '1':
-            return ''  # the shared key's daily quota belongs to the nightly detection chunks unless released
+            return ''  # keyless unless the run released the key (use_keys)
         return os.environ.get(self.key_env, '')
 
     @property
@@ -223,6 +263,17 @@ SERVICES = [
             key_required=True, plugin=True, terms='1,000 a day with a free key'),
     Service('iphub', 'IPHub', lambda ip, k: f'https://v2.api.iphub.info/ip/{q(ip)}', parse_iphub, keyed_daily=1000, key_env='PROVIDER_KEY_IPHUB',
             key_required=True, plugin=True, headers=lambda k: {'X-Key': k}, terms='1,000 a day with a free key'),
+    # Offered by AdvancedAntiVPN (its config.yml, 2.31.8), with the settings it ships.
+    Service('getipintel', 'GetIPIntel', lambda ip, k: f'https://check.getipintel.net/check.php?ip={q(ip)}&contact={q(k)}&format=json',
+            parse_getipintel, interval=4.5, keyed_daily=500, key_env='PROVIDER_CONTACT_GETIPINTEL', key_required=True,
+            terms='free with a real contact e-mail, 15 a minute and 500 a day; no random or incremental lookups; credit required'),
+    Service('iphunter', 'IPHunter', lambda ip, k: f'https://www.iphunter.info:8082/v1/ip/{q(ip)}', parse_iphunter, keyed_daily=1000,
+            key_env='PROVIDER_KEY_IPHUNTER', key_required=True, headers=lambda k: {'X-Key': k},
+            terms='1,000 a day with a free key (per AdvancedAntiVPN); block 1 also covers hosting'),
+    Service('ipqs', 'IPQualityScore', lambda ip, k: f'https://ipqualityscore.com/api/json/ip/{q(k)}/{q(ip)}?strictness=0'
+            '&allow_public_access_points=false&fast=false&lighter_penalties=true&mobile=false', parse_ipqs, keyed_daily=700,
+            key_env='PROVIDER_KEY_IPQS', key_required=True,
+            terms='5,000 a month with a free key, so about one full run a week (capped at 700 a run)'),
     Service('freeipapi', 'FreeIPAPI', lambda ip, k: f'https://free.freeipapi.com/api/json/{q(ip)}', parse_freeipapi, interval=1.2,
             terms='keyless; proxy flag only'),
     Service('negativity', 'Negativity', lambda ip, k: f'https://api.negativity.fr/ip/{q(ip)}', parse_negativity, terms='keyless'),
