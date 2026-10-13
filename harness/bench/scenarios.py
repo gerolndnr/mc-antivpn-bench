@@ -100,12 +100,37 @@ async def platform_parity(runtime, product_id, platform, canaries, cases):
 
 
 # ---------------------------------------------------------- release quality
+CONFIG_SUFFIXES = ('.yml', '.yaml', '.json', '.toml', '.properties', '.conf')
+
+
+def shipped_configs(data_dir, limit=64 * 1024, total=512 * 1024):
+    """The configuration files a product writes on its first start, as text ({relative path: content}), so the
+    shipped defaults are on record (a basis for the `optimal` profiles, METHODOLOGY 4). Data and cache files are left
+    out by suffix and size; the public results are still masked and checked for buyer data like everything else."""
+    out, used = {}, 0
+    if not os.path.isdir(data_dir):
+        return out
+    for root, _, files in sorted(os.walk(data_dir)):
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            if not name.endswith(CONFIG_SUFFIXES) or os.path.getsize(path) > limit or used > total:
+                continue
+            try:
+                text = open(path, encoding='utf-8').read()
+            except (OSError, UnicodeDecodeError):
+                continue
+            used += len(text)
+            out[os.path.relpath(path, data_dir)] = text
+    return out
+
+
 async def clean_install(runtime, product_id, platform, canaries, cases):
     async def body(instance):
         data_dir = instance.data_dir
         generated = sorted(os.listdir(data_dir)) if os.path.isdir(data_dir) else []
-        return dict(data_dir_created=os.path.isdir(data_dir), generated=generated[:40],
-                    joins=[await join(instance, subject) for subject in cases])
+        joins = [await join(instance, subject) for subject in cases]
+        return dict(data_dir_created=os.path.isdir(data_dir), generated=generated[:40], joins=joins,
+                    config_files=shipped_configs(data_dir))
     return await with_instance(runtime, product_id, platform, 'shipped', canaries, body, clean=True,
                                label=f'clean-{product_id}-{platform}', rules=clean_install_rules())
 
