@@ -31,6 +31,7 @@ FAMILIES = ['functional', 'failure', 'redis', 'detection', 'performance', 'provi
 FOLDERS = {'functional': ['platform', 'clean-install', 'upgrade', 'invalid-reload', 'secrets'], 'failure': ['failure'],
            'redis': ['redis'], 'detection': ['detection'], 'performance': ['performance'], 'providers': ['providers']}
 HEADLINE = ['enforce']
+OPTIMAL = 'optimal'  # each plugin's best configuration with free keys (METHODOLOGY 4)
 
 
 def gh(*args):
@@ -116,7 +117,8 @@ def keyed_run(manifest):
 
 
 def select(repo, base, limit=250):
-    """{family: {product: [(run_id, folder, paths)]}} and the providers folder."""
+    """{family: {product: [(run_id, folder, paths)]}} and the providers folder. Family `detection` is the standard pass
+    (as shipped, no keys); `detection-optimal` each plugin's best configuration with free keys, from keyed runs."""
     chosen = {family: {} for family in FAMILIES if family not in ('providers', 'detection')}
     detection = {}  # product -> (profile, core) -> [(run_id, folder, [paths])]
     pending = {}  # (product, profile, core, n) -> {k: (run_id, folder, path)}
@@ -135,14 +137,16 @@ def select(repo, base, limit=250):
                 taken = providers['services'].get(sid)
                 if taken is None or (score.unavailable(taken[2]) and not score.unavailable(entry)):
                     providers['services'][sid] = (run_id, folder, entry, summary.get('meta') or {})
-        if keyed:
-            continue  # plugins are shown only as measured without keys; the services above may use theirs
-        for family in chosen:
-            for product, files in product_files(folder, family).items():
-                chosen[family].setdefault(product, [(run_id, folder, files)])
+        if not keyed:
+            for family in chosen:
+                for product, files in product_files(folder, family).items():
+                    chosen[family].setdefault(product, [(run_id, folder, files)])
         version = dataset.run_version(manifest)
         core = dataset.core_of(version)
         for profile, chunk, path, products in detection_passes(folder, len(dataset.public_items(version))):
+            # A run with keys counts only for the optimal profile; the optimal profile only from a run with keys.
+            if keyed != (profile == OPTIMAL):
+                continue
             for product in products:
                 done = detection.setdefault(product, {})
                 if (profile, core) in done:
@@ -155,15 +159,16 @@ def select(repo, base, limit=250):
                 series.setdefault(k, (run_id, folder, path))
                 if len(series) == int(n):
                     done[(profile, core)] = [(r, f, [p]) for _, (r, f, p) in sorted(series.items())]
-    # The table compares the plugins it shows (newest version each; an older version is not drawn, so it must not hold
-    # the others back) on one dataset core: the newest core every one of them has a complete pass on, keyed if all
-    # have it there. A core every shown plugin lacks waits until all are measured on it.
-    shown = set(overview.newest_only(list(detection)))
-    measured = [p for p in detection if p in shown]
-    cores = sorted({c for p in measured for _, c in detection[p]}, key=lambda c: (c != 'v1', c), reverse=True)
-    pick = next(((x, c) for c in cores for x in HEADLINE if all((x, c) in detection[p] for p in measured)),
-                ('enforce', 'v1'))
-    chosen['detection'] = {p: detection[p][pick] for p in measured if pick in detection[p]}
+    # Each table compares the plugins it shows (newest version each; an older version is not drawn, so it must not hold
+    # the others back) on one dataset core: the newest core every one of them has a complete pass on. A core every
+    # shown plugin lacks waits until all are measured on it.
+    def table(profiles, fallback):
+        measured = [p for p in detection if p in set(overview.newest_only(list(detection))) and any(x in profiles for x, _ in detection[p])]
+        cores = sorted({c for p in measured for x, c in detection[p] if x in profiles}, key=lambda c: (c != 'v1', c), reverse=True)
+        pick = next(((x, c) for c in cores for x in profiles if all((x, c) in detection[p] for p in measured)), fallback)
+        return {p: detection[p][pick] for p in measured if pick in detection[p]}, pick
+    chosen['detection'], pick = table(HEADLINE, ('enforce', 'v1'))
+    chosen['detection-optimal'], _ = table([OPTIMAL], None)
     return chosen, providers, pick[0]
 
 
@@ -185,7 +190,7 @@ def merge(chosen, providers, profile, base):
                 for path in files:
                     sub = os.path.join(target, os.path.basename(os.path.dirname(path)))
                     os.makedirs(sub, exist_ok=True)
-                    if family == 'detection':
+                    if family in ('detection', 'detection-optimal'):
                         # A pass holds every product of its run: keep the rows of the products taken from it.
                         record = load(path)
                         keep = set(products)

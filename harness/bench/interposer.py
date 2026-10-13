@@ -282,6 +282,9 @@ class Interposer:
             if secret.get('value') and secret.get('canary') and \
                     any(fnmatch.fnmatch(host, pattern) for pattern in secret.get('hosts', [])):
                 raw = raw.replace(secret['canary'], secret['value'])
+                quoted = urllib.parse.quote(secret['canary'], safe='')
+                if quoted != secret['canary']:
+                    raw = raw.replace(quoted, urllib.parse.quote(secret['value'], safe=''))
         return raw
 
     def secret_allowed(self, name, host):

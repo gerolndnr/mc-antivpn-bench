@@ -30,7 +30,8 @@ TEMPLATES = os.path.join(WORK, 'templates')
 MC_UID = 1001
 ANSI = re.compile(r'\x1b\[[0-9;]*[A-Za-z]|\[m')
 # Real provider keys live only in the interposer process, never in a product JVM.
-SECRET_ENV = ('PROXYCHECK_KEY', 'VPNAPI_KEY')
+SECRET_ENV = ('PROXYCHECK_KEY', 'VPNAPI_KEY', 'PROVIDER_KEY_IPHUB', 'PROVIDER_KEY_IPAPI_IS', 'PROVIDER_KEY_IPLOCATE',
+              'PROVIDER_KEY_IPQS', 'PROVIDER_KEY_IPHUNTER', 'PROVIDER_KEY_IP2LOCATION', 'PROVIDER_CONTACT_GETIPINTEL')
 FORWARDING_SECRET = 'mc-antivpn-bench-forwarding-secret'
 
 PLATFORMS = {

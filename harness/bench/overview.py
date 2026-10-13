@@ -151,8 +151,9 @@ def performance(dirs):
     return out
 
 
-def detection(dirs):
-    """The headline profile (proxycheck_key if measured, else enforce), chunks merged, final attempt per subject."""
+def detection(dirs, profile=None):
+    """One profile's detection, chunks merged, final attempt per subject: `profile`, or the headline one (proxycheck_key
+    if measured, else enforce)."""
     by, keyless = {}, set()
     for d in dirs:
         manifest = os.path.join(d, 'manifest.json')
@@ -172,7 +173,11 @@ def detection(dirs):
                 keyless |= {p for row in r['rows'] for p in row['products']}
     if not by:
         return None
-    profile = 'proxycheck_key' if 'proxycheck_key' in by else 'enforce' if 'enforce' in by else next(iter(by))
+    if profile is not None:
+        if profile not in by:
+            return None
+    else:
+        profile = 'proxycheck_key' if 'proxycheck_key' in by else 'enforce' if 'enforce' in by else next(iter(by))
     # Final attempt per subject and product: products can come from different runs (bench.latest).
     final, attempts = {}, {}
     for row in by[profile]:
@@ -533,6 +538,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     labels = labels or {}
     of = (lambda family: dirs.get(family, [])) if isinstance(dirs, dict) else (lambda family: dirs)
     perf, det, fail = performance(of('performance')), detection(of('detection')), failure(of('failure'))
+    det_best = detection(of('detection-optimal'), profile='optimal') if isinstance(dirs, dict) else None
     func, red, prov = functional(of('functional')), redis(of('redis')), providers(of('providers'))
     if isinstance(dirs, dict):
         dirs = sorted({d for folders in dirs.values() for d in folders})
@@ -540,6 +546,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     for platform in perf.values():
         ids |= set(platform)
     ids |= set(det['products']) if det else set()
+    ids |= set(det_best['products']) if det_best else set()
     ids |= set(fail) | set(func) | set(red)
     ids.discard('none')
     products = sorted(ids, key=lambda p: PRODUCT_ORDER.index(p) if p in PRODUCT_ORDER else 99)
@@ -608,80 +615,81 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             place([card_a], '1fr')
             place([card_b], '1fr')
 
-    # Detection
-    if det and det['cohorts']:
-        cols = [pid for pid in det['products'] if pid in products]
-        body, totals, rates = [], {}, {}
-        # Fewest refused only counts for plugins that also block: one that blocks almost nothing refuses nobody
-        # (as in the services table).
-        catch_n = sum(det['cohorts'][cid]['n'] for cid, _ in CATCH if cid in det['cohorts'])
-        caught = {pid: sum(det['cohorts'][cid]['blocked'][pid] for cid, _ in CATCH if cid in det['cohorts']) for pid in cols}
-        blockers = {pid for pid in cols if caught[pid] >= catch_n / 2}
-        for group, cohorts, low in (('Should be blocked', CATCH, False), ('Should get in', SPARE, True)):
-            only = (lambda d: {k: v for k, v in d.items() if k in blockers}) if low else (lambda d: d)
-            present = [(cid, label) for cid, label in cohorts if cid in det['cohorts']]
-            if not present:
-                continue
-            body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">{group}{" · higher is better" if not low else " · fewer refused is better"}</td>']))
-            for cid, label in present:
-                c = det['cohorts'][cid]
-                w = best(only(c['blocked']), low)
-                cells = [td(f'{esc(label)}<span class="frac">{c["n"]}</span>')]
-                for pid in cols:
-                    k = c['blocked'][pid]
-                    share = k / c['n'] if c['n'] else 0
-                    cells.append(td(f'<span class="cell">{k}<span class="mini"><b style="width:{100 * share:.1f}%"></b></span></span>', 'best' if pid in w else ''))
-                body.append(('', cells))
-            n = sum(det['cohorts'][cid]['n'] for cid, _ in present)
-            tot = {pid: sum(det['cohorts'][cid]['blocked'][pid] for cid, _ in present) for pid in cols}
-            w = best(only(tot), low)
-            body.append(('total', [td(('Blocked' if not low else 'Refused') + f' of {n}')] + [td(str(tot[pid]), 'best' if pid in w else '') for pid in cols]))
-            rates[low] = (n, tot, only)
-        # True-flag rate: share of the addresses that should be blocked and were. False-flag rate: share of the home and
-        # mobile players refused. Same accent rules as the totals above.
-        if len(rates) == 2:
-            pct = lambda v: f'{100 * v:.1f} %'
-            body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">Rates</td>']))
-            for low, label in ((False, 'True flags · bad addresses blocked'), (True, 'False flags · good players refused')):
-                n, tot, only = rates[low]
-                share = {pid: tot[pid] / n if n else None for pid in cols}
-                w = best(only(share), low, pct)
-                body.append(('', [td(label)] + [td('–' if share[pid] is None else pct(share[pid]), 'best' if pid in w else '') for pid in cols]))
-        # Volunteers' probes that leave through a privacy relay or a data centre: whether to let them in is policy.
-        loose = [(cid, label) for cid, label in UNGRADED if cid in det['cohorts']]
-        if loose:
-            body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">Not graded · blocking these is a policy choice</td>']))
-            for cid, label in loose:
-                c = det['cohorts'][cid]
-                body.append(('', [td(f'{esc(label)}<span class="frac">{c["n"]}</span>')] +
-                             [td(f'{c["blocked"][pid]} blocked') for pid in cols]))
-        profile = {'enforce': 'as shipped, no API keys', 'proxycheck_key': 'same free ProxyCheck key for every plugin',
-                   'free_keys': 'free keys'}.get(det['profile'], det['profile'])
-        bare = [pid for pid in cols if pid in det.get('unnormalized', set())]
-        if bare and det['profile'] == 'enforce':
-            who = ', '.join(names[pid] for pid in bare)
-            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
-                              f'{esc(who)} ask{"s" if len(bare) == 1 else ""} ProxyCheck without a key, as shipped. ProxyCheck answers '
-                              '100 such lookups a day per server; each plugin ran on a server of its own, and after its 100 '
-                              'ProxyCheck answered it no more, as on a busy real server.</td>']))
-        gone = stale_note(det.get('stale') or {})
-        if gone:
-            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
-                              f'Not counted: {gone} of the dataset that had left the Tor exit list or the proxy list by the start of '
-                              'a run shown here. Flagging them is neither right nor wrong any more.</td>']))
-        if det.get('contested'):
-            n = det['contested']
-            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
-                              f'Not counted: {n} contested address{"es" if n != 1 else ""} whose label was shown not to hold when measured '
-                              '(datasets/contested.json, with the evidence).</td>']))
-        late = [pid for pid in cols if after_join(pid)]
-        if late:
-            who = ', '.join(names[pid].split('\n')[0] for pid in late)
-            body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
-                              f'{esc(who)} lets every player in and checks afterwards: its blocks are kicks of a player who is already on '
-                              'the server. Its join times are therefore shown as "after join".</td>']))
-        place([table_card('Detection and false positives', f'{num(det["subjects"])} real addresses, {profile}. Each number: addresses blocked.',
-                          [''] + [names[pid] for pid in cols], body, ['28%'] + [f'{72 / max(1, len(cols)):.2f}%'] * len(cols))], '1fr')
+    # Detection: as shipped without keys, then (when measured) each plugin's best configuration with free keys.
+    for det, det_title in ((det, 'Detection and false positives'), (det_best, 'Detection, best configuration with free keys')):
+        if det and det['cohorts']:
+            cols = [pid for pid in det['products'] if pid in products]
+            body, totals, rates = [], {}, {}
+            # Fewest refused only counts for plugins that also block: one that blocks almost nothing refuses nobody
+            # (as in the services table).
+            catch_n = sum(det['cohorts'][cid]['n'] for cid, _ in CATCH if cid in det['cohorts'])
+            caught = {pid: sum(det['cohorts'][cid]['blocked'][pid] for cid, _ in CATCH if cid in det['cohorts']) for pid in cols}
+            blockers = {pid for pid in cols if caught[pid] >= catch_n / 2}
+            for group, cohorts, low in (('Should be blocked', CATCH, False), ('Should get in', SPARE, True)):
+                only = (lambda d: {k: v for k, v in d.items() if k in blockers}) if low else (lambda d: d)
+                present = [(cid, label) for cid, label in cohorts if cid in det['cohorts']]
+                if not present:
+                    continue
+                body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">{group}{" · higher is better" if not low else " · fewer refused is better"}</td>']))
+                for cid, label in present:
+                    c = det['cohorts'][cid]
+                    w = best(only(c['blocked']), low)
+                    cells = [td(f'{esc(label)}<span class="frac">{c["n"]}</span>')]
+                    for pid in cols:
+                        k = c['blocked'][pid]
+                        share = k / c['n'] if c['n'] else 0
+                        cells.append(td(f'<span class="cell">{k}<span class="mini"><b style="width:{100 * share:.1f}%"></b></span></span>', 'best' if pid in w else ''))
+                    body.append(('', cells))
+                n = sum(det['cohorts'][cid]['n'] for cid, _ in present)
+                tot = {pid: sum(det['cohorts'][cid]['blocked'][pid] for cid, _ in present) for pid in cols}
+                w = best(only(tot), low)
+                body.append(('total', [td(('Blocked' if not low else 'Refused') + f' of {n}')] + [td(str(tot[pid]), 'best' if pid in w else '') for pid in cols]))
+                rates[low] = (n, tot, only)
+            # True-flag rate: share of the addresses that should be blocked and were. False-flag rate: share of the home and
+            # mobile players refused. Same accent rules as the totals above.
+            if len(rates) == 2:
+                pct = lambda v: f'{100 * v:.1f} %'
+                body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">Rates</td>']))
+                for low, label in ((False, 'True flags · bad addresses blocked'), (True, 'False flags · good players refused')):
+                    n, tot, only = rates[low]
+                    share = {pid: tot[pid] / n if n else None for pid in cols}
+                    w = best(only(share), low, pct)
+                    body.append(('', [td(label)] + [td('–' if share[pid] is None else pct(share[pid]), 'best' if pid in w else '') for pid in cols]))
+            # Volunteers' probes that leave through a privacy relay or a data centre: whether to let them in is policy.
+            loose = [(cid, label) for cid, label in UNGRADED if cid in det['cohorts']]
+            if loose:
+                body.append(('groupr', [f'<td class="group" colspan="{1 + len(cols)}">Not graded · blocking these is a policy choice</td>']))
+                for cid, label in loose:
+                    c = det['cohorts'][cid]
+                    body.append(('', [td(f'{esc(label)}<span class="frac">{c["n"]}</span>')] +
+                                 [td(f'{c["blocked"][pid]} blocked') for pid in cols]))
+            profile = {'enforce': 'as shipped, no API keys', 'proxycheck_key': 'same free ProxyCheck key for every plugin',
+                       'free_keys': 'free keys', 'optimal': "each plugin's best configuration, free keys included"}.get(det['profile'], det['profile'])
+            bare = [pid for pid in cols if pid in det.get('unnormalized', set())]
+            if bare and det['profile'] == 'enforce':
+                who = ', '.join(names[pid] for pid in bare)
+                body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                                  f'{esc(who)} ask{"s" if len(bare) == 1 else ""} ProxyCheck without a key, as shipped. ProxyCheck answers '
+                                  '100 such lookups a day per server; each plugin ran on a server of its own, and after its 100 '
+                                  'ProxyCheck answered it no more, as on a busy real server.</td>']))
+            gone = stale_note(det.get('stale') or {})
+            if gone:
+                body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                                  f'Not counted: {gone} of the dataset that had left the Tor exit list or the proxy list by the start of '
+                                  'a run shown here. Flagging them is neither right nor wrong any more.</td>']))
+            if det.get('contested'):
+                n = det['contested']
+                body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                                  f'Not counted: {n} contested address{"es" if n != 1 else ""} whose label was shown not to hold when measured '
+                                  '(datasets/contested.json, with the evidence).</td>']))
+            late = [pid for pid in cols if after_join(pid)]
+            if late:
+                who = ', '.join(names[pid].split('\n')[0] for pid in late)
+                body.append(('', [f'<td colspan="{1 + len(cols)}" class="na" style="white-space:normal;font-size:12.5px;height:44px">'
+                                  f'{esc(who)} lets every player in and checks afterwards: its blocks are kicks of a player who is already on '
+                                  'the server. Its join times are therefore shown as "after join".</td>']))
+            place([table_card(det_title, f'{num(det["subjects"])} real addresses, {profile}. Each number: addresses blocked.',
+                              [''] + [names[pid] for pid in cols], body, ['28%'] + [f'{72 / max(1, len(cols)):.2f}%'] * len(cols))], '1fr')
 
     # Reliability, Redis
     cards = []

@@ -630,10 +630,19 @@ async def run(family, runtime, recorder, canaries, product_ids, platforms):
             if profile == 'free_keys' and not keys:
                 print('[detection] free_keys profile skipped: PROXYCHECK_KEY/VPNAPI_KEY not set', flush=True)
                 continue
+            if profile == 'optimal' and not os.environ.get('PROXYCHECK_KEY'):
+                print('[detection] optimal profile skipped: no keys (it runs only as its own keyed detection run)', flush=True)
+                continue
             if profile == 'proxycheck_key' and not os.environ.get('PROXYCHECK_KEY'):
                 print('[detection] proxycheck_key profile skipped: PROXYCHECK_KEY not set', flush=True)
                 continue
-            await detection(runtime, recorder, canaries, product_ids, profile)
+            ids = product_ids
+            if profile == 'optimal':
+                ids = [p for p in product_ids if 'optimal' in products.adapter(p).get('profiles', {})]
+                if not ids:
+                    print('[detection] optimal profile skipped: no product defines it yet', flush=True)
+                    continue
+            await detection(runtime, recorder, canaries, ids, profile)
     if family in ('failure', 'all'):
         await failure(runtime, recorder, canaries, product_ids)
     if family in ('redis', 'all'):

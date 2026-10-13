@@ -391,10 +391,34 @@ class Overview(unittest.TestCase):
         path = os.path.join(os.path.dirname(__file__), '..', '.github', 'workflows', 'bench.yml')
         run = next(s for s in yaml.safe_load(open(path))['jobs']['bench']['steps'] if s.get('name') == 'Run')
         for name, value in run['env'].items():
-            if 'secrets.' in str(value):
-                self.assertTrue(str(value).startswith("${{ inputs.family == 'providers' &&"), name)
+            value = str(value)
+            if 'secrets.' not in value:
+                continue
+            # Every secret is tied to the providers family or to a keyed detection run of the optimal profile alone.
+            self.assertIn("inputs.family == 'providers'", value, name)
+            others = value.replace("inputs.family == 'providers'", '')
+            if 'inputs.family ==' in others:
+                self.assertIn("inputs.family == 'detection' && inputs.detection_profiles == 'optimal'", others, name)
+                self.assertIn('inputs.use_keys', others, name)
         source = open(os.path.join(ROOT, 'harness', 'bench', '__main__.py')).read()
         self.assertIn('os.environ.pop(name, None)', source)
+
+    def test_only_the_optimal_detection_run_keeps_keys(self):
+        from bench.__main__ import keyed_run_allowed
+        self.assertTrue(keyed_run_allowed('detection', 'optimal'))
+        for family, profiles in (('detection', 'enforce'), ('detection', 'enforce,optimal'), ('performance', 'optimal'),
+                                 ('functional', ''), ('all', 'optimal')):
+            self.assertFalse(keyed_run_allowed(family, profiles), (family, profiles))
+
+    def test_every_key_has_a_canary_and_its_own_hosts(self):
+        from bench import engine
+        canaries = engine.make_canaries(seed=1)
+        spec = engine.secrets_spec(canaries)
+        self.assertEqual(set(engine.KEYS), set(canaries))
+        for name, entry in spec.items():
+            if 'canary' in entry:
+                self.assertTrue(entry['hosts'], name)
+                self.assertRegex(entry['canary'], r'^[A-Za-z0-9-]+$')
 
     def test_overview_accent_follows_the_shown_value(self):
         from bench import overview
@@ -647,6 +671,37 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.assertEqual(profile, 'enforce')
         self.assertEqual(chosen['detection']['connection-guard'][0][0], '1')
         self.assertEqual(chosen['functional']['connection-guard'][0][0], '1')
+
+
+class OptimalTable(unittest.TestCase):
+    """The best-configuration table takes the optimal profile from keyed runs only; the standard table never does."""
+
+    def run_folder(self, base, run_id, products, profile, keyed):
+        folder = os.path.join(base, str(run_id))
+        os.makedirs(os.path.join(folder, 'detection'))
+        json.dump(dict(products=products, environment=dict(started='2026-10-13T08:00:00+00:00',
+                                                           keys_present=dict(proxycheck=keyed, vpnapi=keyed))),
+                  open(os.path.join(folder, 'manifest.json'), 'w'))
+        rows = [dict(subject=f's{i}', cohort='tor', label='tor', attempt=0, products={p: dict(blocked=True) for p in products})
+                for i in range(3)]
+        json.dump(dict(profile=profile, chunk=None, rows=rows), open(os.path.join(folder, 'detection', f'{profile}.json'), 'w'))
+
+    def test_optimal_only_from_keyed_runs(self):
+        from bench import latest
+        base = tempfile.mkdtemp()
+        self.run_folder(base, 4, ['foxgate', 'kaurivpn'], 'optimal', False)  # optimal without keys: ignored
+        self.run_folder(base, 3, ['foxgate', 'kaurivpn'], 'enforce', True)   # standard pass with keys: ignored
+        self.run_folder(base, 2, ['foxgate', 'kaurivpn'], 'optimal', True)
+        self.run_folder(base, 1, ['foxgate', 'kaurivpn'], 'enforce', False)
+        saved = latest.runs, latest.dataset.public_items
+        latest.runs = lambda repo, limit: [dict(id=4), dict(id=3), dict(id=2), dict(id=1)]
+        latest.dataset.public_items = lambda version: [{}] * 3
+        try:
+            chosen, _, profile = latest.select('x', base)
+        finally:
+            latest.runs, latest.dataset.public_items = saved
+        self.assertEqual({p: s[0][0] for p, s in chosen['detection'].items()}, {'foxgate': '1', 'kaurivpn': '1'})
+        self.assertEqual({p: s[0][0] for p, s in chosen['detection-optimal'].items()}, {'foxgate': '2', 'kaurivpn': '2'})
 
 
 class ProviderScore(unittest.TestCase):

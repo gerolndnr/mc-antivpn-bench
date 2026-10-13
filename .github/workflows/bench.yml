@@ -46,7 +46,7 @@ on:
         description: Detection dataset version (v1, or a v2 day YYYY-MM-DD; empty = the newest day)
         default: ''
       use_keys:
-        description: providers family only - give ProxyCheck and VPNAPI their key (plugins never get a key)
+        description: Keys for the providers family, or for a detection run of the optimal profile alone (plugins get keys nowhere else)
         type: boolean
         default: false
 
@@ -84,10 +84,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat datasets/detection-v2/CURRENT)
-          for product in connection-guard-061 foxgate proxyshield vpnguard kaurivpn advancedantivpn; do
+          products="connection-guard-061 foxgate proxyshield vpnguard kaurivpn advancedantivpn"
+          for product in $products; do
             gh workflow run bench.yml --ref main -f family=detection -f products="$product" -f detection_profiles=enforce -f dataset="$version"
-            echo "detection on $version: $product"
+            echo "standard detection on $version: $product"
           done
+          # Best configuration with keys (METHODOLOGY 7.1): Monday to Friday a fifth of the dataset a night, every plugin
+          # in one run, so the keys' daily quotas cover all of them. The week's five nights share one core.
+          dow=$(date -u +%u)
+          if [ "$dow" -le 5 ]; then
+            gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $products | tr ' ' ',')" \
+              -f detection_profiles=optimal -f detection_chunk="$(( dow - 1 ))/5" -f use_keys=true -f dataset="$version"
+            echo "optimal detection on $version: chunk $(( dow - 1 ))/5"
+          fi
 
   bench:
     if: github.event_name == 'workflow_dispatch'
@@ -161,18 +170,20 @@ jobs:
           done
       - name: Run
         env:
-          # Keys reach only the providers family (the detection services measured on their own, METHODOLOGY 7.9).
-          # Plugins never get a key; bench drops any it is given for the other families as well.
-          PROXYCHECK_KEY: ${{ inputs.family == 'providers' && inputs.use_keys && (secrets.PROXYCHECK_KEY_2 || secrets.PROXYCHECK_KEY) || '' }}
-          VPNAPI_KEY: ${{ inputs.family == 'providers' && inputs.use_keys && secrets.VPNAPI_KEY || '' }}
-          BENCH_PROVIDERS_PROXYCHECK_KEY: ${{ inputs.family == 'providers' && inputs.use_keys && '1' || '' }}
-          # providers family: optional free keys (set by the owner); a service without its key is skipped.
-          PROVIDER_KEY_IPAPI_IS: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPAPI_IS || '' }}
-          PROVIDER_KEY_IPLOCATE: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPLOCATE || '' }}
+          # Keys reach the providers family (the services on their own, METHODOLOGY 7.9) and a detection run of the
+          # `optimal` profile alone (each plugin's best configuration, METHODOLOGY 4). The standard runs get none, and
+          # bench drops any key in every other run. ProxyCheck: the providers family uses the second key, the optimal
+          # series the first, so neither spends the other's daily quota.
+          PROXYCHECK_KEY: ${{ inputs.use_keys && (inputs.family == 'providers' && (secrets.PROXYCHECK_KEY_2 || secrets.PROXYCHECK_KEY) || inputs.family == 'detection' && inputs.detection_profiles == 'optimal' && secrets.PROXYCHECK_KEY) || '' }}
+          VPNAPI_KEY: ${{ inputs.use_keys && (inputs.family == 'providers' || inputs.family == 'detection' && inputs.detection_profiles == 'optimal') && secrets.VPNAPI_KEY || '' }}
+          BENCH_PROVIDERS_PROXYCHECK_KEY: ${{ inputs.use_keys && inputs.family == 'providers' && '1' || '' }}
+          # Optional free keys (set by the owner); a service without its key is skipped.
+          PROVIDER_KEY_IPAPI_IS: ${{ (inputs.family == 'providers' || inputs.use_keys && inputs.family == 'detection' && inputs.detection_profiles == 'optimal') && secrets.PROVIDER_KEY_IPAPI_IS || '' }}
+          PROVIDER_KEY_IPLOCATE: ${{ (inputs.family == 'providers' || inputs.use_keys && inputs.family == 'detection' && inputs.detection_profiles == 'optimal') && secrets.PROVIDER_KEY_IPLOCATE || '' }}
           PROVIDER_KEY_IP2LOCATION: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IP2LOCATION || '' }}
-          PROVIDER_KEY_IPHUB: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPHUB || '' }}
+          PROVIDER_KEY_IPHUB: ${{ (inputs.family == 'providers' || inputs.use_keys && inputs.family == 'detection' && inputs.detection_profiles == 'optimal') && secrets.PROVIDER_KEY_IPHUB || '' }}
           PROVIDER_KEY_IPHUNTER: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPHUNTER || '' }}
-          PROVIDER_KEY_IPQS: ${{ inputs.family == 'providers' && secrets.PROVIDER_KEY_IPQS || '' }}
+          PROVIDER_KEY_IPQS: ${{ (inputs.family == 'providers' || inputs.use_keys && inputs.family == 'detection' && inputs.detection_profiles == 'optimal') && secrets.PROVIDER_KEY_IPQS || '' }}
           PROVIDER_CONTACT_GETIPINTEL: ${{ inputs.family == 'providers' && secrets.PROVIDER_CONTACT_GETIPINTEL || '' }}
           BENCH_PROVIDER_SERVICES: ${{ inputs.services }}
           BENCH_DATASET: ${{ steps.nightly.outputs.dataset }}

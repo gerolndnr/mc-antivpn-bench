@@ -56,12 +56,21 @@ def make_canaries(seed=None):
     rng = secrets.SystemRandom() if seed is None else __import__('random').Random(seed)
     digits = lambda n: ''.join(rng.choice('0123456789') for _ in range(n))
     hexs = lambda n: ''.join(rng.choice('0123456789abcdef') for _ in range(n))
-    return dict(proxycheck=f'{digits(6)}-{digits(6)}-{digits(6)}-{digits(6)}', vpnapi=hexs(32))
+    alnum = lambda n: ''.join(rng.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') for _ in range(n))
+    return dict(proxycheck=f'{digits(6)}-{digits(6)}-{digits(6)}-{digits(6)}', vpnapi=hexs(32),
+                # Keys the `optimal` profiles may use (METHODOLOGY 4); the same canary scheme as the two above.
+                iphub=f'MTAw{alnum(40)}', ipapi_is=hexs(16), iplocate=hexs(32), ipqs=alnum(32))
+
+
+# Real key per canary: the environment variable it comes from and the only hosts it may be sent to.
+KEYS = dict(proxycheck=('PROXYCHECK_KEY', ['proxycheck.io']), vpnapi=('VPNAPI_KEY', ['vpnapi.io']),
+            iphub=('PROVIDER_KEY_IPHUB', ['v2.api.iphub.info', 'iphub.info']), ipapi_is=('PROVIDER_KEY_IPAPI_IS', ['api.ipapi.is']),
+            iplocate=('PROVIDER_KEY_IPLOCATE', ['iplocate.io', '*.iplocate.io']),
+            ipqs=('PROVIDER_KEY_IPQS', ['ipqualityscore.com', 'www.ipqualityscore.com']))
 
 
 def secrets_spec(canaries):
-    spec = dict(proxycheck=dict(env='PROXYCHECK_KEY', canary=canaries['proxycheck'], hosts=['proxycheck.io']),
-                vpnapi=dict(env='VPNAPI_KEY', canary=canaries['vpnapi'], hosts=['vpnapi.io']))
+    spec = {name: dict(env=env, canary=canaries[name], hosts=hosts) for name, (env, hosts) in KEYS.items() if name in canaries}
     # A bought product's buyer id (e.g. in a marketplace licence check URL) is masked in the egress log like a key.
     for i, value in enumerate(private.redact_values()):
         spec[f'purchaser-{i}'] = dict(value=value, hosts=[])

@@ -130,8 +130,7 @@ def environment(canaries):
         kernel=host_platform.release(), cpus=os.cpu_count(),
         memory_kb=int(open('/proc/meminfo').read().split()[1]) if os.path.exists('/proc/meminfo') else None,
         image=os.environ.get('BENCH_IMAGE'), host=os.environ.get('BENCH_HOST_DESCRIPTION'),
-        keys_present=dict(proxycheck=bool(os.environ.get('PROXYCHECK_KEY')),
-                          vpnapi=bool(os.environ.get('VPNAPI_KEY'))),
+        keys_present={name: bool(os.environ.get(env)) for name, (env, _) in engine.KEYS.items()},
         canaries={k: hashlib.sha256(v.encode()).hexdigest()[:16] for k, v in canaries.items()},
         pins=products.pins(), artifacts_lock=json.load(open(artifacts.LOCK)) if os.path.exists(artifacts.LOCK) else {})
 
@@ -192,23 +191,28 @@ def providers_run(args, run_id, recorder):
     draw_overview(recorder)
 
 
+def keyed_run_allowed(family, profiles):
+    """Keys reach plugins only in a detection run of the `optimal` profile alone."""
+    return family == 'detection' and [p.strip() for p in profiles.split(',') if p.strip()] == ['optimal']
+
+
 async def main_run(args):
     from .runtime import Runtime
     run_id = args.run_id or datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     recorder = Recorder(run_id)
     if args.family == 'providers':
         return providers_run(args, run_id, recorder)
-    # Plugins never get an API key (METHODOLOGY 5): keys are for the providers family only. Dropped here, before the
-    # interposer starts, so no request of a plugin (nor the baselines) can carry one, whatever the caller passed.
+    # Plugins get API keys only in the `optimal` detection profile (METHODOLOGY 4, 5); every other run drops them
+    # here, before the interposer starts, so no request of a plugin (nor the baselines) can carry one.
     from .servers import SECRET_ENV
-    for name in SECRET_ENV:
-        os.environ.pop(name, None)
+    if not keyed_run_allowed(args.family, os.environ.get('BENCH_DETECTION_PROFILES', '')):
+        for name in SECRET_ENV:
+            os.environ.pop(name, None)
     canaries_path = os.path.join(engine.WORK, 'state', 'canaries.json')
     os.makedirs(os.path.dirname(canaries_path), exist_ok=True)
-    if os.path.exists(canaries_path):
-        canaries = json.load(open(canaries_path))
-    else:
-        canaries = engine.make_canaries()
+    canaries = json.load(open(canaries_path)) if os.path.exists(canaries_path) else {}
+    if set(engine.make_canaries(seed=0)) - set(canaries):  # recorded state from before a key was added
+        canaries = {**engine.make_canaries(), **canaries}
         json.dump(canaries, open(canaries_path, 'w'))
     secrets_path = os.path.join(engine.WORK, 'state', 'secrets.json')
     json.dump(engine.secrets_spec(canaries), open(secrets_path, 'w'))
