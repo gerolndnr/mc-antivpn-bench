@@ -415,17 +415,22 @@ async def record_references(runtime, product_id, platform, profile, canaries, ad
             references[host] = reference['ip']
         spare = iter(spares)
         for host in hosts:
-            if host in references:
-                continue
-            subject = next(spare, None)
-            if subject is None:
-                break
-            others = [h for h in hosts if h != host]
-            runtime.rules(measurement_rules(extra=[dict(name='reference-fallback', hosts=others, action='fault', fault='http_503')]))
-            mark = runtime.sequence()
-            await mcclient.admit(instance.port, subject['ip'], player('ref'), observe_s=1)
-            if host in answered(mark, subject['ip']):
-                references[host] = subject['ip']
+            # A live service can fail the one reference request (rate limit, timeout from the runner). Without its
+            # template every measured request to it would get no answer, so it is tried up to three times.
+            for attempt in range(3):
+                if host in references:
+                    break
+                subject = next(spare, None)
+                if subject is None:
+                    break
+                if attempt:
+                    await asyncio.sleep(3)
+                others = [h for h in hosts if h != host]
+                runtime.rules(measurement_rules(extra=[dict(name='reference-fallback', hosts=others, action='fault', fault='http_503')]))
+                mark = runtime.sequence()
+                await mcclient.admit(instance.port, subject['ip'], player('ref'), observe_s=1)
+                if host in answered(mark, subject['ip']):
+                    references[host] = subject['ip']
     finally:
         runtime.rules(measurement_rules())
         if instance.server:
@@ -471,7 +476,13 @@ def summarize(results, events, lookup_hosts, subjects=None):
     # Checked: a detection service was asked about the player, or the plugin refused them (from its own list or cache).
     # The rest got in without any answer: let in unchecked (quota used up, queue full, timeouts).
     refused = {r.get('subject_ip') for r in results if r.get('outcome') in ('DENY_LOGIN', 'DENY_PLAY')} & distinct
-    return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]),
+    # Requests the simulation could not answer (no template recorded for the host): the plugin saw a failing service,
+    # which the other plugins did not. A round with any is not used for the overview (overview.performance).
+    misses = {}
+    for event in calls:
+        if event.get('source') == 'missing':
+            misses[event['host']] = misses.get(event['host'], 0) + 1
+    return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]), template_misses=misses,
                 distinct_subjects=len(distinct), subjects_with_lookup=len(looked_up), subjects_checked=len(looked_up | refused),
                 join_ms=percentiles([r.get('marks', {}).get('joined') for r in results]),
                 lookup_requests=len(calls), lookup_requests_per_host=per_host,
@@ -518,7 +529,7 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                 references = {}
                 if product_id != 'none':
                     references = await record_references(runtime, product_id, platform, profile, canaries, adapter, reference,
-                                                         by_cohort(items, 'residential', len(adapter['lookup_hosts']), 1),
+                                                         by_cohort(items, 'residential', 3 * len(adapter['lookup_hosts']), 1),
                                                          label=f'perf-ref-{product_id}-{round_index}')
                     record['template_references'] = {h: ('reference' if ip == reference['ip'] else 'fallback-reference')
                                                      for h, ip in references.items()}

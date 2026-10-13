@@ -138,6 +138,8 @@ def performance(dirs):
     for r in records(dirs, 'performance'):
         if 'burst' not in r and 'cold' not in r:
             continue
+        if any((r.get(phase) or {}).get('template_misses') for phase in ('cold', 'warm', 'stampede', 'burst')):
+            continue  # the simulation left a service unanswered for this plugin only (heavy.summarize)
         by.setdefault(r.get('platform', 'velocity'), {}).setdefault(r['product'], []).append(r)
     med = lambda xs: statistics.median(xs) if xs else None
     out = {}

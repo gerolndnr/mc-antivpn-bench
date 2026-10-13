@@ -1082,3 +1082,21 @@ class JarvisMeasurement(unittest.TestCase):
         self.assertFalse(latest.withheld('connection-guard-061'))
         adapter = json.load(open(os.path.join(ROOT, 'products', 'jarvis.json')))
         self.assertEqual(adapter['profiles']['enforce']['edits'][0]['set']['key'], '{licence:jarvis}')
+
+
+class SimulationMisses(unittest.TestCase):
+    def test_unanswered_simulated_requests_are_counted_and_the_round_is_not_used(self):
+        from bench import heavy, overview
+        events = [dict(host='api.ipquery.io', subject_ip='198.51.100.1', source='missing', status=504),
+                  dict(host='api.zowi.gay', subject_ip='198.51.100.2', source='template', status=200)]
+        subjects = [dict(ip='198.51.100.1'), dict(ip='198.51.100.2')]
+        record = heavy.summarize([dict(outcome='ALLOW')] * 2, events, ['api.ipquery.io', 'api.zowi.gay'], subjects)
+        self.assertEqual(record['template_misses'], {'api.ipquery.io': 1})
+        with tempfile.TemporaryDirectory() as folder:
+            os.makedirs(os.path.join(folder, 'performance'))
+            for i, misses in enumerate(({'api.ipquery.io': 7}, {}, {})):
+                burst = dict(record, template_misses=misses, subjects_checked=128 if misses else 1000)
+                json.dump(dict(product='connection-guard-061', platform='velocity', round=i, burst=burst),
+                          open(os.path.join(folder, 'performance', f'r{i}.json'), 'w'))
+            result = overview.performance([folder])['velocity']['connection-guard-061']
+            self.assertEqual((result['rounds'], result['checked']), (2, 1000))
