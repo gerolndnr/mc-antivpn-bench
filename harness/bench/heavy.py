@@ -468,8 +468,11 @@ def summarize(results, events, lookup_hosts, subjects=None):
         per_host[event['host']] = per_host.get(event['host'], 0) + 1
     distinct = {s['ip'] for s in subjects or []}
     looked_up = {e.get('subject_ip') for e in calls if e.get('subject_ip')} & distinct
+    # Checked: a detection service was asked about the player, or the plugin refused them (from its own list or cache).
+    # The rest got in without any answer: let in unchecked (quota used up, queue full, timeouts).
+    refused = {r.get('subject_ip') for r in results if r.get('outcome') in ('DENY_LOGIN', 'DENY_PLAY')} & distinct
     return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]),
-                distinct_subjects=len(distinct), subjects_with_lookup=len(looked_up),
+                distinct_subjects=len(distinct), subjects_with_lookup=len(looked_up), subjects_checked=len(looked_up | refused),
                 join_ms=percentiles([r.get('marks', {}).get('joined') for r in results]),
                 lookup_requests=len(calls), lookup_requests_per_host=per_host,
                 unlisted_lookups=unlisted_lookups(events, lookup_hosts, distinct))

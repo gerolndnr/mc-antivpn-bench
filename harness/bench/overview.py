@@ -119,6 +119,19 @@ def newest_only(products):
     return [pid for pid in products if pid in keep]
 
 
+def legacy_checked(rounds):
+    """Runs before 13 Oct 2026 recorded players with a lookup, not players refused from the plugin's own list. Adding
+    every refusal is exact when the refused players had no lookup (Connection Guard Intel) and at most too high, in
+    the plugin's favour, when they had one."""
+    values = []
+    for r in rounds:
+        b = r.get('burst') or {}
+        if 'subjects_with_lookup' in b:
+            denied = sum((b.get('outcomes') or {}).get(k, 0) for k in ('DENY_LOGIN', 'DENY_PLAY'))
+            values.append(min(b.get('distinct_subjects') or 0, b['subjects_with_lookup'] + denied))
+    return statistics.median(values) if values else None
+
+
 def performance(dirs):
     """Per platform and product: the median across rounds of each value."""
     by = {}
@@ -144,7 +157,9 @@ def performance(dirs):
                 # Wave players the proxy cut off without a product decision (CLOSED, TIMEOUT; recorded from 8 October 2026).
                 cut_off=med([sum(((r.get('burst') or {}).get('outcomes') or {}).get(k, 0) for k in ('CLOSED', 'TIMEOUT'))
                              for r in rounds if r.get('burst')]) or None, burst_p50=m('burst', 'decision_ms', 'p50'),
-                checked=m('burst', 'subjects_with_lookup'), subjects=m('burst', 'distinct_subjects'),
+                # Runs before 13 Oct 2026 recorded only players with a lookup.
+                checked=m('burst', 'subjects_checked') if any('subjects_checked' in (r.get('burst') or {}) for r in rounds) else legacy_checked(rounds),
+                subjects=m('burst', 'distinct_subjects'),
                 cold_p95=m('cold', 'decision_ms', 'p95'), warm_p50=m('warm', 'decision_ms', 'p50'),
                 stampede=m('stampede', 'lookup_requests'), start=m('start', 'ready_s'),
                 cpu=m('resources', 'cpu_seconds'), rss=m('resources', 'max_rss_mb'))
@@ -463,6 +478,7 @@ h1 {{ margin-top: 30px; font-size: 58px; line-height: 1.02; font-weight: 600; le
 .val {{ text-align: right; font-size: 18px; font-weight: 500; color: var(--fg); white-space: nowrap; }}
 .val small {{ display: block; font-size: 12.5px; font-weight: 400; color: var(--fg-3); margin-top: 1px; }}
 .bar-row.best .val {{ color: var(--accent-text); }}
+.bars.wide .bar-row {{ grid-template-columns: 210px 1fr 330px; height: 44px; }}
 table {{ width: 100%; border-collapse: collapse; margin-top: 14px; table-layout: fixed; }}
 th {{ height: 58px; font-size: 13px; font-weight: 500; color: var(--fg-2); text-align: right; padding: 0 0 8px 8px; white-space: normal; overflow: hidden; line-height: 1.3; vertical-align: bottom; }}
 th span {{ color: var(--fg-3); font-weight: 400; font-size: 12px; }}
@@ -491,20 +507,20 @@ footer b {{ color: var(--fg-2); font-weight: 500; }}
 '''
 
 
-def bar_card(title, hint, rows, low=True, cap=None, tag='', eligible=None):
+def bar_card(title, hint, rows, low=True, cap=None, tag='', eligible=None, wide=False):
     """rows: (key, name, value, label, note, ref). `eligible`: only these keys can be marked best."""
     values = {k: v for k, _, v, _, _, ref in rows if not ref and (eligible is None or k in eligible)}
     winners = best(values, low)
     top = max([v for _, _, v, _, _, _ in rows if v is not None] or [1])
     top = min(top, cap) if cap else top
-    out = [f'<section class="card"><h2>{esc(title)}{f"<small>{esc(tag)}</small>" if tag else ""}</h2><p class="hint">{esc(hint)}</p><div class="bars">']
+    out = [f'<section class="card"><h2>{esc(title)}{f"<small>{esc(tag)}</small>" if tag else ""}</h2><p class="hint">{esc(hint)}</p><div class="bars{" wide" if wide else ""}">']
     for k, name, v, label, note, ref in rows:
         width = 0 if v is None else max(0.4, 100 * min(v, top) / top)
         cls = 'ref' if ref else 'best' if k in winners else ''
         out.append(f'<div class="bar-row {cls}"><span class="name">{esc(name)}</span><span class="track"><span class="fill" style="width:{width:.2f}%"></span></span>'
                    f'<span class="val">{esc(label)}{f"<small>{esc(note)}</small>" if note else ""}</span></div>')
     out.append('</div></section>')
-    return ''.join(out), 72 + 46 * len(rows)
+    return ''.join(out), (76 + 56 * len(rows)) if wide else (72 + 46 * len(rows))
 
 
 def table_card(title, hint, head, body, widths=None, tag=''):
@@ -572,29 +588,26 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     if platform:
         p = perf[platform]
         rows = []
-        for pid in products + ['none']:
+        # Under load, the question is whether every player still gets checked. Checked: a detection service was asked
+        # about the player, or the plugin refused them from its own list or cache; the rest got in unchecked.
+        for pid in products:
             e = p.get(pid)
             if not e or e['burst_p95'] is None:
                 continue
-            checked = e['checked']
-            note = (f'{num(checked)} of {num(e["subjects"])} looked up' if pid != 'none' and e['subjects'] else '')
-            if e.get('cut_off'):
-                note += f' · {num(e["cut_off"])} cut off'
             if after_join(pid):
                 rows.append((pid, names[pid], None, 'after join', 'lets everyone in, kicks later', False))
                 continue
-            rows.append((pid, names[pid], e['burst_p95'], fmt_ms(e['burst_p95']), note, pid == 'none'))
-        # A fast answer that skipped most players is not the best answer: only plugins that looked up the most players compete.
-        # "Looked up" counts players with at least one detection-service request; a player refused from a local list
-        # (Connection Guard Intel) is decided without one.
-        most = max([p[k]['checked'] or 0 for k, *_ in rows if k != 'none'] or [0])
+            checked, n = e['checked'] or 0, e['subjects'] or 0
+            note = f'decided within {fmt_ms(e["burst_p95"])}' + (f' · {num(n - checked)} unchecked' if n - checked > 0 else '')
+            if e.get('cut_off'):
+                note += f' · {num(e["cut_off"])} cut off'
+            rows.append((pid, names[pid], checked, f'{num(checked)} of {num(n)}', note, False))
         cut = any(p[k].get('cut_off') for k, *_ in rows if k in p)
-        card_a = bar_card('1,000 players join in 20 seconds', 'Time until the plugin decides, 95th percentile, among those that looked up the most players.'
-                          + (' Cut off: the proxy closed the login after 30 s, before the plugin decided.' if cut else ''),
-                          rows, low=True, cap=30000, tag=platform.capitalize() + (f' · median of {rounds} rounds' if rounds > 1 else ''),
-                          eligible={k for k, *_ in rows if k != 'none' and not after_join(k) and (p[k]['checked'] or 0) >= 0.95 * most})
+        card_a = bar_card('1,000 players join in 20 seconds', 'Players checked, by a detection service or the plugin\'s own list. Unchecked players got in without an answer or were cut off. Higher is better.'
+                          + (' Cut off: closed by the proxy after 30 s.' if cut else ''),
+                          rows, low=False, wide=True, tag=platform.capitalize() + (f' · median of {rounds} rounds' if rounds > 1 else ''))
         metrics = [('Single join, p95', 'cold_p95', fmt_ms, True), ('Repeat join, p50', 'warm_p50', fmt_ms, True),
-                   ('Lookups, 100 same-IP joins', 'stampede', num, True), ('Players looked up in the wave', 'checked', num, False),
+                   ('Lookups, 100 same-IP joins', 'stampede', num, True), ('Players checked in the wave', 'checked', num, False),
                    ('Start-up', 'start', lambda v: '–' if v is None else f'{v:.1f} s', True)]
         cols = [pid for pid in products if pid in p]
         body = []

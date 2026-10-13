@@ -683,6 +683,20 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.assertEqual(chosen['functional']['connection-guard'][0][0], '1')
 
 
+class WaveChecked(unittest.TestCase):
+    """A wave player counts as checked when a service was asked about them or the plugin refused them."""
+
+    def test_refused_from_own_list_counts_as_checked(self):
+        from bench import heavy
+        subjects = [dict(ip=f'192.0.2.{i}') for i in range(1, 5)]
+        results = [dict(subject_ip='192.0.2.1', outcome='ALLOW'), dict(subject_ip='192.0.2.2', outcome='DENY_LOGIN'),
+                   dict(subject_ip='192.0.2.3', outcome='ALLOW'), dict(subject_ip='192.0.2.4', outcome='CLOSED')]
+        events = [dict(host='api.example', subject_ip='192.0.2.1'), dict(host='api.example', subject_ip='192.0.2.4')]
+        out = heavy.summarize(results, events, ['api.example'], subjects)
+        self.assertEqual(out['subjects_with_lookup'], 2)
+        self.assertEqual(out['subjects_checked'], 3)  # .1 looked up, .2 refused from a list, .4 looked up; .3 unchecked
+
+
 class OptimalTable(unittest.TestCase):
     """The best-configuration table takes the optimal profile from keyed runs only; the standard table never does."""
 

@@ -213,10 +213,10 @@ def slide_wave(d):
     sub = (f'{total:,} new players join a Velocity proxy in 20 seconds. Detection services are simulated with the same delay and each '
            'service\'s free-tier limit for every plugin. Median of three rounds.')
     body = f'''<div class="panels" style="grid-template-columns: 1.25fr 1fr">
-<div class="panel"><h3>Players looked up <span>· at least one detection-service request · higher is better</span></h3><div class="hbars">{''.join(rows)}</div></div>
+<div class="panel"><h3>Players checked <span>· asked about at a service or refused from the plugin's own list · higher is better</span></h3><div class="hbars">{''.join(rows)}</div></div>
 <div class="panel"><h3>Time until the plugin decides <span>· 95th percentile · lower is better</span></h3><div class="hbars">{''.join(times)}</div></div></div>'''
-    notes = ['A player not looked up is let in unchecked (quota used up, queue full) or refused without a check.',
-             'Fastest is marked only among plugins that looked up nearly as many players as the best.']
+    notes = ['A player not checked got in without any answer (quota used up, queue full, timeouts).',
+             'Fastest is marked only among plugins that checked nearly as many players as the best.']
     if any(overview.after_join(p) for p in cols):
         notes.append('† Admits every player and checks afterwards, so its decision time is not comparable.')
     return title, sub, body, notes, f'performance, {d["dates"]}'
