@@ -64,6 +64,45 @@
         }
       ],
       "note": "Enables the bundled ProxyCheck and VPNAPI service definitions with keys (documented in the service files)."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "services/proxycheck.yml",
+          "set": {
+            "enabled": true,
+            "key": "{canary:proxycheck}"
+          }
+        },
+        {
+          "file": "services/vpnapi.yml",
+          "set": {
+            "enabled": true,
+            "key": "{canary:vpnapi}"
+          }
+        },
+        {
+          "file": "services/ipapi-is.yml",
+          "set": {
+            "key": "{canary:ipapi_is}"
+          }
+        },
+        {
+          "file": "services/iplocate.yml",
+          "set": {
+            "key": "{canary:iplocate}",
+            "url": "https://iplocate.io/api/lookup/{IP}?apikey={KEY}"
+          }
+        },
+        {
+          "file": "config.yml",
+          "set": {
+            "antivpn.maxFlags": 6
+          }
+        }
+      ],
+      "note": "Best documented configuration (METHODOLOGY 4): the 12 shipped services, plus ProxyCheck and VPNAPI with free keys, free keys for ipapi.is and IPLocate (IPLocate's URL gets its {KEY} variable, as its service file allows), and maxFlags 6, the upper end of FoxGate's own recommendation (5 or 6). Simulated on the providers run of 13 Oct with FoxGate's flag fields (hosting counts as a flag): 370 of 378 caught and 5 of 310 refused, against 366 and 7 shipped. A free search found fewer services scoring higher (zowi and ProxyCheck, 2 agree: 377 and 3); that drops ten of FoxGate's shipped services and is fitted to one day's answers, so it is not used. Range lists and modules stay as shipped."
     }
   },
   "redis": null,

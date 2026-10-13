@@ -89,14 +89,14 @@ jobs:
             gh workflow run bench.yml --ref main -f family=detection -f products="$product" -f detection_profiles=enforce -f dataset="$version"
             echo "standard detection on $version: $product"
           done
-          # Best configuration with keys (METHODOLOGY 7.1): Monday to Friday a fifth of the dataset a night, every plugin
-          # in one run, so the keys' daily quotas cover all of them. The week's five nights share one core.
+          # Best configuration with keys (METHODOLOGY 7.1): a fifth of the dataset a night, every plugin in one run, so the
+          # keys' daily quotas cover all of them. Monday to Friday cover the week's core once; Saturday and Sunday repeat
+          # the first two fifths, which completes a week that started late or lost a night.
           dow=$(date -u +%u)
-          if [ "$dow" -le 5 ]; then
-            gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $products | tr ' ' ',')" \
-              -f detection_profiles=optimal -f detection_chunk="$(( dow - 1 ))/5" -f use_keys=true -f dataset="$version"
-            echo "optimal detection on $version: chunk $(( dow - 1 ))/5"
-          fi
+          chunk="$(( (dow - 1) % 5 ))/5"
+          gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $products | tr ' ' ',')" \
+            -f detection_profiles=optimal -f detection_chunk="$chunk" -f use_keys=true -f dataset="$version"
+          echo "optimal detection on $version: chunk $chunk"
 
   bench:
     if: github.event_name == 'workflow_dispatch'

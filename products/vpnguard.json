@@ -66,6 +66,22 @@
         }
       ],
       "note": "Enables the documented ProxyCheck and VPNAPI providers with keys."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "providers.proxycheck.enabled": true,
+            "providers.proxycheck.key": "{canary:proxycheck}",
+            "providers.vpnapi.enabled": true,
+            "providers.vpnapi.key": "{canary:vpnapi}",
+            "join-enforcement.min-providers-flagged": 2
+          }
+        }
+      ],
+      "note": "Best documented configuration (METHODOLOGY 4): IP-API, ProxyCheck and VPNAPI with free keys, two of the three must flag (join-enforcement.min-providers-flagged 2); block categories as shipped. Simulated on the providers run of 13 Oct: 363 of 378 caught and 3 of 310 refused, against 322 and 9 with IP-API alone as shipped. ProxyCheck alone (1 of 1) caught 377 but refused 7."
     }
   },
   "redis": null,

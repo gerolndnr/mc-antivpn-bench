@@ -59,6 +59,23 @@
         }
       ],
       "note": "Enables the documented proxycheck and vpnapi provider entries with keys."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "detection.block-hosting": false,
+            "api.required-score": 3.5,
+            "api.providers.proxycheck.enabled": true,
+            "api.providers.proxycheck.key": "{canary:proxycheck}",
+            "api.providers.ipapi-is.key": "{canary:ipapi_is}",
+            "api.providers.iplocate.key": "{canary:iplocate}"
+          }
+        }
+      ],
+      "note": "Best documented configuration (METHODOLOGY 4): the 7 shipped providers with free keys for ipapi.is and IPLocate, plus ProxyCheck (weight 2) with a free key; required-score 3.5; data-centre addresses no longer blocked (detection.block-hosting false), since hosting is not graded here and home players behind hosting-flagged ranges were refused. Simulated on the API answers of 13 Oct: 375 of 378 caught and none of 310 refused, against 376 and 6 with the shipped providers and hosting allowed. Lists, rDNS and heuristics add to the score as shipped and are not simulated."
     }
   },
   "redis": {

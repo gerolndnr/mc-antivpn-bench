@@ -2,7 +2,7 @@
 
 **Where keys are used** (owner decisions, 13 October 2026):
 - The `providers` family measures the detection services on their own (METHODOLOGY 7.9).
-- The `optimal` detection series runs each plugin's best configuration with free keys (METHODOLOGY 4). It runs Monday to Friday, a fifth of the dataset a night.
+- The `optimal` detection series runs each plugin's best configuration with free keys (METHODOLOGY 4). It runs every night on a fifth of the dataset (Monday to Friday cover the week).
 
 The standard plugin runs never get a key. The workflow passes keys only to those two, and `bench` drops every key for any other run before the interposer starts. In the optimal series, plugin configurations hold canaries, and the interposer swaps them for the real key only toward that key's own host.
 
