@@ -160,5 +160,23 @@
       "waterfall"
     ],
     "version_type": "candidate"
+  },
+  "connectionguard-0.6.1-candidate-46821a2": {
+    "project": "connectionguard",
+    "version": "0.6.1-SNAPSHOT",
+    "path": "candidates/connection-guard-0.6.1-SNAPSHOT-46821a2.jar",
+    "sha256": "bbab24ed14fd47fb5514eb548e572aa78bc64371a9228af09ac57506c2c712eb",
+    "filename": "connection-guard-0.6.1-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #92 head 46821a2 (new-install order plus dashboard-managed order), CI run 38378596518 artifact (merge ref 8e20265)",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }
