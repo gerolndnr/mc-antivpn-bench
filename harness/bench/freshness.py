@@ -144,7 +144,7 @@ def check(start, network=True, version='v1'):
     if not network:
         return None
     exits, exit_file = tor_exits(start)
-    proxies, version = proxifly_ips(start)
+    proxies, listed = proxifly_ips(start)
     stale = {}
     for sid, (cohort, ip) in sorted(subjects(version).items()):
         if cohort == 'tor' and ip not in exits:
@@ -152,7 +152,7 @@ def check(start, network=True, version='v1'):
         if cohort == 'proxy' and ip not in proxies:
             stale[sid] = "not on proxifly's list at the run start"
     record = dict(started=start.isoformat(), dataset=version, tor=dict(source=f'{COLLECTOR}/ exit list {exit_file}', exits=len(exits)),
-                  proxy=dict(source=f'github.com/{PROXIFLY[0]} {PROXIFLY[1]} at {version["commit"]}', committed=version['date'],
+                  proxy=dict(source=f'github.com/{PROXIFLY[0]} {PROXIFLY[1]} at {listed["commit"]}', committed=listed['date'],
                              listed=len(proxies)),
                   stale=stale)
     os.makedirs(RECORDS, exist_ok=True)

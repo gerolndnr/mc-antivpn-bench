@@ -725,6 +725,26 @@ class DatasetVersions(unittest.TestCase):
             latest.runs, latest.dataset.public_items, latest.dataset.core_of = saved
 
 
+class FreshnessOnV2(unittest.TestCase):
+    """A new freshness record for a v2 run checks that version's subjects and names it."""
+
+    def test_new_record_for_a_v2_version(self):
+        from bench import freshness
+        saved = (freshness.tor_exits, freshness.proxifly_ips, freshness.subjects, freshness.RECORDS)
+        seen = []
+        freshness.tor_exits = lambda start: ({'192.0.2.1'}, 'file')
+        freshness.proxifly_ips = lambda start: ({'192.0.2.9'}, dict(commit='abc', date='2026-10-13T00:00:00Z'))
+        freshness.subjects = lambda version: seen.append(version) or {'t1': ('tor', '192.0.2.1'), 'p1': ('proxy', '192.0.2.2')}
+        freshness.RECORDS = tempfile.mkdtemp()
+        try:
+            record = freshness.check('2026-10-13T08:00:00+00:00', version='2026-10-13')
+        finally:
+            freshness.tor_exits, freshness.proxifly_ips, freshness.subjects, freshness.RECORDS = saved
+        self.assertEqual(seen, ['2026-10-13'])
+        self.assertEqual(record['dataset'], '2026-10-13')
+        self.assertEqual(list(record['stale']), ['p1'])
+
+
 class UngradedAndContested(unittest.TestCase):
     """A probe leaving through WARP is shown apart and not graded; a contested address counts for no one."""
 
