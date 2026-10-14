@@ -241,8 +241,10 @@ SERVICES = [
             terms='keyless; Y also covers hosting and cloud ranges'),
     Service('ipcheck', 'ip-check.net', lambda ip, k: f'https://ip-check.net/api/proxy-detect.php?ip={q(ip)}', parse_letter('TRUE', 'FALSE'),
             plugin=True, terms='no operator, terms or privacy policy published'),
-    Service('zowi', 'zowi', lambda ip, k: f'https://api.zowi.gay/{q(ip)}?key=', parse_zowi, plugin=True,
-            terms='keyless; operated by the developer of FoxGate'),
+    # feature=security (from 14 Oct 2026): only the security block, without geolocation, AS and RDAP data, which the
+    # verdict does not use. The operator's recommended mode for detection; about 5x faster (METHODOLOGY, correction log).
+    Service('zowi', 'zowi', lambda ip, k: f'https://api.zowi.gay/{q(ip)}?key=&feature=security', parse_zowi, plugin=True,
+            terms='keyless; operated by the developer of FoxGate; security-only mode'),
     Service('ipquery', 'IPQuery', lambda ip, k: f'https://api.ipquery.io/{q(ip)}?format=json', parse_ipquery, plugin=True,
             terms='keyless, commercial use allowed'),
     Service('ip-api', 'IP-API', lambda ip, k: f'http://ip-api.com/json/{q(ip)}?fields=status,proxy,hosting', parse_ipapi, interval=1.5,

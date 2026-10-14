@@ -296,6 +296,8 @@ class Providers(unittest.TestCase):
         self.assertEqual(p.parse_zowi(b'{"security":{"vpn":false,"proxy":false,"tor":false,"hosting":true}}', '')['verdict'], p.UNKNOWN)
         self.assertEqual(p.parse_zowi(b'{"security":{"vpn":false,"proxy":false,"tor":false,"hosting":false}}', '')['verdict'], p.NEGATIVE)
         self.assertIsNone(p.parse_zowi(b'{"error":"limit"}', ''))
+        zowi = next(x for x in p.SERVICES if x.id == 'zowi')
+        self.assertEqual(zowi.url('203.0.113.9', ''), 'https://api.zowi.gay/203.0.113.9?key=&feature=security')
         self.assertEqual(p.parse_letter('Y', 'N')(b'Y\n', '')['verdict'], p.POSITIVE)
         self.assertIsNone(p.parse_letter('Y', 'N')(b'<html>', ''))
         self.assertEqual(p.parse_ipapi(b'{"status":"success","proxy":false,"hosting":true}', '')['verdict'], p.UNKNOWN)
