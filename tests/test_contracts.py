@@ -1102,3 +1102,45 @@ class SimulationMisses(unittest.TestCase):
                           open(os.path.join(folder, 'performance', f'r{i}.json'), 'w'))
             result = overview.performance([folder])['velocity']['connection-guard-061']
             self.assertEqual((result['rounds'], result['checked']), (2, 1000))
+
+
+class AccessNetworkEvidence(unittest.TestCase):
+    """A home or mobile probe counts only on a network shown to serve end users (bench.access)."""
+
+    def networks(self, names=None):
+        from bench.access import AccessNetworks
+        apnic = {'Data': [
+            {'AS': 3320, 'Description': 'DTAG - Deutsche Telekom AG', 'Users': 20_000_000},
+            {'AS': 3320, 'Description': 'DTAG - Deutsche Telekom AG', 'Users': 500},  # a second country row adds up
+            {'AS': 61046, 'Description': 'HZ-UK-AS - HZ Hosting Ltd', 'Users': 2926},
+            {'AS': 40980, 'Description': 'TELEMATICA - Anexia Cloud Solutions GmbH', 'Users': 3503},
+            {'AS': 6939, 'Description': 'HURRICANE - Hurricane Electric LLC', 'Users': 316_759},
+            {'AS': 12555, 'Description': 'IMAQLIQ', 'Users': 0},
+        ]}
+        peeringdb = {'data': [{'asn': 12555, 'info_type': 'Content', 'info_types': ['Content'], 'name': 'IMAQLIQ'},
+                              {'asn': 35432, 'info_type': 'Cable/DSL/ISP', 'info_types': ['Cable/DSL/ISP'], 'name': 'Cablenet'}]}
+        names = names or {}
+        whois = lambda ip: {'data': {'records': [[{'key': 'netname', 'value': names.get(ip, 'SOME-ISP-NET')}]]}}
+        return AccessNetworks(apnic, peeringdb, whois)
+
+    def test_networks_without_end_users_do_not_count(self):
+        n = self.networks()
+        self.assertEqual(n.check(12555, '203.0.113.5', {'home'})[0], 'no evidence of end users on the network')  # IMAQLIQ
+        self.assertIsNone(n.check(35432, '203.0.113.6', {'home', 'cable'})[0])  # PeeringDB Cable/DSL/ISP
+        reason, evidence = n.check(3320, '203.0.113.7', {'home'})
+        self.assertIsNone(reason)
+        self.assertEqual(evidence['apnic_users'], 20_000_500)
+
+    def test_hosting_networks_count_only_for_customer_ranges(self):
+        n = self.networks({'203.0.113.8': 'BG-HZHOSTING-20090706', '203.0.113.9': 'TELEMATICA-VULL Telematica DSL Internet Subscribers'})
+        self.assertEqual(n.check(61046, '203.0.113.8', {'home'})[0], 'hosting network without a customer range')
+        self.assertIsNone(n.check(40980, '203.0.113.9', {'mobile'})[0])
+        self.assertEqual(n.check(40980, '203.0.113.10', {'mobile'})[0], 'hosting network without a customer range')
+
+    def test_data_centre_ranges_tunnels_and_tags_never_count(self):
+        n = self.networks({'203.0.113.11': 'DC-IMAQLIQ-NET-45-135-94-0'})
+        self.assertEqual(n.check(3320, '203.0.113.11', {'home'})[0], 'hosting or data-centre range')
+        self.assertEqual(n.check(6939, '2001:470:1f13:814::2', {'home'})[0], 'tunnel range')
+        self.assertEqual(n.check(3320, '203.0.113.12', {'home', 'ipv6-tunnel'})[0], 'tag ipv6-tunnel')
+        self.assertEqual(n.check(3320, '203.0.113.13', {'home', 'vm', 'homelab'})[0], 'tag vm')
+        self.assertIsNone(n.check(3320, '203.0.113.14', {'home', 'homelab'})[0])  # a home lab at home still counts

@@ -29,6 +29,7 @@ Versions (METHODOLOGY 6):
 In v2 an address keeps its id across versions (stable_id), so runs on different days compare on the
 addresses they share.
 """
+import collections
 import datetime
 import gzip
 import hashlib
@@ -114,6 +115,16 @@ class Sources:
             data = fetch_with_retries(url)
             if data[:2] == b'\x1f\x8b':  # archive captures keep the original content encoding
                 data = gzip.decompress(data)
+            if 'format=json' in url:
+                # A broken answer must never be cached: on 14 Oct 2026 the RIPE Atlas archive came back as 239 MB of
+                # invalid JSON (a valid 48 MB document with more bytes after it).
+                try:
+                    json.loads(data)
+                except ValueError:
+                    data = fetch_with_retries(url)
+                    if data[:2] == b'\x1f\x8b':
+                        data = gzip.decompress(data)
+                    json.loads(data)  # raises: better no snapshot than a broken one
             meta = dict(url=url, fetched_at=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
                         sha256=hashlib.sha256(data).hexdigest(), bytes=len(data), public=public)
             if public and self.out != OUT:
@@ -371,11 +382,20 @@ def sample_proxies(src, rng, exclude, lists=PROXY_LISTS):
     return [item('proxy', 'proxy', c, 'checked-public-proxy-lists') for c in picked], set(seen), len(candidates)
 
 
-def sample_ripe(src, rng, date, infrastructure):
-    """residential, mobile_cgnat and residential_v6 items from the RIPE Atlas archive of `date`."""
+def sample_ripe(src, rng, date, infrastructure, access=None):
+    """residential, mobile_cgnat and residential_v6 items from the RIPE Atlas archive of `date`. With `access`
+    (bench.access.AccessNetworks), an address counts only with evidence that its network serves end users."""
     probes = ripe_probes(src, date)
     conflicts = 0
+    excluded = collections.Counter()
     residential, mobile, residential6 = [], [], []
+
+    def admitted(asn, ip, tags):
+        reason = access.cheap(asn, ip, tags) if access else None
+        if reason:
+            excluded[reason] += 1
+        return reason is None
+
     for probe in probes:
         tags = probe_tags(probe)
         if tags & EXCLUDE_TAGS:
@@ -391,22 +411,36 @@ def sample_ripe(src, rng, date, infrastructure):
             v6ip = None
         is_mobile = bool(tags & MOBILE_TAGS)
         is_home = bool(tags & HOME_TAGS)
-        if v4ip and public_ip(v4ip) and 'system-ipv4-works' in tags:
+        if (v4ip and public_ip(v4ip) and 'system-ipv4-works' in tags and (is_mobile or is_home)
+                and admitted(probe.get('asn_v4'), v4ip, tags)):
             candidate = dict(ip=v4ip, provider=f'AS{probe.get("asn_v4")}', country=probe.get('country_code'),
-                             evidence=dict(evidence, asn=probe.get('asn_v4')))
-            if is_mobile:
-                mobile.append(candidate)
-            elif is_home:
-                residential.append(candidate)
-        if v6ip and public_ip(v6ip) and is_home and not is_mobile and 'system-ipv6-works' in tags:
+                             evidence=dict(evidence, asn=probe.get('asn_v4')), tags=tags)
+            (mobile if is_mobile else residential).append(candidate)
+        if (v6ip and public_ip(v6ip) and is_home and not is_mobile and 'system-ipv6-works' in tags
+                and admitted(probe.get('asn_v6'), v6ip, tags)):
             residential6.append(dict(ip=v6ip, provider=f'AS{probe.get("asn_v6")}', country=probe.get('country_code'),
-                                     evidence=dict(evidence, asn=probe.get('asn_v6'))))
+                                     evidence=dict(evidence, asn=probe.get('asn_v6')), tags=tags))
     items = []
     for cohort, pool, per_asn in (('residential', residential, 2), ('mobile_cgnat', mobile, 3),
                                   ('residential_v6', residential6, 2)):
-        for candidate in spread(pool, TARGETS[cohort], rng, per_bucket=per_asn, bucket=lambda c: c['provider']):
+        target = TARGETS[cohort]
+        # The range check needs a whois request, so it runs on a spread with room to spare, in its order.
+        picked = spread(pool, target + target // 2 if access else target, rng, per_bucket=per_asn, bucket=lambda c: c['provider'])
+        kept = 0
+        for candidate in picked:
+            if kept == target:
+                break
+            tags = candidate.pop('tags')
+            if access:
+                reason, network = access.check(candidate['evidence']['asn'], candidate['ip'], tags)
+                if reason:
+                    excluded[reason] += 1
+                    continue
+                candidate['evidence'] = dict(candidate['evidence'], network=network)
             items.append(item(cohort, 'non_vpn', candidate, 'ripe-atlas'))
-    return items, conflicts, dict(residential=len(residential), mobile=len(mobile), residential_v6=len(residential6))
+            kept += 1
+    return items, conflicts, dict(residential=len(residential), mobile=len(mobile), residential_v6=len(residential6),
+                                  not_access_network=dict(sorted(excluded.items())))
 
 
 def dedupe(items):
@@ -509,7 +543,8 @@ def build_core(date, now):
     archive = (date - datetime.timedelta(days=1)).isoformat()
     # Probes on the day's Tor or proxy lists are dropped as in v1; the lists are read here, not kept in the core.
     tor = {ip for ip in src.get('tor-bulk', 'https://check.torproject.org/torbulkexitlist', public=False).decode().split()}
-    ripe, conflicts, ripe_stats = sample_ripe(src, rng, archive, tor | vpn_all)
+    from .access import AccessNetworks
+    ripe, conflicts, ripe_stats = sample_ripe(src, rng, archive, tor | vpn_all, AccessNetworks.from_sources(src))
     items, dropped = dedupe(vpn + ripe)
     for entry in items:
         entry['id'] = stable_id(entry)
@@ -631,7 +666,57 @@ def ungraded(entry):
         return 'privacy_relay', f'leaves through {RELAY_ASNS[asn]}'
     if asn in HOSTING_ASNS:
         return 'tunnel', f'leaves through a data centre ({HOSTING_ASNS[asn]})'
+    reason = not_access().get(entry.get('id'))
+    if reason:
+        return 'not_access', reason
     return None
+
+
+_NOT_ACCESS = {}
+
+
+def not_access():
+    """Stable id -> reason for home and mobile items of cores built before the access-network check (bench.access),
+    from each core's access.json (`python3 -m bench.dataset access-audit <week>`)."""
+    if not _NOT_ACCESS:
+        root = os.path.join(V2, 'core')
+        for week in (sorted(os.listdir(root)) if os.path.isdir(root) else []):
+            path = os.path.join(root, week, 'access.json')
+            if os.path.exists(path):
+                _NOT_ACCESS.update(json.load(open(path))['not_access'])
+        _NOT_ACCESS.setdefault('', '')
+    return _NOT_ACCESS
+
+
+def access_audit(week):
+    """Applies the access-network check (bench.access) to a core built before it. Writes the core's access.json:
+    the ids that do not count, with the reason (no addresses). The core itself stays as published."""
+    from .access import AccessNetworks
+    out = os.path.join(V2, 'core', week)
+    if not os.path.exists(core_private(week)):
+        materialize_core(week)
+    src = Sources(out)
+    access = AccessNetworks.from_sources(src)
+    manifest = json.load(open(os.path.join(out, 'manifest.json')))
+    probes = {p['id']: p for p in json.loads(src.get(f'ripe-archive-{manifest["ripe_archive_date"]}',
+                                                       ripe_archive_url(manifest['ripe_archive_date']), public=False))['results']}
+    result, counts = {}, collections.Counter()
+    for entry in (json.loads(line) for line in open(core_private(week))):
+        if entry.get('source') != 'ripe-atlas':
+            continue
+        probe = probes.get(entry['evidence']['probe_id'], {})
+        reason, _ = access.check(entry['evidence']['asn'], entry['ip'], probe_tags(probe))
+        if reason:
+            result[entry['id']] = reason
+            counts[reason] += 1
+    with open(os.path.join(out, 'access.json'), 'w') as handle:
+        json.dump(dict(note='Home and mobile items of this core that do not count as real players: no evidence that '
+                            'their network serves end users, or a tunnel, hosting or data-centre range (bench.access). '
+                            'Shown apart, never graded.', checked_at=datetime.datetime.now(datetime.timezone.utc)
+                       .isoformat(timespec='seconds'), counts=dict(sorted(counts.items())), not_access=result),
+                  handle, indent=2, sort_keys=True)
+        handle.write('\n')
+    print(json.dumps(dict(week=week, not_access=len(result), counts=dict(counts)), indent=2))
 
 
 _BY_ID = {}
@@ -777,5 +862,7 @@ if __name__ == '__main__':
         materialize(args[0] if args else None)
     elif command == 'current':
         print(current())
+    elif command == 'access-audit':
+        access_audit(args[0])
     else:
-        sys.exit('usage: python3 -m bench.dataset build-day [YYYY-MM-DD] | materialize [version] | current')
+        sys.exit('usage: python3 -m bench.dataset build-day [YYYY-MM-DD] | materialize [version] | current | access-audit <week>')

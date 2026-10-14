@@ -28,7 +28,8 @@ CATCH = [('commercial_vpn', 'Commercial VPNs'), ('fresh_vpn', 'Newly added VPN s
          ('tor', 'Tor exits'), ('proxy', 'Public proxies')]
 SPARE = [('residential', 'Home connections'), ('residential_v6', 'Home connections, IPv6'), ('mobile_cgnat', 'Mobile networks')]
 # Volunteers' probes that do not leave from a home connection (bench.dataset.ungraded): shown, never graded.
-UNGRADED = [('privacy_relay', 'Privacy relay (Cloudflare WARP)'), ('tunnel', 'Tunnel through a data centre')]
+UNGRADED = [('privacy_relay', 'Privacy relay (Cloudflare WARP)'), ('tunnel', 'Tunnel through a data centre'),
+            ('not_access', 'Not an access network (tunnel, hosting, campus)')]
 FAULTS = [('control', 'Services healthy'), ('timeout', 'Services time out'), ('http_429', 'Rate limited (429)'),
           ('malformed', 'Broken answers'), ('incomplete', 'Cut-off answers')]
 PLATFORMS = [('paper', 'Paper'), ('folia', 'Folia'), ('velocity', 'Velocity'), ('bungee', 'BungeeCord')]
