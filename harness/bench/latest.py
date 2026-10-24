@@ -287,7 +287,8 @@ def main():
                 html_path, png = overview.write(dirs, os.path.join(out, theme), labels, theme)
                 if not png:
                     raise SystemExit('overview.png not rendered: no Chrome or Chromium found (set BENCH_CHROME)')
-                os.replace(png, os.path.join(args.output, f'overview-{theme}.png'))
+                # move, not os.replace: the runner's /tmp is a different filesystem since Oct 2026 (EXDEV)
+                shutil.move(png, os.path.join(args.output, f'overview-{theme}.png'))
     runs_used = {family: sorted({r for rs in by.values() for r in rs}) for family, by in used.items()}
     with open(os.path.join(args.output, 'latest.json'), 'w') as handle:
         json.dump(dict(runs=runs_used, products=used, detection_profile=profile), handle, indent=2, sort_keys=True)
