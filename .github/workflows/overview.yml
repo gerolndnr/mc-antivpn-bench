@@ -6,6 +6,11 @@ on:
   workflow_run:
     workflows: [benchmark]
     types: [completed]
+  # The nightly runs are dispatched with the GITHUB_TOKEN, and GitHub starts no workflow_run for runs that token
+  # created: from 14 Oct 2026 the graphic only moved when someone dispatched a run by hand. The dataset build starts
+  # around 04:30 UTC (scheduled 00:05, GitHub delays it) and its last benchmark run ends before 08:00.
+  schedule:
+    - cron: '17 9 * * *'
   workflow_dispatch:
 
 permissions:
@@ -18,7 +23,7 @@ concurrency:
 
 jobs:
   overview:
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && contains(fromJSON('["workflow_dispatch","schedule"]'), github.event.workflow_run.event))
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && contains(fromJSON('["workflow_dispatch","schedule"]'), github.event.workflow_run.event))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
