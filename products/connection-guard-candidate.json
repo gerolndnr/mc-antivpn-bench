@@ -1,22 +1,21 @@
 {
   "id": "connection-guard-candidate",
-  "name": "Connection Guard 0.6.1 candidate (46821a2, new provider order)",
-  "relationship": "Unreleased candidate of Connection Guard (PR #92 head 46821a2; earlier measured at 0b4757c on top of 0.6.1), measured to accept or reject the change. Same adapter as the stable release; not a public product and never in the README overview (pre_release).",
-  "pre_release": true,
+  "name": "Connection Guard 0.6.2 candidate (PR #97, 3bdd753, zowi security)",
+  "relationship": "Unreleased exact CI candidate for PR #97 acceptance against unchanged stable 0.6.1. Current master 29e6446 plus zowi security request. Does not contain later PR #101/#99. Not release qualification or a public product.",
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
   "pins": {
-    "paper": "connectionguard-0.6.1-candidate-46821a2",
-    "folia": "connectionguard-0.6.1-candidate-46821a2",
-    "velocity": "connectionguard-0.6.1-candidate-46821a2",
-    "bungee": "connectionguard-0.6.1-candidate-46821a2"
+    "paper": "connectionguard-0.6.2-candidate-3bdd753",
+    "folia": "connectionguard-0.6.2-candidate-3bdd753",
+    "velocity": "connectionguard-0.6.2-candidate-3bdd753",
+    "bungee": "connectionguard-0.6.2-candidate-3bdd753"
   },
   "previous_pins": {
-    "paper": "connectionguard-0.6.0-candidate-c4b67eb",
-    "folia": "connectionguard-0.6.0-candidate-c4b67eb",
-    "velocity": "connectionguard-0.6.0-candidate-c4b67eb",
-    "bungee": "connectionguard-0.6.0-candidate-c4b67eb"
+    "paper": "connectionguard-0.6.1",
+    "folia": "connectionguard-0.6.1",
+    "velocity": "connectionguard-0.6.1",
+    "bungee": "connectionguard-0.6.1"
   },
   "data_dir": {
     "paper": "ConnectionGuard",
@@ -29,7 +28,7 @@
   "profiles": {
     "shipped": {
       "edits": [],
-      "note": "As downloaded. operation.mode is OBSERVE: decisions are logged, nobody is refused."
+      "note": "Unmodified new-install configuration, ENFORCE by default."
     },
     "enforce": {
       "edits": [
@@ -123,7 +122,7 @@
     "proxycheck.io",
     "vpnapi.io"
   ],
-  "documented_failure_policy": "failure-policy.vpn: OPEN; FAILOVER ProxyCheck -> Blackbox -> zowi -> IPQuery -> IP-API (ip-check.net off by default); bundled Tor list and signed Connection Guard Intel lists checked locally first (config.yml, docs/PROVIDER_RESILIENCE.md, docs/RELEASE_0_6_0.md).",
+  "documented_failure_policy": "VPN OPEN; local Tor/Intel then zowi security mode, confirmed Blackbox and IPQuery. Existing quota, HTTP timeout and total lookup deadline unchanged.",
   "telemetry": [
     "bStats (fixture-wide off)",
     "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"
@@ -132,5 +131,6 @@
     "https://intel.connectionguard.net/vpn.txt",
     "https://intel.connectionguard.net/tor.txt"
   ],
-  "list_sources_note": "Connection Guard Intel lists the shipped configuration downloads (relay.txt and hosting.txt never decide on their own). Intel is built from the same operator server lists as this dataset's VPN labels: its coverage here is circular (see the circularity table)."
+  "list_sources_note": "Connection Guard Intel lists the shipped configuration downloads (relay.txt and hosting.txt never decide on their own). Intel is built from the same operator server lists as this dataset's VPN labels: its coverage here is circular (see the circularity table).",
+  "pre_release": true
 }

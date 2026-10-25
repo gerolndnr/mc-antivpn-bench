@@ -196,5 +196,23 @@
       "waterfall"
     ],
     "version_type": "release"
+  },
+  "connectionguard-0.6.2-candidate-3bdd753": {
+    "project": "connectionguard",
+    "version": "0.6.2-SNAPSHOT",
+    "path": "candidates/connection-guard-0.6.2-SNAPSHOT-3bdd753.jar",
+    "sha256": "406c100045da2f10df1801d1127c26a447be41ac9ba66a987ccfcc915e7abb5b",
+    "filename": "connection-guard-0.6.2-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #97 head 3bdd7536fad3063b2ec7cae251c8d18f2400c901, CI 40226879429 merge fd3f0e43d27b08ee5787f436df97648440ba13e5; zowi security mode on master 29e6446",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }
