@@ -196,5 +196,23 @@
       "waterfall"
     ],
     "version_type": "release"
+  },
+  "connectionguard-0.6.2-candidate-b523e81": {
+    "project": "connectionguard",
+    "version": "0.6.2-SNAPSHOT",
+    "path": "candidates/connection-guard-0.6.2-SNAPSHOT-b523e81.jar",
+    "sha256": "35e301b3fd64a1f23691af02d038566329e6e62415bd2e19a00a1650ba77d3c5",
+    "filename": "connection-guard-0.6.2-SNAPSHOT-all.jar",
+    "source": "gerolndnr/connection-guard PR #103 head b523e81 (join-wave capacity, timeouts toward the circuit threshold, zowi minute-budget auto; master e4b8558 with zowi feature=security), CI run 45065621355 artifact (merge ref 417693f)",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "candidate"
   }
 }
