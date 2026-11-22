@@ -181,6 +181,7 @@ UPGRADE_MARKERS = {
     'connection-guard-060': ['lookup.http-timeout-ms', 'provider.cache.expiration.vpn', 'required-positive-flags'],
     'foxgate': ['antivpn.timeout', 'antivpn.maxFlags'],
     'proxyshield': ['api.timeout-seconds', 'api.cache-minutes'],
+    'proxyshield-310': ['api.timeout-seconds', 'api.cache-minutes'],
     'vpnguard': ['timeout', 'cache-ttl-hours'],
     # KauriVPN's only integer setting; with its default H2 database the port is not used.
     'kaurivpn': ['database.port'],

@@ -84,7 +84,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(cat datasets/detection-v2/CURRENT)
-          products="connection-guard-061 foxgate proxyshield vpnguard kaurivpn advancedantivpn jarvis"
+          products="connection-guard-061 foxgate proxyshield-310 vpnguard kaurivpn advancedantivpn jarvis"
+          # ProxyShield 3.1.0 joins the optimal series once its optimal profile is re-derived (products/proxyshield-310.json).
+          optimal_products="connection-guard-061 foxgate vpnguard kaurivpn advancedantivpn jarvis"
           for product in $products; do
             gh workflow run bench.yml --ref main -f family=detection -f products="$product" -f detection_profiles=enforce -f dataset="$version"
             echo "standard detection on $version: $product"
@@ -94,7 +96,7 @@ jobs:
           # the first two fifths, which completes a week that started late or lost a night.
           dow=$(date -u +%u)
           chunk="$(( (dow - 1) % 5 ))/5"
-          gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $products | tr ' ' ',')" \
+          gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $optimal_products | tr ' ' ',')" \
             -f detection_profiles=optimal -f detection_chunk="$chunk" -f use_keys=true -f dataset="$version"
           echo "optimal detection on $version: chunk $chunk"
 

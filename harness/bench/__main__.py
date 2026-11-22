@@ -26,7 +26,7 @@ ROOT = artifacts.ROOT
 IPV4_ANY = __import__('re').compile(r'(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])')
 IPV6_ANY = __import__('re').compile(r'(?<![\w:])[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}(?![\w:])')
 # The candidate stays in the default set while its pull request is open.
-ALL_PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield', 'vpnguard', 'kaurivpn', 'jarvis']
+ALL_PRODUCTS = ['connection-guard', 'connection-guard-candidate', 'foxgate', 'proxyshield-310', 'vpnguard', 'kaurivpn', 'jarvis']
 # Bought products join the default set only where their JAR was provided (bench/private.py).
 ALL_PRODUCTS += [p['product'] for key, p in private.pins().items() if private.available(key) and p['product'] not in ALL_PRODUCTS]
 ALL_PLATFORMS = ['paper', 'folia', 'velocity', 'bungee']
