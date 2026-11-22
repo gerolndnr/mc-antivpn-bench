@@ -99,6 +99,17 @@ jobs:
           gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $optimal_products | tr ' ' ',')" \
             -f detection_profiles=optimal -f detection_chunk="$chunk" -f use_keys=true -f dataset="$version"
           echo "optimal detection on $version: chunk $chunk"
+          # The other families once a week, on Sunday (METHODOLOGY 7.1): until 22 Nov 2026 they ran only by hand, and
+          # the overview lost them when their last run fell out of its window. Released products only, named here: a
+          # run with an unreleased candidate never reaches the overview.
+          if [ "$dow" = 7 ]; then
+            for family in performance failure functional redis; do
+              gh workflow run bench.yml --ref main -f family=$family -f products="$(echo $products | tr ' ' ',')" -f perf_rounds=3
+              echo "weekly $family"
+            done
+            gh workflow run bench.yml --ref main -f family=providers -f use_keys=true
+            echo "weekly providers"
+          fi
 
   bench:
     if: github.event_name == 'workflow_dispatch'

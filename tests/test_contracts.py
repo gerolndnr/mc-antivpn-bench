@@ -660,6 +660,41 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.assertEqual(sorted(chosen['detection']), ['connection-guard', 'foxgate', 'kaurivpn'])
         self.assertEqual(profile, 'enforce')
 
+    def test_previous_overview_runs_back_a_family_outside_the_window(self):
+        from bench import latest
+        base = tempfile.mkdtemp()
+        self.run_folder(base, 5, ['connection-guard'], 'enforce')
+        self.run_folder(base, 1, ['connection-guard', 'foxgate'], None)  # an old functional run, outside the window
+        os.makedirs(os.path.join(base, '9'))  # used before, artifact expired: an empty folder
+        saved = latest.runs, latest.gh, latest.dataset.public_items
+        latest.runs = lambda repo, limit: [dict(id=5, created_at='2026-11-22T01:00:00Z')]
+        asked = []
+        def gh(*args):
+            asked.append(args[1])
+            return json.dumps(dict(id=int(args[1].rsplit('/', 1)[1]), created_at='2026-10-20T01:00:00Z'))
+        latest.gh = gh
+        latest.dataset.public_items = lambda version: [{}] * 3
+        dates = {}
+        try:
+            chosen, _, _ = latest.select('x', base, previous=dict(runs=dict(functional=['1', '5'], redis=['9'])), dates=dates)
+        finally:
+            latest.runs, latest.gh, latest.dataset.public_items = saved
+        self.assertEqual(asked, ['repos/x/actions/runs/9', 'repos/x/actions/runs/1'])  # not 5: in the window
+        self.assertEqual(chosen['functional']['connection-guard'][0][0], '5')  # the newer run wins
+        self.assertEqual(chosen['functional']['foxgate'][0][0], '1')  # kept from the previous overview
+        self.assertEqual(dates['1'], '2026-10-20')
+
+    def test_stale_families_are_named(self):
+        import datetime
+        from bench import latest
+        runs_used = dict(detection=['5'], performance=['1'], functional=['5'])
+        dates = {'5': '2026-11-22', '1': '2026-10-01'}
+        out = latest.stale(runs_used, dates, today=datetime.date(2026, 11, 22))
+        self.assertIn('older than 30 days', out['performance'])
+        self.assertEqual(out['redis'], 'no result in the overview')
+        self.assertNotIn('functional', out)
+        self.assertNotIn('detection', out)
+
     def test_runs_with_a_key_never_show_plugins(self):
         from bench import latest
         self.assertTrue(latest.keyed_run(dict(environment=dict(keys_present=dict(proxycheck=True, vpnapi=False)))))

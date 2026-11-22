@@ -253,6 +253,11 @@ class Instance:
             servers.fresh_copy(await self.installed_template(), self.directory)
             edits = profile_edits(self.adapter, profile) + list(extra_edits)
             if edits and not os.path.isdir(self.data_dir):
+                # No data folder after the first start. A product that downloads libraries at start can fail on a
+                # flaky mirror (FoxGate pre10, Nov 2026), so the first start is repeated once before it counts.
+                print(f'[prepare] {self.product_id} created no data folder on first start; installing once more', flush=True)
+                servers.fresh_copy(await self.installed_template(clean=True), self.directory)
+            if edits and not os.path.isdir(self.data_dir):
                 # The product never created its data folder on first start: it did not load.
                 raise ProductNotLoaded(self.installed_console())
             apply_edits(self.data_dir, edits, canaries)
