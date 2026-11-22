@@ -65,7 +65,11 @@
         "42452534813"
       ]
     },
-    "failure": {},
+    "failure": {
+      "foxgate-pre12": [
+        "45068359877"
+      ]
+    },
     "functional": {},
     "performance": {},
     "redis": {
@@ -105,7 +109,9 @@
       "42344481711",
       "42452534813"
     ],
-    "failure": [],
+    "failure": [
+      "45068359877"
+    ],
     "functional": [],
     "performance": [],
     "redis": [
