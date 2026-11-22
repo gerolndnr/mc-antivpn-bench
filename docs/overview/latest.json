@@ -86,8 +86,23 @@
       ]
     },
     "functional": {
+      "advancedantivpn": [
+        "45067212229"
+      ],
+      "connection-guard-061": [
+        "45067212229"
+      ],
       "foxgate-pre12": [
         "45068362397"
+      ],
+      "kaurivpn": [
+        "45067212229"
+      ],
+      "proxyshield-310": [
+        "45067212229"
+      ],
+      "vpnguard": [
+        "45067212229"
       ]
     },
     "performance": {},
@@ -198,6 +213,7 @@
       "45068359877"
     ],
     "functional": [
+      "45067212229",
       "45068362397"
     ],
     "performance": [],
