@@ -84,6 +84,18 @@ def parse_zowi(body, ip):
     return verdict(vpn=_flag(s.get('vpn')), proxy=_flag(s.get('proxy')), tor=_flag(s.get('tor')), hosting=_flag(s.get('hosting')))
 
 
+def parse_paperstream(body, ip):
+    r = json.loads(body)
+    if not isinstance(r, dict) or not any(k in r for k in ('vpn', 'proxy', 'tor')):
+        return None
+    # `community`: reported by other ProxyShield servers; ProxyShield reads it as a proxy flag, like vpn and proxy.
+    proxy = _flag(r.get('proxy'))
+    community = _flag(r.get('community'))
+    if community:
+        proxy = True
+    return verdict(vpn=_flag(r.get('vpn')), proxy=proxy, tor=_flag(r.get('tor')), hosting=_flag(r.get('hosting')))
+
+
 def parse_ipquery(body, ip):
     r = json.loads(body).get('risk') or {}
     if not r:
@@ -245,6 +257,9 @@ SERVICES = [
     # verdict does not use. The operator's recommended mode for detection; about 5x faster (METHODOLOGY, correction log).
     Service('zowi', 'zowi', lambda ip, k: f'https://api.zowi.gay/{q(ip)}?key=&feature=security', parse_zowi, plugin=True,
             terms='keyless; operated by the developer of FoxGate; security-only mode'),
+    # ProxyShield 3.1.0's first service (from 22 Nov 2026). Recorded once and served to every product, like zowi and Intel.
+    Service('paperstream', 'PaperStream Intel', lambda ip, k: f'https://intel.paperstream.dev/v1/ip/{q(ip)}', parse_paperstream,
+            plugin=True, terms='keyless, 600 a minute; operated by the developer of ProxyShield'),
     Service('ipquery', 'IPQuery', lambda ip, k: f'https://api.ipquery.io/{q(ip)}?format=json', parse_ipquery, plugin=True,
             terms='keyless, commercial use allowed'),
     Service('ip-api', 'IP-API', lambda ip, k: f'http://ip-api.com/json/{q(ip)}?fields=status,proxy,hosting', parse_ipapi, interval=1.5,

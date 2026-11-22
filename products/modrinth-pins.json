@@ -1097,6 +1097,47 @@
     "version_id": "x23xNlqx",
     "version_type": "beta"
   },
+  "proxyshield-3.1.0+universal": {
+    "filename": "ProxyShield-Universal-3.1.0.jar",
+    "game_versions": [
+      "1.21",
+      "1.21.1",
+      "1.21.10",
+      "1.21.11",
+      "1.21.2",
+      "1.21.3",
+      "1.21.4",
+      "1.21.5",
+      "1.21.6",
+      "1.21.7",
+      "1.21.8",
+      "1.21.9",
+      "26.1",
+      "26.1.1",
+      "26.1.2",
+      "26.2",
+      "26.3"
+    ],
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "purpur",
+      "spigot",
+      "sponge",
+      "velocity",
+      "waterfall"
+    ],
+    "project": "proxyshield",
+    "published": "2026-11-22T00:58:31.607390Z",
+    "sha512": "ed4216c8c64e56f348ddccd8e2d1e92009677b9fb6c584057e6f13456171884ba536eaba397a198cea81b2f50f1dc0ea8740e515c21982efc2843d33ae551307",
+    "size": 894527,
+    "url": "https://cdn.modrinth.com/data/nqiuEiMp/versions/RGotbABC/ProxyShield-Universal-3.1.0.jar",
+    "version": "3.1.0+universal",
+    "version_id": "RGotbABC",
+    "version_type": "release"
+  },
   "vpnguard-1.1.1": {
     "filename": "VPNGuard-1.1.1.jar",
     "game_versions": [

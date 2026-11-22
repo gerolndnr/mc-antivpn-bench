@@ -1,0 +1,135 @@
+{
+  "id": "proxyshield-310",
+  "name": "ProxyShield",
+  "relationship": "Independent third party (LucasTHCR).",
+  "license": "GPL-3.0-only",
+  "source": "https://codeberg.org/LucasTHCR/ProxyShield",
+  "listing": "https://modrinth.com/plugin/proxyshield",
+  "pins": {
+    "paper": "proxyshield-3.1.0+universal",
+    "folia": "proxyshield-3.1.0+universal",
+    "velocity": "proxyshield-3.1.0+universal",
+    "bungee": "proxyshield-3.1.0+universal"
+  },
+  "pins_note": "From 3.0.2 ProxyShield publishes one universal JAR for every platform (Modrinth 3.1.0+universal); the per-platform builds end at 3.0.1. Pinned on 2026-11-22 after the author asked for the current release (issue #1); checked against the v3.1.0 source on Codeberg (tag 636eb5a), not against the author's description. Its own adapter id, like connection-guard-060/061, so results of 2.5.1 (adapter `proxyshield`) keep their label; the overview shows the newest version per plugin.",
+  "previous_pins": {
+    "paper": "proxyshield-2.5.1+paper",
+    "velocity": "proxyshield-2.5.1+velocity"
+  },
+  "data_dir": {
+    "paper": "ProxyShield",
+    "folia": "ProxyShield",
+    "velocity": "proxyshield",
+    "bungee": "ProxyShield"
+  },
+  "config": "config.yml",
+  "ready_pattern": "VPN lists ready",
+  "profiles": {
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded: 7 of the 27 known services enabled, in consensus (required-score 1.5): PaperStream Intel (the author's own service, first), zowi, Blackbox, ip-check.net, IPLocate, IP-API and IPRisk; IPQuery, ipapi.is and FreeIPAPI are no longer on by default. Plus lists (X4BNet VPN and data-centre, Tor, monosans proxies, the operators' relay list and the ASN feed from intel.paperstream.dev), rDNS and heuristics; blocks hosting. Fast admit is `auto`: during a wave of 20 joins in 10 s, end-user networks skip the lookup (shipped behaviour, measured as is). Reporting to PaperStream is off by default and stays off."
+    },
+    "enforce": {
+      "edits": [],
+      "note": "Enforces out of the box; no step needed."
+    },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "api.providers.proxycheck.enabled": true,
+            "api.providers.proxycheck.key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through the product's documented key field (same key for every product)."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "api.providers.proxycheck.enabled": true,
+            "api.providers.proxycheck.key": "{canary:proxycheck}",
+            "api.providers.vpnapi.enabled": true,
+            "api.providers.vpnapi.key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "Enables the documented proxycheck and vpnapi provider entries with keys."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "detection.block-hosting": false,
+            "api.required-score": 3.5,
+            "api.providers.proxycheck.enabled": true,
+            "api.providers.proxycheck.key": "{canary:proxycheck}",
+            "api.providers.ipapi-is.key": "{canary:ipapi_is}",
+            "api.providers.iplocate.key": "{canary:iplocate}"
+          }
+        }
+      ],
+      "note": "PROVISIONAL, not run yet: carried over from 2.5.1 (simulated on the API answers of 13 Oct, 375 of 378 caught and none of 310 refused), whose shipped services differed. Every key still exists in 3.1.0's config. 3.1.0 joins the nightly optimal series once this profile is re-derived from a `providers` run that includes PaperStream; until then ProxyShield is not in the optimal table."
+    }
+  },
+  "redis": {
+    "edits": [
+      {
+        "file": "config.yml",
+        "set": {
+          "storage.type": "redis",
+          "storage.redis.host": "127.0.0.1",
+          "storage.redis.port": 6379
+        }
+      }
+    ],
+    "note": "storage.type: redis (documented for networks; falls back to file storage when unreachable at start-up)."
+  },
+  "commands": {
+    "reload": "proxyshield reload",
+    "inspect": [
+      "proxyshield providers",
+      "proxyshield status"
+    ]
+  },
+  "lookup_hosts": [
+    "intel.paperstream.dev",
+    "api.zowi.gay",
+    "blackbox.ipinfo.app",
+    "ip-check.net",
+    "iplocate.io",
+    "ip-api.com",
+    "api.iprisk.info",
+    "api.ipquery.io",
+    "api.ipapi.is",
+    "freeipapi.com",
+    "free.freeipapi.com",
+    "proxycheck.io",
+    "vpnapi.io"
+  ],
+  "documented_failure_policy": "settings.fail-closed: false (admit when providers fail). api.timeout-seconds 4, total-timeout-seconds 6 (unchanged in 3.1.0).",
+  "telemetry": [
+    "bStats (metrics.enabled; fixture-wide off)",
+    "update check (updates.notify, on by default: Modrinth, Hangar, Codeberg every 12 h) - blocked so the artifact under test cannot change; auto-update is off by default",
+    "reporting of refused addresses to intel.paperstream.dev (reporting.enabled, off by default)"
+  ],
+  "list_sources": [
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt",
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv6.txt",
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt",
+    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv6.txt",
+    "https://check.torproject.org/torbulkexitlist",
+    "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt",
+    "https://intel.paperstream.dev/feed/operators.txt",
+    "https://intel.paperstream.dev/feed/asn-feed.tsv.gz"
+  ],
+  "list_sources_note": "Lists the shipped 3.1.0 configuration downloads (config.yml lists.sources, lists.operator-relays, detection.network-data.source); used only for the circularity table. The operators' relay list covers Mullvad, IVPN, NordVPN and PIA, the same operators as the fresh_vpn cohort, so that cohort is no hold-out for ProxyShield 3.1.0 either.",
+  "lookup_hosts_note": "intel.paperstream.dev also serves the ASN feed and the operators' relay list at start (/feed/asn-feed.tsv.gz, /feed/operators.txt). Like every other host it is recorded once per run and served identically; its feed downloads at start fall before the measured phases."
+}

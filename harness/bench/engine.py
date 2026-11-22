@@ -34,7 +34,9 @@ TELEMETRY = ['bstats.org', '*.bstats.org', 'sentry.io', '*.sentry.io', 'api.conn
 UPDATES = ['api.github.com', 'github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com',
            'hub.spigotmc.org', 'api.spiget.org', 'www.spigotmc.org', 'api.modrinth.com', 'cdn.modrinth.com',
            'piston-data.mojang.com', 'piston-meta.mojang.com', 'launchermeta.mojang.com', 'libraries.minecraft.net',
-           'api.minecraftservices.com', 'sessionserver.mojang.com']
+           'api.minecraftservices.com', 'sessionserver.mojang.com',
+           # ProxyShield 3.1.0's update check (updates.notify) also asks Hangar and Codeberg.
+           'hangar.papermc.io', 'codeberg.org']
 # Runtime library downloads (e.g. a Redis client loaded only when Redis is configured) are normal
 # product behaviour on a server with internet access: streamed through, never recorded.
 LIBRARIES = ['repo1.maven.org', 'repo.maven.apache.org', '*.maven.apache.org', 'repo.papermc.io', 'repo.okaeri.cloud',

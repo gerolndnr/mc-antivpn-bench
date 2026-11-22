@@ -13,7 +13,8 @@ from .artifacts import ROOT, USER_AGENT
 MATRIX = {
     'connectionguard': ['0.5.1', '0.5.0', '0.4.11'],
     'foxgate': ['1.2.0-pre10', '1.2.0-pre9'],
-    'proxyshield': ['2.5.1+paper', '2.5.1+folia', '2.5.1+velocity', '2.5.1+bungee', '2.4.1+paper', '2.4.1+velocity'],
+    # From 3.0.2 one universal JAR for every platform; 2.5.1 stays for the upgrade test.
+    'proxyshield': ['3.1.0+universal', '2.5.1+paper', '2.5.1+folia', '2.5.1+velocity', '2.5.1+bungee', '2.4.1+paper', '2.4.1+velocity'],
     'vpnguard': ['1.2.0', '1.1.1'],
     # 1.10.1.2 is published for Folia only; the other platforms run 1.10.1.1 (universal JAR).
     'kauri-antivpn': ['1.10.1.2', '1.10.1.1', '1.10.0'],
