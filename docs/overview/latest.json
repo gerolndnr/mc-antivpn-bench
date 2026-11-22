@@ -68,7 +68,26 @@
     "failure": {},
     "functional": {},
     "performance": {},
-    "redis": {}
+    "redis": {
+      "advancedantivpn": [
+        "45067215075"
+      ],
+      "connection-guard-061": [
+        "45067215075"
+      ],
+      "foxgate-pre12": [
+        "45068364289"
+      ],
+      "kaurivpn": [
+        "45067215075"
+      ],
+      "proxyshield-310": [
+        "45067215075"
+      ],
+      "vpnguard": [
+        "45067215075"
+      ]
+    }
   },
   "runs": {
     "detection": [
@@ -89,6 +108,9 @@
     "failure": [],
     "functional": [],
     "performance": [],
-    "redis": []
+    "redis": [
+      "45067215075",
+      "45068364289"
+    ]
   }
 }
