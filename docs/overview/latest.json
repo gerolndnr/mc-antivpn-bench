@@ -70,7 +70,11 @@
         "45068359877"
       ]
     },
-    "functional": {},
+    "functional": {
+      "foxgate-pre12": [
+        "45068362397"
+      ]
+    },
     "performance": {},
     "redis": {
       "advancedantivpn": [
@@ -112,7 +116,9 @@
     "failure": [
       "45068359877"
     ],
-    "functional": [],
+    "functional": [
+      "45068362397"
+    ],
     "performance": [],
     "redis": [
       "45067215075",
