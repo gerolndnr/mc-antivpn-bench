@@ -17,7 +17,7 @@ import time
 import urllib.parse
 
 from . import mcclient, netguard, products
-from .engine import Backend, Instance, measurement_rules, product_errors
+from .engine import Backend, Instance, ProductNotLoaded, measurement_rules, product_errors
 from .interposer import CATCH_ALL_PORT
 from .scenarios import PRIVATE, blocked, player
 
@@ -162,12 +162,21 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
         import hashlib
         order = [s for s in order if int(hashlib.sha256(s['id'].encode()).hexdigest(), 16) % n == k]
     backend = await Backend(DETECTION_PLATFORM).start()
-    instances = []
+    instances, not_loaded = [], {}
     try:
         for slot, product_id in enumerate(product_ids):
             instance = Instance(runtime, product_id, DETECTION_PLATFORM, slot=slot, label=f'det-{product_id}')
-            await instance.prepare(profile, canaries)
+            try:
+                await instance.prepare(profile, canaries)
+            except ProductNotLoaded as error:
+                # One product that does not load must not cost the others their pass (the optimal run measures every
+                # plugin together). It is recorded as not loaded and has no rows in this pass.
+                not_loaded[product_id] = str(error)[-2000:]
+                print(f'[detection {profile}] {product_id} did not load; measuring the others', flush=True)
+                continue
             instances.append(instance)
+        if not instances:
+            raise ProductNotLoaded('; '.join(f'{p}: {c[-300:]}' for p, c in not_loaded.items()))
         runtime.rules(measurement_rules())
         starts = {}
         for instance in instances:
@@ -251,7 +260,7 @@ async def detection(runtime, recorder, canaries, product_ids, profile):
         pacing = {pid: p.summary() for pid, p in pacers.items()}
         record = dict(profile=profile, platform=DETECTION_PLATFORM, starts=starts, subjects=len(order),
                       retried=sum(len(v) for v in retry.values()), rows=rows, chunk=chunk or None,
-                      pacing=pacing, first_pass_s=pass_seconds)
+                      pacing=pacing, first_pass_s=pass_seconds, not_loaded=not_loaded)
     finally:
         teardown = {}
         for instance in instances:

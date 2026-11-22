@@ -13,6 +13,9 @@ adds those products and leaves the others' results in place.
   - Performance on Velocity only.
   - Providers: per service the newest run in which it answered; a service that was down keeps its earlier result.
   - Never a run that measured an unreleased candidate (adapter `pre_release`).
+  - The window is the newest `--limit` runs, and after them the runs the previous latest.json used, as long as their
+    artifacts exist. Families that are not measured every night (everything but detection) would otherwise drop out
+    once 250 nightly detection runs have passed (it happened from 31 Oct to 13 Nov 2026).
 Writes overview-dark.png, overview-light.png and latest.json (which runs each product came from). Display names can
 be set in <output>/labels.json ({"product-id": "Name"}).
 """
@@ -51,6 +54,19 @@ def runs(repo, limit):
             break
         page += 1
     return out[:limit]
+
+
+def previous_runs(repo, previous, seen):
+    """The runs the previous overview used that are outside the window, newest first, as `runs` returns them."""
+    ids = sorted({str(r) for rs in ((previous or {}).get('runs') or {}).values() for r in rs} - {str(s) for s in seen},
+                 key=int, reverse=True)
+    out = []
+    for run_id in ids:
+        try:
+            out.append(json.loads(gh('api', f'repos/{repo}/actions/runs/{run_id}')))
+        except subprocess.CalledProcessError:
+            continue  # deleted run: its results are gone
+    return out
 
 
 def download(repo, run_id, base):
@@ -125,14 +141,18 @@ def keyed_run(manifest):
     return present is None or any(v for k, v in present.items() if k not in LICENCE_KEYS)
 
 
-def select(repo, base, limit=250):
+def select(repo, base, limit=250, previous=None, dates=None):
     """{family: {product: [(run_id, folder, paths)]}} and the providers folder. Family `detection` is the standard pass
     (as shipped, no keys); `detection-optimal` each plugin's best configuration with free keys, from keyed runs."""
     chosen = {family: {} for family in FAMILIES if family not in ('providers', 'detection')}
     detection = {}  # product -> (profile, core) -> [(run_id, folder, [paths])]
     pending = {}  # (product, profile, core, n) -> {k: (run_id, folder, path)}
     providers = None
-    for run in runs(repo, limit):
+    window = runs(repo, limit)
+    # Older runs the previous overview used come after the window, so a newer result always wins (first one counts).
+    for run in window + previous_runs(repo, previous, [r['id'] for r in window]):
+        if dates is not None:
+            dates[str(run['id'])] = (run.get('created_at') or '')[:10]
         folder = download(repo, run['id'], base)
         manifest = load(os.path.join(folder, 'manifest.json')) or {}
         if any(pre_release(p) for p in manifest.get('products', [])):
@@ -276,7 +296,9 @@ def main():
     labels_path = os.path.join(args.output, 'labels.json')
     labels = json.load(open(labels_path)) if os.path.exists(labels_path) else {}
     with tempfile.TemporaryDirectory() as base:
-        chosen, providers, profile = select(args.repo, base, args.limit)
+        previous = load(os.path.join(args.output, 'latest.json'))
+        dates = {}
+        chosen, providers, profile = select(args.repo, base, args.limit, previous, dates)
         if not any(chosen.values()) and not providers:
             raise SystemExit('no complete results found')
         dirs = merge(chosen, providers, profile, base)
@@ -294,6 +316,23 @@ def main():
         json.dump(dict(runs=runs_used, products=used, detection_profile=profile), handle, indent=2, sort_keys=True)
         handle.write('\n')
     print(json.dumps(dict(runs=runs_used, detection_profile=profile)))
+    for family, line in stale(runs_used, dates).items():
+        print(f'::warning::{family}: {line}')
+
+
+def stale(runs_used, dates, days=30, today=None):
+    """Families whose newest shown run is older than `days`, or that have no result at all."""
+    import datetime
+    today = today or datetime.date.today()
+    out = {}
+    for family in FAMILIES + ['detection-optimal']:
+        shown = [dates.get(str(r)) for r in runs_used.get(family, [])]
+        shown = [d for d in shown if d]
+        if not runs_used.get(family):
+            out[family] = 'no result in the overview'
+        elif shown and (today - datetime.date.fromisoformat(max(shown))).days > days:
+            out[family] = f'newest result from {max(shown)}, older than {days} days'
+    return out
 
 
 if __name__ == '__main__':
