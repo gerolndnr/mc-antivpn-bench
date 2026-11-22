@@ -164,14 +164,14 @@ class Fairness(unittest.TestCase):
             self.assertIn(host, hosts)
 
     def test_profiles_resolve_for_every_product(self):
-        for product in ('connection-guard', 'foxgate', 'proxyshield', 'proxyshield-310', 'vpnguard'):
+        for product in ('connection-guard', 'foxgate', 'foxgate-pre12', 'proxyshield', 'proxyshield-310', 'vpnguard'):
             adapter = json.load(open(os.path.join(ROOT, 'products', product + '.json')))
             for profile in ('shipped', 'enforce', 'proxycheck_key', 'free_keys'):
                 engine.profile_edits(adapter, profile)
             self.assertEqual(set(adapter['pins']), {'paper', 'folia', 'velocity', 'bungee'})
 
     def test_every_product_gets_the_same_free_keys(self):
-        for product in ('connection-guard', 'foxgate', 'proxyshield', 'proxyshield-310', 'vpnguard'):
+        for product in ('connection-guard', 'foxgate', 'foxgate-pre12', 'proxyshield', 'proxyshield-310', 'vpnguard'):
             adapter = json.load(open(os.path.join(ROOT, 'products', product + '.json')))
             values = json.dumps(engine.profile_edits(adapter, 'free_keys'))
             self.assertIn('{canary:proxycheck}', values)
