@@ -559,8 +559,15 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     perf, det, fail = performance(of('performance')), detection(of('detection')), failure(of('failure'))
     det_best = detection(of('detection-optimal'), profile='optimal') if isinstance(dirs, dict) else None
     func, red, prov = functional(of('functional')), redis(of('redis')), providers(of('providers'))
+    best_date = ''
     if isinstance(dirs, dict):
+        # The optimal series is measured over a week in fifths and can lag behind the nightly runs: it carries its own
+        # dates, and the header shows those of everything else.
+        best_date = measured_dates(manifests(dirs.get('detection-optimal', [])))
+        dated = sorted({d for family, folders in dirs.items() if family != 'detection-optimal' for d in folders})
         dirs = sorted({d for folders in dirs.values() for d in folders})
+    else:
+        dated = dirs
     ids = set()
     for platform in perf.values():
         ids |= set(platform)
@@ -573,7 +580,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         products = newest_only(products)
     names = product_names(products, labels)
     ms = manifests(dirs)
-    date = measured_dates(ms)
+    date = measured_dates(manifests(dated)) or measured_dates(ms)
     rounds = max([e['rounds'] for p in perf.values() for e in p.values()] or [0])
     sections, height = [], 236 if products else 190
 
@@ -632,7 +639,8 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             place([card_b], '1fr')
 
     # Detection: as shipped without keys, then (when measured) each plugin's best configuration with free keys.
-    for det, det_title in ((det, 'Detection and false positives'), (det_best, 'Detection, best configuration with free keys')):
+    for det, det_title, det_tag in ((det, 'Detection and false positives', ''),
+                                    (det_best, 'Detection, best configuration with free keys', f'measured {best_date}' if best_date else '')):
         if det and det['cohorts']:
             cols = [pid for pid in det['products'] if pid in products]
             body, totals, rates = [], {}, {}
@@ -705,7 +713,8 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
                                   f'{esc(who)} lets every player in and checks afterwards: its blocks are kicks of a player who is already on '
                                   'the server. Its join times are therefore shown as "after join".</td>']))
             place([table_card(det_title, f'{num(det["subjects"])} real addresses, {profile}. Each number: addresses blocked.',
-                              [''] + [names[pid] for pid in cols], body, ['28%'] + [f'{72 / max(1, len(cols)):.2f}%'] * len(cols))], '1fr')
+                              [''] + [names[pid] for pid in cols], body, ['28%'] + [f'{72 / max(1, len(cols)):.2f}%'] * len(cols),
+                              tag=det_tag)], '1fr')
 
     # Reliability, Redis
     cards = []
