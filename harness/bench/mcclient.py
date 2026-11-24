@@ -146,7 +146,9 @@ async def admit(port, subject_ip, name, *, observe_s=8.0, deadline_s=30.0, host=
     """Attempt one join and classify the outcome. Never raises."""
     started = time.perf_counter_ns()
     marks = {}
-    result = dict(subject_ip=subject_ip, name=name)
+    # Wall clock at connect, the clock the interposer stamps lookups with (same container): places each lookup before
+    # or after this player's decision (heavy.summarize).
+    result = dict(subject_ip=subject_ip, name=name, started_at=time.time())
 
     def mark(label):
         marks[label] = (time.perf_counter_ns() - started) / 1e6

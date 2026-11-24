@@ -33,6 +33,18 @@
       "edits": [],
       "note": "Enforces out of the box; no step needed."
     },
+    "no_fast_admit": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "detection.network-data.fast-admit": "never"
+          }
+        }
+      ],
+      "note": "enforce with the documented switch detection.network-data.fast-admit: never. Used only by the load test (adapter load_profile): as shipped (auto), ProxyShield stops asking services about home networks once 20 players join within 10 s, so the ramp would measure that rule, not how many checks it can sustain (METHODOLOGY 7.3). The stress test and every other family keep the shipped setting."
+    },
     "proxycheck_key": {
       "extends": "enforce",
       "edits": [
@@ -79,6 +91,8 @@
       "note": "PROVISIONAL, not run yet: carried over from 2.5.1 (simulated on the API answers of 13 Oct, 375 of 378 caught and none of 310 refused), whose shipped services differed. Every key still exists in 3.1.0's config. 3.1.0 joins the nightly optimal series once this profile is re-derived from a `providers` run that includes PaperStream; until then ProxyShield is not in the optimal table."
     }
   },
+  "load_profile": "no_fast_admit",
+  "load_note": "fast admit off (shipped: skips home networks in waves)",
   "redis": {
     "edits": [
       {

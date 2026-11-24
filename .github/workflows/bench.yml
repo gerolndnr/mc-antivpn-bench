@@ -112,6 +112,10 @@ jobs:
             done
             gh workflow run bench.yml --ref main -f family=providers -f use_keys=true
             echo "weekly providers"
+            # The load limit as its own performance run (METHODOLOGY 7.3), one round, Velocity.
+            gh workflow run bench.yml --ref main -f family=performance -f platforms=velocity -f perf_rounds=1 -f perf_phases=ramp \
+              -f products="$(echo $products | tr ' ' ',')"
+            echo "weekly load limit"
           fi
 
   bench:

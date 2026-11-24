@@ -169,6 +169,30 @@ def performance(dirs):
     return out
 
 
+def ramps(dirs):
+    """Per product the newest ramp (bench.heavy.ramp) on Velocity, newest run first in `dirs`."""
+    out = {}
+    for r in records(dirs, 'performance'):
+        if r.get('ramp') and r.get('platform', 'velocity') == 'velocity' and not r.get('harness_error'):
+            out.setdefault(r['product'], dict(r['ramp'], profile=r.get('profile')))
+    return out
+
+
+def ramp_reason(step):
+    """What broke a step, in a few words."""
+    n = step.get('distinct_subjects') or 0
+    parts = []
+    decided = sum((step.get('outcomes') or {}).get(k, 0) for k in ('ALLOW', 'DENY_LOGIN', 'DENY_PLAY'))
+    if n - decided > 0:
+        parts.append(f'{num(n - decided)} of {num(n)} no decision')
+    if n - (step.get('subjects_checked') or 0) > 0 and step.get('subjects_checked') is not None:
+        parts.append(f'{num(n - step["subjects_checked"])} of {num(n)} unchecked')
+    p95 = (step.get('decision_ms') or {}).get('p95')
+    if p95 and p95 > 5000:
+        parts.append(f'p95 {fmt_ms(p95)}')
+    return ', '.join(parts)
+
+
 def detection(dirs, profile=None):
     """One profile's detection, chunks merged, final attempt per subject: `profile`, or the headline one (proxycheck_key
     if measured, else enforce)."""
@@ -559,6 +583,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     perf, det, fail = performance(of('performance')), detection(of('detection')), failure(of('failure'))
     det_best = detection(of('detection-optimal'), profile='optimal') if isinstance(dirs, dict) else None
     func, red, prov = functional(of('functional')), redis(of('redis')), providers(of('providers'))
+    load = ramps(of('ramp'))
     if isinstance(dirs, dict):
         dirs = sorted({d for folders in dirs.values() for d in folders})
     ids = set()
@@ -566,7 +591,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         ids |= set(platform)
     ids |= set(det['products']) if det else set()
     ids |= set(det_best['products']) if det_best else set()
-    ids |= set(fail) | set(func) | set(red)
+    ids |= set(fail) | set(func) | set(red) | {pid for pid in load if not adapter_of(pid).get('pre_release')}
     ids.discard('none')
     products = sorted(ids, key=lambda p: PRODUCT_ORDER.index(p) if p in PRODUCT_ORDER else 99)
     if not all_versions:
@@ -630,6 +655,42 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         else:
             place([card_a], '1fr')
             place([card_b], '1fr')
+
+    # Load limit: rising join rates until a plugin stops working (bench.heavy.ramp).
+    if load:
+        base = (load.get('none') or {}).get('capacity_per_s')
+        r = load.get('none') or next(iter(load.values()))
+        shown = sorted([pid for pid in load if pid in products or (pid != 'none' and adapter_of(pid).get('pre_release'))],
+                       key=lambda pid: PRODUCT_ORDER.index(pid) if pid in PRODUCT_ORDER else 99)
+        extra = product_names([pid for pid in shown if pid not in names], labels)
+        rows = []
+        for pid in shown:
+            r = load[pid]
+            steps = sorted(r.get('steps') or [], key=lambda st: st['rate'])
+            cap, broke = r.get('capacity_per_s'), r.get('breaking_per_s')
+            first_bad = next((st for st in steps if st.get('failures')), None)
+            beyond = base is not None and broke is not None and broke > base
+            name = names.get(pid) or extra[pid]
+            # A plugin that checks after the join: its login time is no decision time, but whether a player was
+            # checked still counts.
+            late = ' · checks after the join' if after_join(pid) else ''
+            # A documented setting changed for this test only (adapter load_profile) is named next to the result.
+            changed = adapter_of(pid).get('load_note') if r.get('profile') and r['profile'] == adapter_of(pid).get('load_profile') else None
+            tail = ''.join(f' · {x}' for x in (changed,) if x) + late
+            if cap is None:
+                low = r.get('below_lowest_per_s') or (steps[0]['rate'] if steps else None)
+                note = f'at {low}/s: {ramp_reason(first_bad)}' if first_bad else ''
+                rows.append((pid, name, 0, f'< {low}/s' if low else '–', note + tail, False))
+            elif (r.get('harness_limited') and broke is None) or beyond:
+                rows.append((pid, name, cap, f'≥ {cap}/s', 'no limit below what the test machine sends' + tail, False))
+            else:
+                note = f'breaks at {broke}/s: {ramp_reason(next(st for st in steps if st["rate"] == broke))}' if broke else ''
+                rows.append((pid, name, cap, f'{cap}/s', note + tail, False))
+        if base:
+            rows.append(('none', 'Test machine without a plugin', base, f'{base}/s', 'the most joins a second this runner sends', True))
+        hint = (f'Rising join rates, {r.get("step_s", 10):g} s each, fresh players, {r.get("rest_s", 60):g} s rest; then halving to within '
+                f'{r.get("resolution", 5)}/s. A rate works when 99 % get a decision, 99 % are checked and p95 stays under 5 s. Higher is better.')
+        place([bar_card('Load limit: joins a second until checks fail', hint, rows, low=False, wide=True, tag='Velocity · 1 round')], '1fr')
 
     # Detection: as shipped without keys, then (when measured) each plugin's best configuration with free keys.
     for det, det_title in ((det, 'Detection and false positives'), (det_best, 'Detection, best configuration with free keys')):
