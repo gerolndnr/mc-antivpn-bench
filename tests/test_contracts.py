@@ -720,6 +720,76 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.assertEqual(chosen['functional']['connection-guard'][0][0], '1')
 
 
+class CapacityRamp(unittest.TestCase):
+    """A ramp step works only when nearly every join was decided and checked, fast enough to wait for."""
+
+    def step(self, outcomes, checked, p95, n=1000):
+        return dict(distinct_subjects=n, outcomes=outcomes, subjects_checked=checked, decision_ms=dict(p95=p95))
+
+    def test_a_clean_step_works(self):
+        from bench import heavy
+        self.assertEqual(heavy.ramp_failures(self.step({'ALLOW': 995, 'DENY_LOGIN': 5}, 1000, 400), 'connection-guard-061'), [])
+
+    def test_unchecked_players_break_a_plugin_but_not_the_baseline(self):
+        from bench import heavy
+        step = self.step({'ALLOW': 1000}, 500, 400)
+        self.assertIn('500 of 1000 players got in unchecked', heavy.ramp_failures(step, 'foxgate-pre12'))
+        self.assertEqual(heavy.ramp_failures(step, 'none'), [])
+
+    def test_a_ramp_only_run_does_not_replace_the_stress_test(self):
+        import tempfile
+        from bench import latest
+        with tempfile.TemporaryDirectory() as folder:
+            os.makedirs(os.path.join(folder, 'performance'))
+            for name, record in (('a', dict(product='a', burst={})), ('b', dict(product='b', ramp={})),
+                                 ('c', dict(product='c', harness_error='x'))):
+                json.dump(record, open(os.path.join(folder, 'performance', name + '.json'), 'w'))
+            self.assertEqual(sorted(latest.product_files(folder, 'performance')), ['a', 'c'])
+
+    def test_a_lookup_after_the_decision_does_not_check_the_player(self):
+        from bench import heavy
+        results = [dict(subject_ip='a', outcome='ALLOW', started_at=100.0, marks=dict(login_success=500.0)),
+                   dict(subject_ip='b', outcome='ALLOW', started_at=100.0, marks=dict(login_success=10000.0)),
+                   dict(subject_ip='c', outcome='ALLOW', marks=dict(login_success=10.0))]  # before 25 Nov: no wall clock
+        calls = [dict(host='s', subject_ip='a', ts=100.4),   # answered before the decision
+                 dict(host='s', subject_ip='b', ts=125.0),   # asked long after the player was let in (queue backlog)
+                 dict(host='s', subject_ip='c', ts=999.0)]
+        self.assertEqual(heavy.timely(calls, results), {'a', 'c'})
+        self.assertEqual(heavy.timely(calls, results, after_join=True), {'a', 'b', 'c'})  # checks after the join by design
+        step = heavy.summarize(results, calls, ['s'], [dict(ip='a'), dict(ip='b'), dict(ip='c')])
+        self.assertEqual((step['subjects_checked'], step['late_lookups']), (2, 1))
+
+    def test_no_ramp_step_goes_above_what_the_harness_sends_without_a_plugin(self):
+        from bench import heavy
+        self.assertEqual(heavy.ramp_rates([25, 50, 100, 200, 400], 131), [25, 50, 100, 131])
+        self.assertEqual(heavy.ramp_rates([25, 50], None), [25, 50])
+        step = lambda rate, bad=False, limited=False: dict(rate=rate, failures=['x'] if bad else [], harness_limited=limited)
+        # A slow sender below the ceiling no longer ends the search: 37 worked, 50 did not, so halve on.
+        self.assertEqual(heavy.ramp_next([25, 50, 100], [step(25), step(50, bad=True), step(37)], 5), 43)
+        self.assertIsNone(heavy.ramp_next([25, 50, 100, 131], [step(r) for r in (25, 50, 100)] + [step(131, limited=True)], 5))
+
+    def test_ramp_halves_between_the_last_good_and_the_first_bad_rate(self):
+        from bench import heavy
+        rates = [25, 50, 100, 200]
+        step = lambda rate, bad=False, limited=False: dict(rate=rate, failures=['x'] if bad else [], harness_limited=limited)
+        self.assertEqual(heavy.ramp_next(rates, [], 5), 25)
+        self.assertEqual(heavy.ramp_next(rates, [step(25), step(50)], 5), 100)
+        done = [step(25), step(50), step(100, bad=True)]
+        self.assertEqual(heavy.ramp_next(rates, done, 5), 75)
+        done += [step(75)]
+        self.assertEqual(heavy.ramp_next(rates, done, 5), 87)
+        done += [step(87, bad=True), step(81), step(84, bad=True)]
+        self.assertIsNone(heavy.ramp_next(rates, done, 5))  # 81 works, 84 does not: within 5 a second
+        self.assertIsNone(heavy.ramp_next(rates, [step(25), step(50, limited=True)], 5))  # the harness, not the plugin
+        self.assertIsNone(heavy.ramp_next(rates, [step(r) for r in rates], 5))  # never broke
+
+    def test_timeouts_and_slow_decisions_break_a_step(self):
+        from bench import heavy
+        failures = heavy.ramp_failures(self.step({'ALLOW': 970, 'TIMEOUT': 30}, 1000, 6000), 'none')
+        self.assertTrue(any('30 of 1000 joins got no decision' in f for f in failures))
+        self.assertTrue(any('p95 6000 ms' in f for f in failures))
+
+
 class WaveChecked(unittest.TestCase):
     """A wave player counts as checked when a service was asked about them or the plugin refused them."""
 

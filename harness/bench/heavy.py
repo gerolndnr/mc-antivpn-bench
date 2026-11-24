@@ -448,14 +448,21 @@ async def record_references(runtime, product_id, platform, profile, canaries, ad
     return references
 
 
-async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2.0):
-    """Sequential (concurrency=None, rate=None), simultaneous (concurrency) or open-loop at `rate`/s."""
+async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2.0, timing=None):
+    """Sequential (concurrency=None, rate=None), simultaneous (concurrency) or open-loop at `rate`/s. With `timing`
+    (a dict), an open-loop run stores how long sending took, so a caller can tell whether the client kept the rate."""
     if rate:
         tasks = []
+        started = time.monotonic()
         for index, subject in enumerate(subjects):
             tasks.append(asyncio.create_task(mcclient.admit(instance.port, subject['ip'], player('burst'),
                                                             observe_s=observe_s, deadline_s=60)))
-            await asyncio.sleep(1.0 / rate)
+            # Paced against the start, not by a fixed sleep per join: at hundreds a second the sleeps' overhead
+            # would otherwise lower the rate actually sent.
+            delay = started + (index + 1) / rate - time.monotonic()
+            await asyncio.sleep(max(0.0, delay))
+        if timing is not None:
+            timing['send_s'] = time.monotonic() - started
         return await asyncio.gather(*tasks)
     pid = instance.product_id
     if concurrency:
@@ -472,7 +479,26 @@ async def run_joins(instance, subjects, concurrency=None, rate=None, observe_s=2
     return out
 
 
-def summarize(results, events, lookup_hosts, subjects=None):
+LOOKUP_SLACK_S = 0.25  # interposer stamps after answering; the plugin decides after reading the answer
+
+
+def timely(calls, results, after_join=False):
+    """Subjects a service answered about before the plugin decided on them. A lookup after the decision protects no
+    one (a plugin that let the player in on a timeout and asks later). Plugins that decide after the join, and results
+    without a wall-clock start (runs before 25 Nov 2026), count every lookup as before."""
+    deadline = {}
+    for r in results:
+        ms = decision_ms(r) if r.get('outcome') != 'TIMEOUT' else None
+        ms = ms if ms is not None else r.get('total_ms')
+        if r.get('started_at') is None or ms is None or after_join:
+            deadline[r.get('subject_ip')] = float('inf')
+        else:
+            deadline[r.get('subject_ip')] = max(deadline.get(r.get('subject_ip'), 0), r['started_at'] + ms / 1000 + LOOKUP_SLACK_S)
+    return {e.get('subject_ip') for e in calls
+            if e.get('subject_ip') and (e.get('ts') is None or e['ts'] <= deadline.get(e['subject_ip'], float('inf')))}
+
+
+def summarize(results, events, lookup_hosts, subjects=None, after_join=False):
     outcomes = {}
     for result in results:
         outcomes[result['outcome']] = outcomes.get(result['outcome'], 0) + 1
@@ -481,9 +507,11 @@ def summarize(results, events, lookup_hosts, subjects=None):
     for event in calls:
         per_host[event['host']] = per_host.get(event['host'], 0) + 1
     distinct = {s['ip'] for s in subjects or []}
-    looked_up = {e.get('subject_ip') for e in calls if e.get('subject_ip')} & distinct
-    # Checked: a detection service was asked about the player, or the plugin refused them (from its own list or cache).
-    # The rest got in without any answer: let in unchecked (quota used up, queue full, timeouts).
+    looked_up = timely(calls, results, after_join) & distinct
+    late = len({e.get('subject_ip') for e in calls if e.get('subject_ip')} & distinct) - len(looked_up)
+    # Checked: a detection service answered about the player before the plugin decided, or the plugin refused them
+    # (from its own list or cache). The rest got in without any answer: let in unchecked (quota used up, queue full,
+    # timeouts), counting players a service was asked about only after they were let in (late_lookups).
     refused = {r.get('subject_ip') for r in results if r.get('outcome') in ('DENY_LOGIN', 'DENY_PLAY')} & distinct
     # Requests the simulation could not answer (no template recorded for the host): the plugin saw a failing service,
     # which the other plugins did not. A round with any is not used for the overview (overview.performance).
@@ -493,6 +521,7 @@ def summarize(results, events, lookup_hosts, subjects=None):
             misses[event['host']] = misses.get(event['host'], 0) + 1
     return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]), template_misses=misses,
                 distinct_subjects=len(distinct), subjects_with_lookup=len(looked_up), subjects_checked=len(looked_up | refused),
+                late_lookups=late,
                 join_ms=percentiles([r.get('marks', {}).get('joined') for r in results]),
                 lookup_requests=len(calls), lookup_requests_per_host=per_host,
                 unlisted_lookups=unlisted_lookups(events, lookup_hosts, distinct))
@@ -508,14 +537,121 @@ def unlisted_lookups(events, lookup_hosts, subject_ips):
     return out
 
 
+# Capacity ramp (local trial, BENCH_PERF_PHASES=ramp): the join rate rises in steps until the plugin stops working.
+# A step works when nearly every join got a decision, nearly every player was checked (a detection service was asked
+# about them, or the plugin refused them), and the decisions came within the time a player would still wait.
+RAMP_RATES = (25, 50, 100, 200, 400, 800)
+RAMP_STEP_S = 10    # seconds of joins per step, each step with players never seen before
+RAMP_REST_S = 60    # pause between steps: queues drain and per-minute quotas start again
+RAMP_DECIDED = 0.99
+RAMP_CHECKED = 0.99
+RAMP_P95_MS = 5000
+RAMP_RESOLUTION = 5  # joins a second between the last rate that worked and the first that did not
+DECIDED = ('ALLOW', 'DENY_LOGIN', 'DENY_PLAY')
+
+
+def ramp_settings():
+    rates = [int(r) for r in (os.environ.get('BENCH_RAMP_RATES') or ','.join(map(str, RAMP_RATES))).split(',') if r]
+    return rates, float(os.environ.get('BENCH_RAMP_STEP_S') or RAMP_STEP_S), float(os.environ.get('BENCH_RAMP_REST_S') or RAMP_REST_S)
+
+
+def ramp_failures(step, product_id):
+    """Why a ramp step does not count as working (empty: it works). `step` is a summarize() record."""
+    n = step['distinct_subjects'] or 1
+    decided = sum(v for k, v in step['outcomes'].items() if k in DECIDED)
+    out = []
+    if decided < RAMP_DECIDED * n:
+        out.append(f'{n - decided} of {n} joins got no decision ({", ".join(f"{k} {v}" for k, v in sorted(step["outcomes"].items()) if k not in DECIDED)})')
+    if product_id != 'none' and step['subjects_checked'] < RAMP_CHECKED * n:
+        out.append(f'{n - step["subjects_checked"]} of {n} players got in unchecked')
+    p95 = step['decision_ms'].get('p95')
+    if p95 is None or p95 > RAMP_P95_MS:
+        out.append(f'decision p95 {p95} ms over {RAMP_P95_MS} ms')
+    return out
+
+
+def ramp_next(rates, done, resolution):
+    """The next rate to probe, or None when the limit is found. First the coarse steps in order, until one fails or
+    reaches the harness limit; then halving between the highest rate that worked and the lowest that did not, until
+    they are `resolution` joins a second apart (or 5 % of the rate, whichever is larger)."""
+    worked = [s['rate'] for s in done if not s['failures']]
+    failed = [s['rate'] for s in done if s['failures']]
+    if not failed:
+        if any(s['harness_limited'] for s in done):
+            return None
+        rest = [r for r in rates if r not in {s['rate'] for s in done}]
+        return rest[0] if rest else None
+    low, high = max([r for r in worked if r < min(failed)], default=0), min(failed)
+    if high - low <= max(resolution, 0.05 * high):
+        return None
+    return (low + high) // 2
+
+
+def ramp_rates(rates, ceiling):
+    """The coarse rates, with every rate above the harness ceiling replaced by the ceiling itself."""
+    return sorted({min(r, ceiling) for r in rates}) if ceiling else list(rates)
+
+
+async def ramp(runtime, instance, adapter, pool, product_id, ceiling=None):
+    """Rising join rates on fresh players until the plugin stops working, then halving to find where exactly.
+    `ceiling` is the highest rate the same runner sustained without a plugin (the `none` ramp of this round): no step
+    goes above it, and a plugin that still works there is limited by the harness, not by itself (harness_limited,
+    capacity_per_s a lower bound). Without a ceiling a step the client sent below 90 % of its rate counts as limited.
+    capacity_per_s is the highest rate that worked (the rate actually sent, if lower), breaking_per_s the lowest that
+    did not; below_lowest_per_s is set when even the lowest rate failed."""
+    rates, step_s, rest_s = ramp_settings()
+    rates = ramp_rates(rates, ceiling)
+    resolution = int(os.environ.get('BENCH_RAMP_RESOLUTION') or RAMP_RESOLUTION)
+    steps, offset = [], 0
+    rate = ramp_next(rates, steps, resolution)
+    while rate is not None:
+        if steps:
+            await asyncio.sleep(rest_s)
+        count = int(rate * step_s)
+        subjects = pool[offset:offset + count]
+        offset += count
+        if len(subjects) < count:
+            break  # out of fresh players; never reuse one, a cached answer would flatter the plugin
+        mark, timing, started = runtime.sequence(), {}, time.monotonic()
+        results = await run_joins(instance, subjects, rate=rate, timing=timing)
+        step = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'], subjects,
+                         after_join=bool(adapter.get('decides_after_join')))
+        step.update(rate=rate, sent_per_s=round(count / timing['send_s'], 1) if timing.get('send_s') else None,
+                    wall_s=round(time.monotonic() - started, 1))
+        step['failures'] = ramp_failures(step, product_id)
+        if ceiling:
+            step['harness_limited'] = rate >= ceiling and not step['failures']
+        else:
+            step['harness_limited'] = bool(step['sent_per_s'] and step['sent_per_s'] < 0.9 * rate)
+        steps.append(step)
+        print(f'[ramp] {product_id} {rate}/s (sent {step["sent_per_s"]}/s): checked {step["subjects_checked"]}/{count} '
+              f'late {step["late_lookups"]} p95={step["decision_ms"].get("p95")} {step["outcomes"]} '
+              f'{"; ".join(step["failures"]) or ("works, at the harness ceiling" if step["harness_limited"] else "works")}', flush=True)
+        rate = ramp_next(rates, steps, resolution)
+    failed = [s['rate'] for s in steps if s['failures']]
+    good = [s for s in steps if not s['failures'] and (not failed or s['rate'] < min(failed))]
+    best = max(good, key=lambda s: s['rate'], default=None)
+    capacity = int(min(best['rate'], best['sent_per_s'] or best['rate'])) if best else None
+    limited = any(s['harness_limited'] for s in steps)
+    return dict(steps=steps, capacity_per_s=capacity, breaking_per_s=min(failed) if failed else None,
+                below_lowest_per_s=min(s['rate'] for s in steps) if steps and best is None and failed else None,
+                harness_limited=limited, ceiling_per_s=ceiling, step_s=step_s, rest_s=rest_s, rates=rates,
+                resolution=resolution, criteria=dict(decided=RAMP_DECIDED, checked=RAMP_CHECKED, p95_ms=RAMP_P95_MS))
+
+
 async def performance(runtime, recorder, canaries, product_ids, platform='velocity', rounds=3, profile='enforce'):
     items = dataset('v1')
     reference = by_cohort(items, 'residential', 1, 0)[0]
     burst_subjects = synthetic_subjects(items, 1000, SEED)
     seq_subjects = synthetic_subjects(items, 1100, SEED + 1)[1000:1100]
     stampede_ip = synthetic_subjects(items, 1101, SEED + 2)[-1]
+    phases = (os.environ.get('BENCH_PERF_PHASES') or 'cold,warm,stampede,burst').split(',')
+    rates, step_s, _ = ramp_settings()
+    ramp_pool = synthetic_subjects(items, int((sum(rates) + 8 * max(rates)) * step_s), SEED + 3) if 'ramp' in phases else []
     candidates = ['none'] + list(product_ids)
+    ramp_only = phases == ['ramp']
     for round_index in range(rounds):
+        ceiling = None  # the rate this runner sustains without a plugin, from this round's `none` ramp
         rotation = candidates[round_index % len(candidates):] + candidates[:round_index % len(candidates)]
         for product_id in rotation:
             record = dict(product=product_id, platform=platform, round=round_index, latency_model=LATENCY_MODEL,
@@ -531,13 +667,16 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                 instance.jar_sha256 = None
             else:
                 adapter = products.adapter(product_id)
+                # A ramp-only run may use the adapter's documented load profile (METHODOLOGY 7.3).
+                use = adapter.get('load_profile') if ramp_only and adapter.get('load_profile') else profile
+                record['profile'] = use
                 instance = Instance(runtime, product_id, platform, label=f'perf-{product_id}-{round_index}')
-                await instance.prepare(profile, canaries)
+                await instance.prepare(use, canaries)
             try:
                 # Reference answers for the templates: one real lookup per service the product uses.
                 references = {}
                 if product_id != 'none':
-                    references = await record_references(runtime, product_id, platform, profile, canaries, adapter, reference,
+                    references = await record_references(runtime, product_id, platform, record['profile'], canaries, adapter, reference,
                                                          by_cohort(items, 'residential', 3 * len(adapter['lookup_hosts']), 1),
                                                          label=f'perf-ref-{product_id}-{round_index}')
                     record['template_references'] = {h: ('reference' if ip == reference['ip'] else 'fallback-reference')
@@ -553,10 +692,13 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                         ('warm', seq_subjects[:50], {}),
                         ('stampede', [stampede_ip] * 100, dict(concurrency=100)),
                         ('burst', burst_subjects, dict(rate=50))):
+                    if phase not in phases:
+                        continue
                     mark = runtime.sequence()
                     started = time.monotonic()
                     results = await run_joins(instance, subjects, **kwargs)
-                    phase_record = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'], subjects)
+                    phase_record = summarize(results, runtime.events_since(mark), adapter['lookup_hosts'], subjects,
+                                             after_join=bool(adapter.get('decides_after_join')))
                     phase_record['wall_s'] = round(time.monotonic() - started, 1)
                     record[phase] = phase_record
                     if phase_record['unlisted_lookups'] and product_id != 'none':
@@ -564,6 +706,11 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                         raise RuntimeError(f'unlisted lookup hosts {phase_record["unlisted_lookups"]}: add them to the adapter')
                     print(f'[performance] r{round_index} {product_id} {phase}: {phase_record["outcomes"]} '
                           f'p50={phase_record["decision_ms"].get("p50")} req={phase_record["lookup_requests"]}', flush=True)
+                if 'ramp' in phases:
+                    record['ramp'] = await ramp(runtime, instance, adapter, ramp_pool, product_id,
+                                                ceiling=None if product_id == 'none' else ceiling)
+                    if product_id == 'none':
+                        ceiling = record['ramp']['capacity_per_s']
                 record['resources'] = sampler.stop()
                 record['process_alive'] = instance.server.process.returncode is None
             except Exception as error:

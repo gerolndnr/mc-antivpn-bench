@@ -29,10 +29,10 @@ import tempfile
 
 from . import dataset, overview, score
 
-FAMILIES = ['functional', 'failure', 'redis', 'detection', 'performance', 'providers']
+FAMILIES = ['functional', 'failure', 'redis', 'detection', 'performance', 'ramp', 'providers']
 # Result folders per family; the first one decides whether a run has a result for a product.
 FOLDERS = {'functional': ['platform', 'clean-install', 'upgrade', 'invalid-reload', 'secrets'], 'failure': ['failure'],
-           'redis': ['redis'], 'detection': ['detection'], 'performance': ['performance'], 'providers': ['providers']}
+           'redis': ['redis'], 'detection': ['detection'], 'performance': ['performance'], 'ramp': ['performance'], 'providers': ['providers']}
 HEADLINE = ['enforce']
 OPTIMAL = 'optimal'
 LICENCE_KEYS = ('jarvis',)  # engine.LICENCE_KEYS; latest stays importable without the harness packages  # each plugin's best configuration with free keys (METHODOLOGY 4)
@@ -108,6 +108,10 @@ def product_files(folder, family):
             if not isinstance(record, dict) or 'product' not in record:
                 continue
             if family == 'performance' and record.get('platform', 'velocity') != 'velocity':
+                continue
+            if family == 'performance' and 'ramp' in record and 'burst' not in record:
+                continue  # a ramp-only run measures the limit, not the stress test the README shows
+            if family == 'ramp' and not record.get('ramp'):
                 continue
             out.setdefault(record['product'], []).append(path)
     if family == 'functional':
