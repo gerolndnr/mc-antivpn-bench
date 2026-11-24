@@ -15,6 +15,8 @@ There is no combined score. Every result is reported per question, per cohort an
   <img alt="Latest results of every test family: join wave, everyday joins, detection and false positives, failing detection services, Redis outage, platforms and release quality" src="docs/overview/overview-light.png">
 </picture>
 
+**[All numbers as tables →](docs/overview/RESULTS.md)** (the same results as text, for reading, searching and copying).
+
 The newest complete result of every family, redrawn after each run by [overview.yml](.github/workflows/overview.yml); [latest.json](docs/overview/latest.json) lists the runs. Each plugin appears once, in its newest pinned version. Draw it from any result folders with `PYTHONPATH=harness python3 -m bench.overview results/<run> [...] --output <dir>`.
 
 > **Conflict of interest.** This suite is maintained by the authors of Connection Guard, one of the products under test. The methodology, the adapters and every raw log are public, so other plugin authors can check and challenge each decision. Corrections are welcome; see [METHODOLOGY.md](METHODOLOGY.md#right-of-reply).

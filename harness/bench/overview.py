@@ -892,6 +892,140 @@ The accent marks the best value in each row. Results describe this setup and dat
     return page, height
 
 
+# ------------------------------------------------------------------ Markdown
+class _Node:
+    def __init__(self, tag, attrs, parent=None):
+        self.tag, self.attrs, self.parent, self.children = tag, dict(attrs), parent, []
+
+    def cls(self):
+        return (self.attrs.get('class') or '').split()
+
+    def find(self, test):
+        out = []
+        for child in self.children:
+            if isinstance(child, _Node):
+                if test(child):
+                    out.append(child)
+                out += child.find(test)
+        return out
+
+    def text(self, skip=('track', 'fill', 'mini')):
+        parts = []
+        for child in self.children:
+            if isinstance(child, str):
+                parts.append(child)
+            elif child.tag == 'br':
+                parts.append(' ')
+            elif 'ok' in child.cls() or 'bad' in child.cls():
+                parts.append(' ✅ ' if 'ok' in child.cls() else ' ❌ ')
+            elif 'frac' in child.cls() and child.text(skip):
+                parts.append(f' ({child.text(skip)}) ')
+            elif not set(child.cls()) & set(skip) and child.tag not in ('script', 'style', 'small'):
+                parts.append(' ' + child.text(skip) + ' ')
+        return ' '.join(''.join(parts).split())
+
+
+def _tree(page):
+    from html.parser import HTMLParser
+    root = _Node('root', [])
+
+    class Parser(HTMLParser):
+        node = root
+
+        def handle_starttag(self, tag, attrs):
+            child = _Node(tag, attrs, self.node)
+            self.node.children.append(child)
+            if tag not in ('br', 'col', 'img', 'meta', 'link', 'i'):
+                self.node = child
+
+        def handle_endtag(self, tag):
+            node = self.node
+            while node is not root and node.tag != tag:
+                node = node.parent
+            if node is not root:
+                self.node = node.parent
+
+        def handle_data(self, data):
+            self.node.children.append(data)
+
+    Parser(convert_charrefs=True).feed(page)
+    return root
+
+
+def _cell(node):
+    text = node.text().replace('|', '\\|')
+    small = ' '.join(' '.join(s.text(skip=()).split()) for s in node.find(lambda n: n.tag == 'small'))
+    if small:
+        text = f'{text} <sub>{small}</sub>' if text else small
+    return f'**{text}**' if text and 'best' in node.cls() else text
+
+
+def markdown(page):
+    """The overview as Markdown, read from the drawn page so both always show the same numbers."""
+    root = _tree(page)
+    one = lambda test: next(iter(root.find(test)), None)
+    h1, sub, pill = one(lambda n: n.tag == 'h1'), one(lambda n: 'sub' in n.cls()), one(lambda n: 'pill' in n.cls())
+    out = [f'# {h1.text() if h1 else "Results"}', '']
+    if pill:
+        out += [f'*{pill.text()}*', '']
+    if sub:
+        out += [sub.text(), '']
+    out += ['The same numbers as the [overview graphic](overview-dark.png), redrawn after each run. '
+            'Bold marks the best value in each row.', '']
+    for card in root.find(lambda n: n.tag == 'section' and 'card' in n.cls()):
+        h2 = one_in(card, 'h2')
+        tag = one_in(card, 'small', inside=h2) if h2 else None
+        title = ' '.join(c if isinstance(c, str) else '' for c in h2.children).strip() if h2 else ''
+        out += [f'## {title}', '']
+        hint = next(iter(card.find(lambda n: 'hint' in n.cls())), None)
+        if tag or hint:
+            out += [' · '.join(x for x in ((f'*{tag.text(skip=())}*' if tag else ''), hint.text() if hint else '') if x), '']
+        rows = card.find(lambda n: 'bar-row' in n.cls())
+        if rows:
+            out += ['| Plugin | Result | Detail |', '| --- | ---: | --- |']
+            for row in rows:
+                name = next(iter(row.find(lambda n: 'name' in n.cls())))
+                val = next(iter(row.find(lambda n: 'val' in n.cls())))
+                note = ' '.join(s.text(skip=()) for s in val.find(lambda n: n.tag == 'small'))
+                label = val.text()
+                label = f'**{label}**' if 'best' in row.cls() else label
+                ref = '*' if 'ref' in row.cls() else ''
+                out.append(f'| {ref}{name.text()}{ref} | {label} | {note.replace("|", "/")} |')
+            out.append('')
+        for table in card.find(lambda n: n.tag == 'table'):
+            head = [th.text() for th in table.find(lambda n: n.tag == 'th')]
+            out += ['| ' + ' | '.join(h or ' ' for h in head) + ' |', '| --- |' + ' ---: |' * (len(head) - 1)]
+            notes = []
+            for tr in table.find(lambda n: n.tag == 'tr' and n.parent.tag == 'tbody'):
+                cells = [_cell(td) for td in tr.children if isinstance(td, _Node) and td.tag == 'td']
+                if 'groupr' in tr.cls() or len(cells) == 1:
+                    if len(tr.text()) > 60:
+                        notes.append(tr.text())  # a note under the table, not a group heading
+                    else:
+                        out.append(f'| ***{tr.text()}*** |' + ' |' * (len(head) - 1))
+                    continue
+                if 'total' in tr.cls() and cells and not cells[0].startswith('**'):
+                    cells[0] = f'**{cells[0]}**'
+                out.append('| ' + ' | '.join(cells + [''] * (len(head) - len(cells))) + ' |')
+            out += [''] + [f'> {n}  ' for n in notes] + ([''] if notes else [])
+    foot = one(lambda n: n.tag == 'footer')
+    if foot:
+        lines, line = [], []
+        for span in (c for c in foot.children if isinstance(c, _Node)):
+            for child in span.children + [_Node('br', [])]:
+                if isinstance(child, _Node) and child.tag == 'br':
+                    lines.append(' '.join(' '.join(line).split()))
+                    line = []
+                else:
+                    line.append(child if isinstance(child, str) else child.text(skip=()))
+        out += ['---', ''] + [l.replace('The accent marks', 'Bold marks') + '  ' for l in lines if l] + ['']
+    return '\n'.join(out)
+
+
+def one_in(node, tag, inside=None):
+    return next(iter((inside or node).find(lambda n: n.tag == tag)), None)
+
+
 def chrome():
     for candidate in (os.environ.get('BENCH_CHROME'), 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser',
                       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'):
@@ -916,6 +1050,8 @@ def write(dirs, output, labels=None, theme='dark', title=None, all_versions=Fals
     html_path = os.path.join(output, 'overview.html')
     with open(html_path, 'w') as handle:
         handle.write(page)
+    with open(os.path.join(output, 'overview.md'), 'w') as handle:
+        handle.write(markdown(page))
     png = os.path.join(output, 'overview.png')
     try:
         rendered = render(html_path, png, height)

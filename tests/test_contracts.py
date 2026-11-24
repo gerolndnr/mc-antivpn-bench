@@ -746,6 +746,24 @@ class CapacityRamp(unittest.TestCase):
                 json.dump(record, open(os.path.join(folder, 'performance', name + '.json'), 'w'))
             self.assertEqual(sorted(latest.product_files(folder, 'performance')), ['a', 'c'])
 
+    def test_the_results_page_shows_the_numbers_of_the_graphic(self):
+        from bench import overview
+        bars, _ = overview.bar_card('Wave', 'Higher is better.', [('a', 'Plugin A', 10, '10 of 10', 'fast', False),
+                                                                ('b', 'Plugin B', 4, '4 of 10', '6 unchecked', False)], low=False)
+        table, _ = overview.table_card('Faults', 'Still refused.', ['', 'Plugin A 1.0', 'Plugin B'],
+                                       [('', [overview.td('Timeout'), overview.td(overview.MARK[True]), overview.td(overview.MARK[False])]),
+                                        ('groupr', ['<td class="group" colspan="3">Rates</td>']),
+                                        ('', [overview.td('Caught<span class="frac">5</span>'), overview.td('5', 'best'), overview.td('3')])])
+        page = f'<html><body><header><h1>Title</h1></header>{bars}{table}<footer><span>runs 1<br>Bold note.</span></footer></body></html>'
+        md = overview.markdown(page)
+        self.assertIn('| Plugin A | **10 of 10** | fast |', md)
+        self.assertIn('| Plugin B | 4 of 10 | 6 unchecked |', md)
+        self.assertIn('|   | Plugin A 1.0 | Plugin B |', md)
+        self.assertIn('| Timeout | ✅ | ❌ |', md)
+        self.assertIn('| ***Rates*** | | |', md)
+        self.assertIn('| Caught (5) | **5** | 3 |', md)
+        self.assertIn('runs 1  \nBold note.  ', md)
+
     def test_a_lookup_after_the_decision_does_not_check_the_player(self):
         from bench import heavy
         results = [dict(subject_ip='a', outcome='ALLOW', started_at=100.0, marks=dict(login_success=500.0)),
