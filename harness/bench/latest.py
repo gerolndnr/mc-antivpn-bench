@@ -109,6 +109,8 @@ def product_files(folder, family):
                 continue
             if family == 'performance' and record.get('platform', 'velocity') != 'velocity':
                 continue
+            if family == 'performance' and 'ramp' in record and 'burst' not in record:
+                continue  # a ramp-only run measures the limit, not the stress test the README shows
             out.setdefault(record['product'], []).append(path)
     if family == 'functional':
         # A product counts as measured here only with a platform result.

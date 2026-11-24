@@ -720,6 +720,54 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.assertEqual(chosen['functional']['connection-guard'][0][0], '1')
 
 
+class CapacityRamp(unittest.TestCase):
+    """A ramp step works only when nearly every join was decided and checked, fast enough to wait for."""
+
+    def step(self, outcomes, checked, p95, n=1000):
+        return dict(distinct_subjects=n, outcomes=outcomes, subjects_checked=checked, decision_ms=dict(p95=p95))
+
+    def test_a_clean_step_works(self):
+        from bench import heavy
+        self.assertEqual(heavy.ramp_failures(self.step({'ALLOW': 995, 'DENY_LOGIN': 5}, 1000, 400), 'connection-guard-061'), [])
+
+    def test_unchecked_players_break_a_plugin_but_not_the_baseline(self):
+        from bench import heavy
+        step = self.step({'ALLOW': 1000}, 500, 400)
+        self.assertIn('500 of 1000 players got in unchecked', heavy.ramp_failures(step, 'foxgate-pre12'))
+        self.assertEqual(heavy.ramp_failures(step, 'none'), [])
+
+    def test_a_ramp_only_run_does_not_replace_the_stress_test(self):
+        import tempfile
+        from bench import latest
+        with tempfile.TemporaryDirectory() as folder:
+            os.makedirs(os.path.join(folder, 'performance'))
+            for name, record in (('a', dict(product='a', burst={})), ('b', dict(product='b', ramp={})),
+                                 ('c', dict(product='c', harness_error='x'))):
+                json.dump(record, open(os.path.join(folder, 'performance', name + '.json'), 'w'))
+            self.assertEqual(sorted(latest.product_files(folder, 'performance')), ['a', 'c'])
+
+    def test_ramp_halves_between_the_last_good_and_the_first_bad_rate(self):
+        from bench import heavy
+        rates = [25, 50, 100, 200]
+        step = lambda rate, bad=False, limited=False: dict(rate=rate, failures=['x'] if bad else [], harness_limited=limited)
+        self.assertEqual(heavy.ramp_next(rates, [], 5), 25)
+        self.assertEqual(heavy.ramp_next(rates, [step(25), step(50)], 5), 100)
+        done = [step(25), step(50), step(100, bad=True)]
+        self.assertEqual(heavy.ramp_next(rates, done, 5), 75)
+        done += [step(75)]
+        self.assertEqual(heavy.ramp_next(rates, done, 5), 87)
+        done += [step(87, bad=True), step(81), step(84, bad=True)]
+        self.assertIsNone(heavy.ramp_next(rates, done, 5))  # 81 works, 84 does not: within 5 a second
+        self.assertIsNone(heavy.ramp_next(rates, [step(25), step(50, limited=True)], 5))  # the harness, not the plugin
+        self.assertIsNone(heavy.ramp_next(rates, [step(r) for r in rates], 5))  # never broke
+
+    def test_timeouts_and_slow_decisions_break_a_step(self):
+        from bench import heavy
+        failures = heavy.ramp_failures(self.step({'ALLOW': 970, 'TIMEOUT': 30}, 1000, 6000), 'none')
+        self.assertTrue(any('30 of 1000 joins got no decision' in f for f in failures))
+        self.assertTrue(any('p95 6000 ms' in f for f in failures))
+
+
 class WaveChecked(unittest.TestCase):
     """A wave player counts as checked when a service was asked about them or the plugin refused them."""
 
