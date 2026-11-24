@@ -115,6 +115,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: contracts
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write  # dispatches the overview redraw
     timeout-minutes: 350
     env:
       RUN_ID: ${{ github.run_id }}-${{ inputs.family || 'detection' }}
@@ -274,3 +277,11 @@ jobs:
           path: sealed/interposer-state.tgz.enc
           if-no-files-found: ignore
           retention-days: 30
+      # Runs the nightly job dispatches with the GITHUB_TOKEN start no workflow_run, so the overview never heard of them,
+      # and GitHub delays its 09:17 schedule by up to ten hours (16:00-19:30 UTC from 13 to 22 Nov 2026). Such a run
+      # asks for the redraw itself; a run started by a person already triggers it through workflow_run.
+      - name: Redraw the README overview
+        if: success() && github.ref == 'refs/heads/main' && github.triggering_actor == 'github-actions[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run overview.yml --ref main
