@@ -1,6 +1,6 @@
 # Anti-VPN plugins, measured.
 
-*Published run · 4–24 November 2026 · Velocity*
+*Published run · 4–25 November 2026 · Velocity*
 
 6 unmodified plugins on the same server, with the same players and the same simulated detection services.
 
@@ -30,6 +30,20 @@ Same simulated services, same delays and free-tier limits for every plugin.
 | Lookups, 100 same-IP joins | **1** | 6 | 2 | **1** | 2 | 300 |
 | Players checked in the stress test | **1,000** | **1,000** | 392 | 47 | 631 | 500 |
 | Start-up | 6.5 s | 8.3 s | 17.1 s | **6.3 s** | **6.3 s** | 7.1 s |
+
+## Load limit: joins a second until checks fail
+
+*Velocity · 1 round* · Rising join rates, 10 s each, fresh players, 60 s rest; then halving to within 5/s. A rate works when 99 % get a decision, 99 % are checked and p95 stays under 5 s. Higher is better.
+
+| Plugin | Result | Detail |
+| --- | ---: | --- |
+| Connection Guard v0.6.1 | 29/s | breaks at 37/s: 22 of 370 unchecked |
+| FoxGate 1.2.0-pre12 | 19/s | breaks at 25/s: 4 of 250 unchecked |
+| ProxyShield 3.1.0 | **58/s** | breaks at 62/s: 14 of 620 unchecked · fast admit off (shipped: skips home networks in waves) |
+| VPNGuard 1.2.0 | < 3/s | at 3/s: 30 of 30 unchecked, p95 10 s |
+| KauriVPN 1.10.1.1 | 15/s | breaks at 18/s: 14 of 180 unchecked · checks after the join |
+| AdvancedAntiVPN 2.31.8 | 6/s | breaks at 9/s: p95 7.3 s |
+| *Test machine without a plugin* | 124/s | the most joins a second this runner sends |
 
 ## Detection and false positives
 
@@ -161,7 +175,7 @@ Fixed VPN, Tor, home and mobile joins on every platform; counts are platforms pa
 
 ---
 
-Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 41783312977, 41981415567, 42174830603, 42344481711, 42452534813, 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45368628735, 45368631927, 45368635681, 45368640040, 45368644740, 45368650348 · commit 1ddbb66  
+Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 41783312977, 41981415567, 42174830603, 42344481711, 42452534813, 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45368628735, 45368631927, 45368635681, 45368640040, 45368644740, 45368650348, 45508280763 · commit 1ddbb66  
 Bold marks the best value in each row. Results describe this setup and dataset, not every server.  
 Conflict of interest: maintained by the author of Connection Guard.  
 Other plugin authors can contest adapters and results (METHODOLOGY 10).  
