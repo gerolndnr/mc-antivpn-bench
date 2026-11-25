@@ -174,6 +174,8 @@ def ramps(dirs):
     out = {}
     for r in records(dirs, 'performance'):
         if r.get('ramp') and r.get('platform', 'velocity') == 'velocity' and not r.get('harness_error'):
+            if any(step.get('template_misses') for step in r['ramp'].get('steps') or []):
+                continue  # the simulation left a service unanswered for this plugin only, as in performance()
             out.setdefault(r['product'], dict(r['ramp'], profile=r.get('profile')))
     return out
 

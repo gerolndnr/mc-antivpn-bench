@@ -736,6 +736,18 @@ class CapacityRamp(unittest.TestCase):
         self.assertIn('500 of 1000 players got in unchecked', heavy.ramp_failures(step, 'foxgate-pre12'))
         self.assertEqual(heavy.ramp_failures(step, 'none'), [])
 
+    def test_a_ramp_with_an_unanswered_service_is_not_shown(self):
+        import tempfile
+        from bench import latest, overview
+        with tempfile.TemporaryDirectory() as folder:
+            os.makedirs(os.path.join(folder, 'performance'))
+            clean = dict(steps=[dict(rate=25, failures=[], template_misses={})], capacity_per_s=25)
+            missed = dict(steps=[dict(rate=25, failures=['x'], template_misses={'marvinmc.dev': 161})], capacity_per_s=None)
+            for name, ramp in (('a', clean), ('b', missed)):
+                json.dump(dict(product=name, ramp=ramp), open(os.path.join(folder, 'performance', name + '.json'), 'w'))
+            self.assertEqual(sorted(latest.product_files(folder, 'ramp')), ['a'])
+            self.assertEqual(sorted(overview.ramps([folder])), ['a'])
+
     def test_a_ramp_only_run_does_not_replace_the_stress_test(self):
         import tempfile
         from bench import latest
