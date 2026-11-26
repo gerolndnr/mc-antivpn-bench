@@ -111,8 +111,9 @@ def product_files(folder, family):
                 continue
             if family == 'performance' and 'ramp' in record and 'burst' not in record:
                 continue  # a ramp-only run measures the limit, not the stress test the README shows
-            if family == 'ramp' and not record.get('ramp'):
-                continue
+            if family == 'ramp' and (not record.get('ramp') or any(
+                    step.get('template_misses') for step in record['ramp'].get('steps') or [])):
+                continue  # unanswered services: an older clean ramp of the product stays in the overview
             out.setdefault(record['product'], []).append(path)
     if family == 'functional':
         # A product counts as measured here only with a platform result.
