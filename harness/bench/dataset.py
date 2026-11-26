@@ -864,5 +864,12 @@ if __name__ == '__main__':
         print(current())
     elif command == 'access-audit':
         access_audit(args[0])
+    elif command == 'seal':
+        from bench import sealed
+        sealed.seal()
+    elif command == 'reveal' and args:
+        from bench import sealed
+        sealed.reveal(args[0])
     else:
-        sys.exit('usage: python3 -m bench.dataset build-day [YYYY-MM-DD] | materialize [version] | current | access-audit <week>')
+        sys.exit('usage: python3 -m bench.dataset build-day [YYYY-MM-DD] | materialize [version] | current | access-audit <week>'
+                 ' | seal | reveal <sealed-version>')
