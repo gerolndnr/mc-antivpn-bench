@@ -155,8 +155,9 @@ def performance(dirs):
                     if isinstance(v, (int, float)):
                         values.append(v)
                 return med(values)
+            profiles = {r.get('profile') for r in rounds}
             out.setdefault(platform, {})[pid] = dict(
-                rounds=len(rounds), burst_p95=m('burst', 'decision_ms', 'p95'),
+                rounds=len(rounds), profile=profiles.pop() if len(profiles) == 1 else None, burst_p95=m('burst', 'decision_ms', 'p95'),
                 # Wave players the proxy cut off without a product decision (CLOSED, TIMEOUT; recorded from 8 October 2026).
                 cut_off=med([sum(((r.get('burst') or {}).get('outcomes') or {}).get(k, 0) for k in ('CLOSED', 'TIMEOUT'))
                              for r in rounds if r.get('burst')]) or None, burst_p50=m('burst', 'decision_ms', 'p50'),
@@ -631,6 +632,8 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             note = f'decided within {fmt_ms(e["burst_p95"])}' + (f' · {num(n - checked)} unchecked' if n - checked > 0 else '')
             if e.get('cut_off'):
                 note += f' · {num(e["cut_off"])} cut off'
+            if e.get('profile') and e['profile'] == adapter_of(pid).get('load_profile'):
+                note += f' · {adapter_of(pid)["load_note"]}'
             rows.append((pid, names[pid], checked, f'{num(checked)} of {num(n)}', note, False))
         cut = any(p[k].get('cut_off') for k, *_ in rows if k in p)
         card_a = bar_card('Stress test: 1,000 players join in 20 seconds', 'Players checked, by a detection service or the plugin\'s own list. Unchecked players got in without an answer or were cut off. Higher is better.'
@@ -676,7 +679,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
             # A plugin that checks after the join: its login time is no decision time, but whether a player was
             # checked still counts.
             late = ' · checks after the join' if after_join(pid) else ''
-            # A documented setting changed for this test only (adapter load_profile) is named next to the result.
+            # A documented setting changed for the performance family (adapter load_profile) is named next to the result.
             changed = adapter_of(pid).get('load_note') if r.get('profile') and r['profile'] == adapter_of(pid).get('load_profile') else None
             tail = ''.join(f' · {x}' for x in (changed,) if x) + late
             if cap is None:

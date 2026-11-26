@@ -43,7 +43,7 @@
           }
         }
       ],
-      "note": "enforce with the documented switch detection.network-data.fast-admit: never. Used only by the load test (adapter load_profile): as shipped (auto), ProxyShield stops asking services about home networks once 20 players join within 10 s, so the ramp would measure that rule, not how many checks it can sustain (METHODOLOGY 7.3). The stress test and every other family keep the shipped setting."
+      "note": "enforce with the documented switch detection.network-data.fast-admit: never. Used by the whole performance family, stress test and load limit (adapter load_profile): as shipped (auto), ProxyShield stops asking services about home networks once 20 players join within 10 s, so a wave would measure that rule, not how many checks it can sustain (METHODOLOGY 7.3). Every other family keeps the shipped setting."
     },
     "proxycheck_key": {
       "extends": "enforce",

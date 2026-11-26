@@ -649,7 +649,6 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
     rates, step_s, _ = ramp_settings()
     ramp_pool = synthetic_subjects(items, int((sum(rates) + 8 * max(rates)) * step_s), SEED + 3) if 'ramp' in phases else []
     candidates = ['none'] + list(product_ids)
-    ramp_only = phases == ['ramp']
     for round_index in range(rounds):
         ceiling = None  # the rate this runner sustains without a plugin, from this round's `none` ramp
         rotation = candidates[round_index % len(candidates):] + candidates[:round_index % len(candidates)]
@@ -667,8 +666,8 @@ async def performance(runtime, recorder, canaries, product_ids, platform='veloci
                 instance.jar_sha256 = None
             else:
                 adapter = products.adapter(product_id)
-                # A ramp-only run may use the adapter's documented load profile (METHODOLOGY 7.3).
-                use = adapter.get('load_profile') if ramp_only and adapter.get('load_profile') else profile
+                # Every performance phase uses the adapter's documented load profile, if it has one (METHODOLOGY 7.3).
+                use = adapter.get('load_profile') or profile
                 record['profile'] = use
                 instance = Instance(runtime, product_id, platform, label=f'perf-{product_id}-{round_index}')
                 await instance.prepare(use, canaries)
