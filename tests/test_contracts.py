@@ -748,6 +748,21 @@ class CapacityRamp(unittest.TestCase):
             self.assertEqual(sorted(latest.product_files(folder, 'ramp')), ['a'])
             self.assertEqual(sorted(overview.ramps([folder])), ['a'])
 
+    def test_the_stress_test_names_the_load_profile_it_ran_with(self):
+        import tempfile
+        from bench import overview, products
+        self.assertEqual(products.adapter('proxyshield-310').get('load_profile'), 'no_fast_admit')
+        with tempfile.TemporaryDirectory() as folder:
+            os.makedirs(os.path.join(folder, 'performance'))
+            burst = dict(decision_ms=dict(p95=900), subjects_checked=1000, distinct_subjects=1000)
+            for index, (product, profile) in enumerate((('proxyshield-310', 'no_fast_admit'), ('proxyshield-310', 'no_fast_admit'),
+                                                        ('kaurivpn', 'enforce'), ('kaurivpn', 'no_fast_admit'))):
+                json.dump(dict(product=product, profile=profile, round=index, burst=burst),
+                          open(os.path.join(folder, 'performance', f'{index}.json'), 'w'))
+            perf = overview.performance([folder])['velocity']
+            self.assertEqual(perf['proxyshield-310']['profile'], 'no_fast_admit')
+            self.assertIsNone(perf['kaurivpn']['profile'])  # mixed rounds name no profile
+
     def test_a_ramp_only_run_does_not_replace_the_stress_test(self):
         import tempfile
         from bench import latest
