@@ -130,7 +130,7 @@
   ],
   "list_sources": [
     "https://intel.connectionguard.net/vpn.txt",
-    "https://intel.connectionguard.net/tor.txt"
+    "https://intel.connectionguard.net/tor.txt", "https://intel.connectionguard.net/proxy.txt"
   ],
   "list_sources_note": "Connection Guard Intel lists the shipped configuration downloads (relay.txt and hosting.txt never decide on their own). Intel is built from the same operator server lists as this dataset's VPN labels: its coverage here is circular (see the circularity table)."
 }
