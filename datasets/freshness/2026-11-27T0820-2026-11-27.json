@@ -1,0 +1,14 @@
+{
+  "dataset": "2026-11-27",
+  "proxy": {
+    "committed": "2026-11-27T02:43:53Z",
+    "listed": 11997,
+    "source": "github.com/proxifly/free-proxy-list proxies/all/data.txt at 43d160063f20727ad1a621c049c5183a26fa200e"
+  },
+  "stale": {},
+  "started": "2026-11-27T08:20:21+00:00",
+  "tor": {
+    "exits": 1263,
+    "source": "https://collector.torproject.org/ exit list 2026-11-27-08-10-12"
+  }
+}
