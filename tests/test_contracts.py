@@ -660,6 +660,27 @@ class ReadmeOverviewSelection(unittest.TestCase):
         self.assertEqual(sorted(chosen['detection']), ['connection-guard', 'foxgate', 'kaurivpn'])
         self.assertEqual(profile, 'enforce')
 
+    def test_each_family_shows_the_newest_version_it_has(self):
+        from bench import latest
+        base = tempfile.mkdtemp()
+        self.run_folder(base, 3, ['connection-guard-062'], None)  # only a functional run of the new release so far
+        self.run_folder(base, 1, ['connection-guard-061', 'foxgate'], 'enforce')
+        saved = latest.runs, latest.dataset.public_items, latest.withheld
+        latest.runs = lambda repo, limit: [dict(id=3), dict(id=1)]
+        latest.dataset.public_items = lambda version: [{}] * 3
+        latest.withheld = lambda product: False
+        try:
+            chosen, _, _ = latest.select('x', base)
+        finally:
+            latest.runs, latest.dataset.public_items, latest.withheld = saved
+        self.assertEqual(sorted(chosen['functional']), ['connection-guard-062', 'foxgate'])
+        self.assertEqual(sorted(chosen['detection']), ['connection-guard-061', 'foxgate'])
+
+    def test_overview_draws_each_family_with_its_newest_version(self):
+        from bench import overview
+        self.assertEqual(overview.newest_of({'connection-guard-061': 1, 'connection-guard-062': 2, 'none': 3}),
+                         {'connection-guard-062': 2, 'none': 3})
+
     def test_previous_overview_runs_back_a_family_outside_the_window(self):
         from bench import latest
         base = tempfile.mkdtemp()

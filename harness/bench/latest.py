@@ -5,7 +5,8 @@ workflow runs.
 
 Reads, newest first, successful `benchmark` runs started by hand or by the schedule, and takes per family and per
 product the newest result of that product. A run that measured only some products (a product added later) therefore
-adds those products and leaves the others' results in place.
+adds those products and leaves the others' results in place. Per family only each plugin's newest version is kept, so
+a new release replaces the old one family by family as it is measured.
   - Plugins only from runs without API keys (METHODOLOGY 5): a run that had a key configured is skipped for every
     plugin family, also the earlier `enforce` runs whose keyless ProxyCheck requests got the free key attached.
   - Detection: the `enforce` profile. A chunk counts only together with the other chunks of the same series; a run
@@ -196,14 +197,19 @@ def select(repo, base, limit=250, previous=None, dates=None):
     # Each table compares the plugins it shows (newest version each; an older version is not drawn, so it must not hold
     # the others back) on one dataset core: the newest core every one of them has a complete pass on. A core every
     # shown plugin lacks waits until all are measured on it.
+    # Per family the newest version that family has a result for (owner decision, 28 Nov 2026): a new release shows
+    # wherever it has been measured, an older one fills the families it has not reached yet.
     def table(profiles, fallback):
-        measured = [p for p in detection if p in set(overview.newest_only(list(detection))) and any(x in profiles for x, _ in detection[p])]
+        having = [p for p in detection if any(x in profiles for x, _ in detection[p])]
+        measured = [p for p in having if p in set(overview.newest_only(having))]
         cores = sorted({c for p in measured for x, c in detection[p] if x in profiles}, key=lambda c: (c != 'v1', c), reverse=True)
         pick = next(((x, c) for c in cores for x in profiles if all((x, c) in detection[p] for p in measured)), fallback)
         return {p: detection[p][pick] for p in measured if pick in detection[p]}, pick
     detection = {p: v for p, v in detection.items() if not withheld(p)}
     for family in chosen:
         chosen[family] = {p: v for p, v in chosen[family].items() if not withheld(p)}
+        newest = set(overview.newest_only(list(chosen[family])))
+        chosen[family] = {p: v for p, v in chosen[family].items() if p in newest}
     chosen['detection'], pick = table(HEADLINE, ('enforce', 'v1'))
     chosen['detection-optimal'], _ = table([OPTIMAL], None)
     return chosen, providers, pick[0]

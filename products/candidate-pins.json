@@ -196,5 +196,23 @@
       "waterfall"
     ],
     "version_type": "release"
+  },
+  "connectionguard-0.6.2": {
+    "project": "connectionguard",
+    "version": "0.6.2",
+    "path": "candidates/connection-guard-0.6.2.jar",
+    "sha256": "74839b26baa1eddc0c864d10801f421f750541418f3697dc73e92480b9ba4783",
+    "filename": "connection-guard-0.6.2-all.jar",
+    "source": "gerolndnr/connection-guard release 0.6.2 (tag at 74f76c6, published 28 Nov 2026 00:07 UTC), release asset; matches the release SHA256SUMS.",
+    "loaders": [
+      "bukkit",
+      "bungeecord",
+      "folia",
+      "paper",
+      "spigot",
+      "velocity",
+      "waterfall"
+    ],
+    "version_type": "release"
   }
 }

@@ -22,7 +22,7 @@ from . import dataset, freshness
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
 WIDTH = 1600
-PRODUCT_ORDER = ['connection-guard-061', 'connection-guard-candidate', 'connection-guard', 'foxgate-pre12', 'foxgate', 'proxyshield-310', 'proxyshield', 'vpnguard', 'kaurivpn', 'jarvis',
+PRODUCT_ORDER = ['connection-guard-062', 'connection-guard-061', 'connection-guard-candidate', 'connection-guard', 'foxgate-pre12', 'foxgate', 'proxyshield-310', 'proxyshield', 'vpnguard', 'kaurivpn', 'jarvis',
                  'advancedantivpn']
 CATCH = [('commercial_vpn', 'Commercial VPNs'), ('fresh_vpn', 'Newly added VPN servers'), ('vpn_v6', 'VPNs over IPv6'),
          ('tor', 'Tor exits'), ('proxy', 'Public proxies')]
@@ -118,6 +118,16 @@ def newest_only(products):
             by_project[key] = (rank, pid)
     keep = {pid for _, pid in by_project.values()}
     return [pid for pid in products if pid in keep]
+
+
+def project_of(pid):
+    return pin_of(pid).get('project') or pid
+
+
+def newest_of(by_product):
+    """The entries of the newest version of each plugin in one family's results."""
+    keep = set(newest_only(list(by_product)))
+    return {pid: v for pid, v in by_product.items() if pid in keep}
 
 
 def legacy_checked(rounds):
@@ -595,11 +605,21 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     ids |= set(det['products']) if det else set()
     ids |= set(det_best['products']) if det_best else set()
     ids |= set(fail) | set(func) | set(red) | {pid for pid in load if not adapter_of(pid).get('pre_release')}
+    if not all_versions:
+        # Each family shows the newest version it has a result for; another family may still show an older one.
+        perf = {pl: newest_of(d) for pl, d in perf.items()}
+        fail, func, red, load = newest_of(fail), newest_of(func), newest_of(red), newest_of(load)
+        for d in (det, det_best):
+            if d:
+                d['products'] = newest_only(d['products'])
+        ids = set().union(*(set(p) for p in perf.values()), set(det['products']) if det else set(),
+                          set(det_best['products']) if det_best else set(), fail, func, red,
+                          {pid for pid in load if not adapter_of(pid).get('pre_release')})
     ids.discard('none')
     products = sorted(ids, key=lambda p: PRODUCT_ORDER.index(p) if p in PRODUCT_ORDER else 99)
-    if not all_versions:
-        products = newest_only(products)
     names = product_names(products, labels)
+    # One entry per plugin for the legend and the count: its newest version shown anywhere.
+    plugins = products if all_versions else newest_only(products)
     ms = manifests(dirs)
     date = measured_dates(ms)
     rounds = max([e['rounds'] for p in perf.values() for e in p.values()] or [0])
@@ -792,8 +812,9 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         cards.append(table_card('When detection services fail', 'VPN and Tor still refused while every service fails this way.',
                                 [''] + [names[pid] for pid in cols], body, ['34%'] + [f'{66 / max(1, len(cols)):.2f}%'] * len(cols)))
     if red:
-        cols = products  # plugins the Redis run did not cover show as not measured
-        red = {pid: red.get(pid, {}) for pid in products}
+        # Plugins the Redis run did not cover show as not measured, under the version shown in this family if any.
+        cols = [next((q for q in products if q in red and project_of(q) == project_of(pid)), pid) for pid in plugins]
+        red = {pid: red.get(pid, {}) for pid in cols}
         body = []
         for sid, label in REDIS_STEPS:
             if not any(red[pid] and sid in red[pid] for pid in cols):
@@ -805,7 +826,7 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
         cards.append(table_card('Redis outage', 'Correct decisions in under 10 s while the shared cache is down.',
                                 [''] + [names[pid] for pid in cols], body, ['28%'] + [f'{72 / max(1, len(cols)):.2f}%'] * len(cols)))
     # Side by side up to four plugins; with more, the columns get too narrow for the names, so each card takes a row.
-    if len(products) <= 4:
+    if len(plugins) <= 4:
         place(cards, ' '.join(['1fr'] * len(cards)))
     else:
         for card in cards:
@@ -885,8 +906,8 @@ def build(dirs, labels=None, theme='dark', title=None, all_versions=False):
     head = f'''<header><div class="top"><span class="word mono"><i></i>mc-antivpn-bench</span>
 <span class="pill"><span class="dot"></span><b>{status}</b> · {esc(date)}{f" · {esc(platform.capitalize())}" if platform else ""}</span></div>
 <h1>{esc(title or ('Anti-VPN plugins, measured.' if products else 'Detection services, measured.'))}</h1>
-<p class="sub">{f"{len(products)} unmodified plugins on the same server, with the same players and the same simulated detection services." if products else "Detection services measured directly, without any plugin."}</p>
-<div class="legend">{''.join(f'<span>{esc(names[p])}</span>' for p in products)}</div></header>'''.replace('<header>', '<header>' if products else '<header style="height:190px">')
+<p class="sub">{f"{len(plugins)} unmodified plugins on the same server, with the same players and the same simulated detection services." if products else "Detection services measured directly, without any plugin."}</p>
+<div class="legend">{''.join(f'<span>{esc(names[p])}</span>' for p in plugins)}</div></header>'''.replace('<header>', '<header>' if products else '<header style="height:190px">')
     foot = f'''<footer><span><b>Method, raw data and every log:</b> github.com/gerolndnr/mc-antivpn-bench · runs {esc(runs)}{f" · commit {esc(', '.join(commits))}" if commits else ""}<br>
 The accent marks the best value in each row. Results describe this setup and dataset, not every server.</span>
 <span style="text-align:right">Conflict of interest: maintained by the author of Connection Guard.<br>Other plugin authors can contest adapters and results (METHODOLOGY 10).</span></footer>'''
