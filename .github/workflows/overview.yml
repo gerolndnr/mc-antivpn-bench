@@ -44,4 +44,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Overview from runs $(python -c 'import json; print(", ".join(sorted({r for v in json.load(open("docs/overview/latest.json"))["runs"].values() for r in v})))')"
-          git push
+          # A merge or a dataset commit can land on main while the overview is drawn (28 Nov 2026: the push was
+          # rejected and a run's results stayed out of the graphic). Only this workflow writes these two folders, so
+          # replaying the commit on top of main is safe.
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((attempt * 10))
+          done
+          exit 1
