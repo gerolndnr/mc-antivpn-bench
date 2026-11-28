@@ -147,6 +147,91 @@ class Interposer(unittest.TestCase):
         self.assertTrue(all(a[0]['body'] == b'{"proxy":"no"}' for a in answers))
 
 
+class MissingTemplateShape(unittest.TestCase):
+    """A request shape the reference join did not produce is recorded once, live, about the reference address."""
+    REFERENCE = '192.0.2.1'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.proxy = interposer.Interposer(self.tmp.name)
+        self.proxy.configure(dict(default='deny', replay_latency='none', rules=[
+            dict(name='template-x', hosts=['marvinmc.example'], action='template', reference_ip=self.REFERENCE,
+                 record_missing=True)]))
+        self.sent = []
+
+    def tearDown(self):
+        self.proxy.events.close()
+        self.proxy.store.db.close()
+        self.tmp.cleanup()
+
+    def answer_with(self, status, body=b'false'):
+        async def fake_forward(_scheme, _host, _port, request, **_kwargs):
+            self.sent.append(request)
+            return dict(status=status, reason='X', headers=[], body=body, upstream_ms=40.0)
+        self.proxy.forward = fake_forward
+
+    def ask(self, target, headers=()):
+        request = interposer.Request('GET', target, 'HTTP/1.1', [('Host', 'marvinmc.example'), *headers], b'')
+        ctx = self.proxy.prepare(request, 'https', 'marvinmc.example', 443, 'c')
+        return asyncio.run(self.proxy.decide(ctx, request, 'https', 443))
+
+    def test_shape_is_recorded_about_the_reference_and_then_templated(self):
+        self.answer_with(200, b'{"ip":"192.0.2.1","proxy":false}')
+        answer, source = self.ask('/proxy/?ip=%2F198.51.100.7&v=2')
+        self.assertEqual(source, 'template-recorded')
+        self.assertEqual(answer['body'], b'{"ip":"198.51.100.7","proxy":false}')
+        self.assertEqual(self.sent[0].target, '/proxy/?ip=%2F192.0.2.1&v=2')
+        answer, source = self.ask('/proxy/?ip=%2F203.0.113.9&v=2')
+        self.assertEqual((source, len(self.sent)), ('template', 1))
+        self.assertEqual(answer['body'], b'{"ip":"203.0.113.9","proxy":false}')
+
+    def test_subject_never_reaches_the_live_service(self):
+        self.answer_with(200)
+        self.assertEqual(self.ask('/proxy/?ip=198.51.100.7', headers=[('X-Forwarded-For', '198.51.100.7')]), (None, None))
+        self.assertEqual(self.ask('/proxy/?ip=198.51.100.7&peer=203.0.113.9'), (None, None))
+        self.assertEqual(self.sent, [])
+
+    def test_a_failed_recording_pauses_and_is_not_stored(self):
+        self.answer_with(503)
+        self.assertEqual(self.ask('/proxy/?ip=198.51.100.7'), (None, None))
+        self.assertEqual(self.ask('/proxy/?ip=198.51.100.8'), (None, None))
+        self.assertEqual(len(self.sent), 1)
+        self.assertIsNone(self.proxy.store.template(self.proxy.canonical(
+            'https', 'marvinmc.example', interposer.Request('GET', '/proxy/?ip=198.51.100.7', 'HTTP/1.1', [], b''))[1],
+            self.REFERENCE))
+
+    def test_only_rules_that_ask_for_it_record(self):
+        self.answer_with(200)
+        self.proxy.configure(dict(default='deny', replay_latency='none', rules=[
+            dict(name='t', hosts=['marvinmc.example'], action='template', reference_ip=self.REFERENCE)]))
+        self.assertEqual(self.ask('/proxy/?ip=198.51.100.7'), (None, None))
+        self.assertEqual(self.sent, [])
+
+    def test_rebase_refuses_a_second_address_and_handles_ipv6(self):
+        request = interposer.Request('GET', '/q?ip=1.2.3.4&net=11.2.3.45', 'HTTP/1.1', [], b'')
+        self.assertIsNone(interposer.rebase(request, '1.2.3.4', self.REFERENCE))
+        request = interposer.Request('GET', '/q/2001:db8::7?x=1', 'HTTP/1.1', [], b'{"ip":"2001:db8::7"}')
+        rebased = interposer.rebase(request, '2001:db8::7', self.REFERENCE)
+        self.assertEqual((rebased.target, rebased.body), ('/q/192.0.2.1?x=1', b'{"ip":"192.0.2.1"}'))
+
+    def test_miss_shapes_are_published_without_addresses(self):
+        from bench import heavy
+        events = [dict(host='marvinmc.example', method='GET', scheme='https', source='missing', subject_ip='198.51.100.7',
+                       target='/proxy/?ip=%2F198.51.100.7&from=203.0.113.9'),
+                  dict(host='marvinmc.example', method='GET', scheme='https', source='template-recorded',
+                       subject_ip='198.51.100.8', target='/proxy/?ip=198.51.100.8')]
+        summary = heavy.summarize([], events, ['marvinmc.example'])
+        self.assertEqual(summary['template_misses'], {'marvinmc.example': 1})
+        self.assertEqual(summary['template_recorded'], {'marvinmc.example': 1})
+        self.assertEqual(summary['template_miss_shapes'],
+                         {'marvinmc.example': {'GET https://marvinmc.example/proxy/?ip=/{IP}&from={ADDR}': 1}})
+
+    def test_template_rules_record_missing_shapes(self):
+        from bench import heavy
+        rules = heavy.template_rules(dict(lookup_hosts=['marvinmc.dev']), self.REFERENCE)['rules']
+        self.assertTrue(all(r.get('record_missing') for r in rules if r.get('action') == 'template'))
+
+
 class Fairness(unittest.TestCase):
     def test_fallback_services_get_their_own_template_reference(self):
         from bench import heavy

@@ -62,6 +62,33 @@ def ip_literals(text):
     return found
 
 
+def same_address(a, b):
+    try:
+        return a is not None and b is not None and ipaddress.ip_address(a) == ipaddress.ip_address(b)
+    except ValueError:
+        return False
+
+
+def rebase(request, subject, reference):
+    """`request` asked about `reference` instead of `subject`, or None when that cannot be done cleanly: the subject
+    in a header, in a form not replaced, or another address left in the target or body."""
+    forms = {subject: reference}
+    for safe in ('', '/'):
+        forms.setdefault(urllib.parse.quote(subject, safe=safe), urllib.parse.quote(reference, safe=safe))
+    if any(form in value for _, value in request.headers for form in forms):
+        return None
+    digits = r'\d.' if ipaddress.ip_address(subject).version == 4 else r'0-9A-Fa-f:'
+
+    def swap(text):
+        for form in sorted(forms, key=len, reverse=True):
+            text = re.sub(rf'(?<![{digits}]){re.escape(form)}(?![{digits}])', lambda _m, to=forms[form]: to, text)
+        return text
+    target, body = swap(request.target), swap(request.body.decode('latin-1'))
+    if any(not same_address(ip, reference) for ip in ip_literals(urllib.parse.unquote(target) + ' ' + body)):
+        return None
+    return Request(request.method, target, request.version, list(request.headers), body.encode('latin-1'))
+
+
 class Request:
     def __init__(self, method, target, version, headers, body):
         self.method, self.target, self.version, self.headers, self.body = method, target, version, headers, body
@@ -213,6 +240,7 @@ class Interposer:
         self.sni = {}
         self.key_locks = {}
         self.quota_hits = {}
+        self.template_tries = {}
         self.upstream_tls = ssl.create_default_context()
         self.lock = threading.Lock()
 
@@ -223,6 +251,7 @@ class Interposer:
         rules.setdefault('replay_latency', 'recorded')
         self.rules = rules
         self.random = random.Random(rules.get('seed', 1))
+        self.template_tries = {}
 
     def over_quota(self, rule, host):
         """Emulated provider quota: {'limit': n, 'window_s': s} per host within the rule."""
@@ -433,20 +462,61 @@ class Interposer:
         if answer is None and action == 'template' and ctx['subject']:
             reference = rule.get('reference_ip')
             found = self.store.template(ctx['template_key'], reference) if reference else None
+            recorded = False
+            if found is None and reference and rule.get('record_missing'):
+                found, recorded = await self.record_template(ctx, request, scheme, port)
             if found:
                 answer = dict(found, body=found['body'].replace(reference.encode(), ctx['subject'].encode()))
-                source = 'template'
+                source = 'template-recorded' if recorded else 'template'
         if answer is None and action in ('record', 'passthrough'):
             answer = await self.forward(scheme, ctx['host'], port, request,
                                         timeout=120 if action == 'passthrough' else 20, rule=rule)
             source = 'upstream'
             if action == 'record' and answer['status'] < 500 and answer['status'] not in (429, 304):
                 self.store.put(ctx['key'], ctx['template_key'], ctx['host'], answer, ctx['subject'])
-        if answer is not None and source != 'upstream':
+        if answer is not None and source not in ('upstream', 'template-recorded'):
             delay = self.latency(rule, answer.get('upstream_ms'))
             if delay:
                 await asyncio.sleep(delay)
         return answer, source
+
+    # A request shape without a template is recorded live at most this often per rule set, this far apart.
+    TEMPLATE_RECORD_TRIES = 3
+    TEMPLATE_RECORD_PAUSE_S = 20
+    TEMPLATE_RECORD_TIMEOUT_S = 8
+
+    async def record_template(self, ctx, request, scheme, port):
+        """Template for a request shape the reference join did not produce (a product that sometimes asks a service
+        a second way: another parameter, a retry with a different URL). The same request about the reference address
+        is forwarded live once and stored as that shape's template, so the shape is answered like every other one.
+        Only the reference address reaches the service: a request that names the subject anywhere else (a header, a
+        second address) is not forwarded and stays unanswered. Returns (answer, recorded_by_this_request)."""
+        rule = ctx['rule']
+        reference = rule['reference_ip']
+        lock = self.key_locks.setdefault(('template', ctx['template_key'], reference), asyncio.Lock())
+        async with lock:
+            found = self.store.template(ctx['template_key'], reference)
+            if found:
+                return found, False
+            tries, last = self.template_tries.get((ctx['template_key'], reference), (0, None))
+            if tries >= self.TEMPLATE_RECORD_TRIES or (last is not None and time.monotonic() - last < self.TEMPLATE_RECORD_PAUSE_S):
+                return None, False
+            rebased = rebase(request, ctx['subject'], reference)
+            if rebased is None:
+                return None, False
+            key, template_key, subject = self.canonical(scheme, ctx['host'], rebased)
+            if template_key != ctx['template_key'] or not same_address(subject, reference):
+                return None, False
+            self.template_tries[(ctx['template_key'], reference)] = (tries + 1, time.monotonic())
+            try:
+                answer = await asyncio.wait_for(self.forward(scheme, ctx['host'], port, rebased, rule=rule),
+                                                self.TEMPLATE_RECORD_TIMEOUT_S)
+            except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError, ValueError, ssl.SSLError):
+                return None, False
+            if answer['status'] >= 500 or answer['status'] in (429, 304):
+                return None, False
+            self.store.put(key, template_key, ctx['host'], answer, reference)
+            return dict(answer, subject_ip=reference), True
 
     FAULT_BODIES = {
         'http_429': (429, 'Too Many Requests', b'{"status":"denied","message":"rate limit exceeded"}',
