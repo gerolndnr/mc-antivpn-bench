@@ -97,11 +97,15 @@ jobs:
           # Best configuration with keys (METHODOLOGY 7.1): a fifth of the dataset a night, every plugin in one run, so the
           # keys' daily quotas cover all of them. Monday to Friday cover the week's core once; Saturday and Sunday repeat
           # the first two fifths, which completes a week that started late or lost a night.
+          # Paused from 28 Nov 2026 (owner decision): set optimal_series=on to run it again.
+          optimal_series=off
           dow=$(date -u +%u)
           chunk="$(( (dow - 1) % 5 ))/5"
-          gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $optimal_products | tr ' ' ',')" \
-            -f detection_profiles=optimal -f detection_chunk="$chunk" -f use_keys=true -f dataset="$version"
-          echo "optimal detection on $version: chunk $chunk"
+          if [ "$optimal_series" = on ]; then
+            gh workflow run bench.yml --ref main -f family=detection -f products="$(echo $optimal_products | tr ' ' ',')" \
+              -f detection_profiles=optimal -f detection_chunk="$chunk" -f use_keys=true -f dataset="$version"
+            echo "optimal detection on $version: chunk $chunk"
+          fi
           # The other families once a week, on Sunday (METHODOLOGY 7.1): until 22 Nov 2026 they ran only by hand, and
           # the overview lost them when their last run fell out of its window. Released products only, named here: a
           # run with an unreleased candidate never reaches the overview.

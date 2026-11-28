@@ -885,22 +885,32 @@ class OptimalTable(unittest.TestCase):
                 for i in range(3)]
         json.dump(dict(profile=profile, chunk=None, rows=rows), open(os.path.join(folder, 'detection', f'{profile}.json'), 'w'))
 
-    def test_optimal_only_from_keyed_runs(self):
+    def select(self, shown):
         from bench import latest
         base = tempfile.mkdtemp()
         self.run_folder(base, 4, ['foxgate', 'kaurivpn'], 'optimal', False)  # optimal without keys: ignored
         self.run_folder(base, 3, ['foxgate', 'kaurivpn'], 'enforce', True)   # standard pass with keys: ignored
         self.run_folder(base, 2, ['foxgate', 'kaurivpn'], 'optimal', True)
         self.run_folder(base, 1, ['foxgate', 'kaurivpn'], 'enforce', False)
-        saved = latest.runs, latest.dataset.public_items
+        saved = latest.runs, latest.dataset.public_items, latest.OPTIMAL_SHOWN
         latest.runs = lambda repo, limit: [dict(id=4), dict(id=3), dict(id=2), dict(id=1)]
         latest.dataset.public_items = lambda version: [{}] * 3
+        latest.OPTIMAL_SHOWN = shown
         try:
             chosen, _, profile = latest.select('x', base)
         finally:
-            latest.runs, latest.dataset.public_items = saved
+            latest.runs, latest.dataset.public_items, latest.OPTIMAL_SHOWN = saved
         self.assertEqual({p: s[0][0] for p, s in chosen['detection'].items()}, {'foxgate': '1', 'kaurivpn': '1'})
+        return chosen
+
+    def test_optimal_only_from_keyed_runs(self):
+        chosen = self.select(True)
         self.assertEqual({p: s[0][0] for p, s in chosen['detection-optimal'].items()}, {'foxgate': '2', 'kaurivpn': '2'})
+
+    def test_optimal_series_paused(self):
+        from bench import latest
+        self.assertFalse(latest.OPTIMAL_SHOWN)  # paused on 28 Nov 2026 (owner decision)
+        self.assertEqual(self.select(False)['detection-optimal'], {})
 
 
 class ProviderScore(unittest.TestCase):
