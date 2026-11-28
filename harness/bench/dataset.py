@@ -3,7 +3,9 @@
 Ground truth comes from the party that operates the address, never from a
 detection provider:
 
-  commercial_vpn  VPN operators' own published server lists
+  commercial_vpn  VPN operators' own published server data: from the 2026-W49 core 25 operators (their APIs, server
+                  pages and configuration archives, NymVPN's gateway directory, and for operators without a list
+                  of their own the copy of their data in gluetun-servers), at most PER_PROVIDER each
   fresh_vpn       operator-listed today, absent from the same operator's list in the
                   newest Internet Archive capture at least MIN_FRESH_DAYS old
                   (NordVPN: operator-published created_at within FRESH_DAYS)
@@ -33,13 +35,17 @@ import collections
 import datetime
 import gzip
 import hashlib
+import io
 import ipaddress
 import json
 import os
 import random
+import re
 import socket
 import sys
 import urllib.request
+import zipfile
+from concurrent.futures import ThreadPoolExecutor
 
 from .artifacts import ROOT, USER_AGENT
 
@@ -53,8 +59,10 @@ CACHE = os.path.join(ROOT, 'cache', 'sources')
 SEED = 20261005
 MIN_FRESH_DAYS = 14
 FRESH_DAYS = 30
-PER_PROVIDER = 25
-TARGETS = dict(commercial_vpn=125, fresh_vpn=60, tor=80, proxy=100, residential=150, mobile_cgnat=100,
+# Up to this many addresses per operator (one per /24). From the 2026-W49 core there are about 25 operators instead of 5,
+# so a plugin that reads a handful of operator lists no longer covers the cohort (METHODOLOGY 6, 28 Nov 2026).
+PER_PROVIDER = 10
+TARGETS = dict(commercial_vpn=250, fresh_vpn=60, tor=80, proxy=100, residential=150, mobile_cgnat=100,
                residential_v6=60, vpn_v6=40)
 HOME_TAGS = {'home', 'dsl', 'cable', 'fibre', 'ftth', 'adsl', 'vdsl', 'docsis', 'gpon'}
 MOBILE_TAGS = {'lte', '4g', '5g', 'mobile', 'starlink', 'cgnat', '3g'}
@@ -143,12 +151,13 @@ class Sources:
         path = committed if os.path.exists(committed) or self.out != OUT else os.path.join(self.cache, name + '.json')
         os.makedirs(os.path.dirname(path), exist_ok=True)
         if not os.path.exists(path):
-            out = {}
-            for hostname in hostnames:
+            def one(hostname):
                 try:
-                    out[hostname] = sorted({info[4][0] for info in socket.getaddrinfo(hostname, 443, socket.AF_INET)})
+                    return hostname, sorted({info[4][0] for info in socket.getaddrinfo(hostname, 443, socket.AF_INET)})
                 except OSError:
-                    out[hostname] = []
+                    return hostname, []
+            with ThreadPoolExecutor(16) as pool:
+                out = dict(pool.map(one, sorted(set(hostnames))))
             with open(path, 'w') as handle:
                 json.dump(dict(resolved_at=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
                                records=out), handle, sort_keys=True)
@@ -260,7 +269,128 @@ def vpn_candidates(src):
                 v4.setdefault('surfshark', []).append(dict(ip=ip, provider='surfshark', country=cluster['countryCode'],
                                                            evidence=dict(hostname=name, resolved=True)))
     src.records['surfshark']['note'] = 'cluster host names resolved via DNS at fetch time'
+    src.unavailable = more_operators(src, v4, v6)
     return v4, v6
+
+
+def add(v4, v6, provider, ip, country=None, **evidence):
+    if not ip or not public_ip(ip):
+        return
+    target = v6 if ':' in ip else v4
+    target.setdefault(provider, []).append(dict(ip=ip, provider=provider, country=(country or '').upper() or None,
+                                                evidence=evidence))
+
+
+def add_hosts(src, v4, v6, provider, hosts, note):
+    """{hostname: country} from an operator's own data, resolved by DNS once and frozen with the snapshot."""
+    resolved = src.resolved(f'{provider}-dns', sorted(hosts))
+    for host, country in sorted(hosts.items()):
+        for ip in resolved.get(host, []):
+            add(v4, v6, provider, ip, country, hostname=host, resolved=True)
+    src.records[f'{provider}-dns']['note'] = note
+
+
+GLUETUN = 'https://raw.githubusercontent.com/qdm12/gluetun-servers/main/pkg/servers/'
+# Operators without a public server list of their own: the server data the gluetun VPN client keeps up to date from
+# the operators' own APIs and configuration files (github.com/qdm12/gluetun-servers, MIT). Only host names are used,
+# resolved at build time, so an address is the operator's server today, not when gluetun last updated the file.
+GLUETUN_PROVIDERS = ('cyberghost', 'expressvpn', 'giganews', 'ipvanish', 'protonvpn', 'purevpn', 'slickvpn', 'torguard',
+                     'vpn unlimited', 'vpnsecure', 'vyprvpn')
+
+
+def remote_hosts(archive):
+    """`remote` host names and literal addresses in an operator's OpenVPN configuration archive."""
+    hosts, literal = set(), set()
+    with zipfile.ZipFile(io.BytesIO(archive)) as z:
+        for name in z.namelist()[:20_000]:
+            if z.getinfo(name).file_size > 1_000_000:
+                continue
+            for m in re.finditer(rb'^\s*remote\s+(\S+)', z.read(name), re.M):
+                h = m.group(1).decode('ascii', 'replace')
+                (literal if public_ip(h) else hosts).add(h)
+    return hosts, literal
+
+
+def more_operators(src, v4, v6):
+    """About 20 more operators' own server data (APIs their apps load, server pages, configuration archives, and
+    gluetun's copy for operators without a list), the same set Connection Guard Intel reads (circular for it). An
+    operator whose data cannot be fetched or read is left out of that week's core and named in its manifest."""
+    def airvpn():
+        for server in src.json('airvpn', 'https://airvpn.org/api/status/').get('servers', []):
+            if server.get('health') == 'ok':
+                for key in [f'ip_v{v}_in{i}' for v in (4, 6) for i in range(1, 5)]:
+                    add(v4, v6, 'airvpn', server.get(key), server.get('country_code'), name=server.get('public_name'))
+
+    def windscribe():
+        for loc in src.json('windscribe', 'https://assets.windscribe.com/serverlist/mob-v2/1/0').get('data', []):
+            if loc.get('status') != 1:
+                continue
+            for group in loc.get('groups') or []:
+                for node in group.get('nodes') or []:
+                    for key in ('ip', 'ip2', 'ip3'):
+                        add(v4, v6, 'windscribe', node.get(key), loc.get('country_code'), hostname=node.get('hostname'))
+
+    def ovpn():
+        for dc in src.json('ovpn', 'https://www.ovpn.com/v2/api/client/entry').get('datacenters', []):
+            for server in dc.get('servers', []):
+                if server.get('online', True):
+                    add(v4, v6, 'ovpn', server.get('ip'), dc.get('country'), ptr=server.get('ptr'))
+
+    def nym():
+        for gateway in src.json('nym', 'https://mainnet-node-status-api.nymtech.cc/dvpn/v1/directory/gateways/exit'):
+            location = gateway.get('location') or {}
+            exit_ok = ((gateway.get('last_probe') or {}).get('outcome') or {}).get('as_exit') or {}
+            # Gateways in home networks are left out: like peer-to-peer VPNs, they are someone's home connection.
+            if (location.get('asn') or {}).get('kind') == 'residential' or not exit_ok.get('can_route_ip_external_v4'):
+                continue
+            for ip in gateway.get('ip_addresses') or []:
+                add(v4, v6, 'nym', ip, location.get('two_letter_iso_country_code'), identity=gateway.get('identity_key'))
+
+    def azirevpn():
+        locations = src.json('azirevpn', 'https://api.azirevpn.com/v2/locations').get('locations', [])
+        add_hosts(src, v4, v6, 'azirevpn', {loc['pool']: loc.get('iso') for loc in locations if loc.get('pool')},
+                  'location pool host names resolved via DNS at fetch time')
+
+    def privadovpn():
+        hosts, literal = remote_hosts(src.get('privadovpn', 'https://privadovpn.com/apps/ovpn_configs.zip'))
+        for ip in sorted(literal):
+            add(v4, v6, 'privadovpn', ip, None, config=True)
+        add_hosts(src, v4, v6, 'privadovpn', dict.fromkeys(hosts), 'OpenVPN configuration remote host names resolved via DNS')
+
+    def page(provider, url, pattern):
+        def step():
+            text = src.get(provider, url).decode('utf-8', 'replace')
+            add_hosts(src, v4, v6, provider, dict.fromkeys(set(re.findall(pattern, text))),
+                      "host names on the operator's server page resolved via DNS at fetch time")
+        return step
+
+    def gluetun(name):
+        def step():
+            provider = name.replace(' ', '')
+            data = src.json(f'gluetun-{provider}', GLUETUN + name.replace(' ', '%20') + '.json')
+            hosts = {}
+            for server in data.get('servers') or []:
+                if server.get('hostname'):
+                    hosts.setdefault(server['hostname'], server.get('country'))
+            add_hosts(src, v4, v6, provider, hosts, 'gluetun-servers host names resolved via DNS at fetch time')
+        return step
+
+    steps = dict(airvpn=airvpn, windscribe=windscribe, ovpn=ovpn, nym=nym, azirevpn=azirevpn, privadovpn=privadovpn,
+                 privatevpn=page('privatevpn', 'https://privatevpn.com/serverlist/', r'[a-z0-9-]+\.pvdata\.host'),
+                 vpnac=page('vpnac', 'https://vpn.ac/status', r'\b[a-z]{2}[0-9]{1,2}\.vpn\.ac\b'),
+                 fastestvpn=page('fastestvpn', 'https://support.fastestvpn.com/vpn-servers/', r'[a-z0-9-]+\.jumptoserver\.com'),
+                 worldvpn=page('worldvpn', 'https://www.worldvpn.net/servers', r'\b[a-z0-9-]+\.ocservvpn\.com\b'),
+                 **{name.replace(' ', ''): gluetun(name) for name in GLUETUN_PROVIDERS})
+    unavailable = {}
+    for provider, step in steps.items():
+        try:
+            step()
+        except Exception as error:  # one operator's broken answer must not stop the week's core
+            print(f'{provider}: left out ({type(error).__name__}: {error})', file=sys.stderr)
+            v4.pop(provider, None)
+            v6.pop(provider, None)
+            unavailable[provider] = f'{type(error).__name__}: {error}'[:200]
+    return unavailable
 
 
 def previous_ips(src, provider):
@@ -350,7 +480,8 @@ def sample_vpn(src, rng, now):
     for candidate in spread(pool, TARGETS['vpn_v6'], rng):
         items.append(item('vpn_v6', 'vpn', candidate, candidate['provider']))
     vpn_all = {c['ip'] for provider in v4 for c in v4[provider]} | {c['ip'] for p in v6 for c in v6[p]}
-    stats = dict(fresh=fresh_meta, candidates=dict(commercial_vpn={p: len(v) for p, v in v4.items()}, fresh=len(fresh)))
+    stats = dict(fresh=fresh_meta, candidates=dict(commercial_vpn={p: len(v) for p, v in v4.items()}, fresh=len(fresh)),
+                 operators_unavailable=getattr(src, 'unavailable', {}))
     return items, vpn_all, stats
 
 
