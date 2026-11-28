@@ -5,6 +5,7 @@ These run without Docker, servers or network (CI job `contracts`).
 import asyncio
 import glob
 import hashlib
+import io
 import ipaddress
 import json
 import os
@@ -12,6 +13,7 @@ import struct
 import tempfile
 import unittest
 import urllib.error
+import zipfile
 
 from bench import dataset, engine, interposer, mcclient
 
@@ -931,6 +933,54 @@ class OverviewJobNeedsNoPackages(unittest.TestCase):
         env = dict(os.environ, PYTHONPATH=os.path.join(ROOT, 'harness'))
         result = subprocess.run([sys.executable, '-c', code], env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class MoreOperators(unittest.TestCase):
+    """The 20 operator sources added on 28 Nov 2026, fed from canned answers instead of the network."""
+
+    class Src:
+        def __init__(self, answers, dns, broken=()):
+            self.answers, self.dns, self.broken, self.records = answers, dns, set(broken), {}
+
+        def json(self, name, url, public=True):
+            if name in self.broken:
+                raise ValueError('broken answer')
+            return self.answers.get(name, {'servers': [], 'data': [], 'datacenters': [], 'locations': []} if name != 'nym' else [])
+
+        def get(self, name, url, public=True):
+            if name == 'privadovpn':
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, 'w') as z:
+                    z.writestr('a.ovpn', 'client\nremote nl1.privado.example 1194\nremote 185.65.134.70 1194\n')
+                return buf.getvalue()
+            return b''
+
+        def resolved(self, name, hostnames):
+            self.records[name] = {}
+            return {h: self.dns.get(h, []) for h in hostnames}
+
+    def test_operators_and_failures(self):
+        from bench import dataset
+        answers = {
+            'airvpn': {'servers': [{'health': 'ok', 'country_code': 'ch', 'ip_v4_in1': '185.65.134.66', 'ip_v6_in1': '2a03:1b20:4:f011::a01f'},
+                                   {'health': 'error', 'ip_v4_in1': '185.65.134.99'}]},
+            'nym': [{'ip_addresses': ['89.36.162.71'], 'location': {'asn': {'kind': 'other'}},
+                     'last_probe': {'outcome': {'as_exit': {'can_route_ip_external_v4': True}}}},
+                    {'ip_addresses': ['89.36.162.72'], 'location': {'asn': {'kind': 'residential'}},
+                     'last_probe': {'outcome': {'as_exit': {'can_route_ip_external_v4': True}}}}],
+            'gluetun-expressvpn': {'servers': [{'hostname': 'albania.example', 'country': 'Albania', 'ips': ['31.171.152.205']}]},
+        }
+        src = self.Src(answers, {'albania.example': ['31.171.154.187'], 'nl1.privado.example': ['91.148.224.10']}, broken={'windscribe'})
+        v4, v6 = {}, {}
+        unavailable = dataset.more_operators(src, v4, v6)
+        ips = lambda d, p: sorted(c['ip'] for c in d.get(p, []))
+        self.assertEqual(ips(v4, 'airvpn'), ['185.65.134.66'])
+        self.assertEqual(ips(v6, 'airvpn'), ['2a03:1b20:4:f011::a01f'])
+        self.assertEqual(ips(v4, 'nym'), ['89.36.162.71'])  # the gateway in a home network is left out
+        self.assertEqual(ips(v4, 'expressvpn'), ['31.171.154.187'])  # resolved now, not gluetun's recorded address
+        self.assertEqual(ips(v4, 'privadovpn'), ['185.65.134.70', '91.148.224.10'])
+        self.assertIn('windscribe', unavailable)
+        self.assertNotIn('windscribe', v4)
 
 
 class DatasetVersions(unittest.TestCase):
