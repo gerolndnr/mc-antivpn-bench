@@ -12,7 +12,7 @@ The same numbers as the [overview graphic](overview-dark.png), redrawn after eac
 
 | Plugin | Result | Detail |
 | --- | ---: | --- |
-| Connection Guard v0.6.1 | **1,000 of 1,000** | decided within 451 ms |
+| Connection Guard v0.6.2 | **1,000 of 1,000** | decided within 763 ms |
 | FoxGate 1.2.0-pre12 | **1,000 of 1,000** | decided within 976 ms |
 | ProxyShield 3.1.0 | 735 of 1,000 | decided within 1.7 s · 265 unchecked · fast admit off (shipped: skips home networks in waves) |
 | VPNGuard 1.2.0 | 47 of 1,000 | decided within 11.1 s · 953 unchecked |
@@ -23,13 +23,13 @@ The same numbers as the [overview graphic](overview-dark.png), redrawn after eac
 
 Same simulated services, same delays and free-tier limits for every plugin.
 
-|   | Connection Guard v0.6.1 | FoxGate 1.2.0-pre12 | ProxyShield 3.1.0 | VPNGuard 1.2.0 | KauriVPN 1.10.1.1 | AdvancedAntiVPN 2.31.8 |
+|   | Connection Guard v0.6.2 | FoxGate 1.2.0-pre12 | ProxyShield 3.1.0 | VPNGuard 1.2.0 | KauriVPN 1.10.1.1 | AdvancedAntiVPN 2.31.8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Single join, p95 | 289 ms | 634 ms | 953 ms | **287 ms** | after join | 420 ms |
-| Repeat join, p50 | 2.1 ms | 303 ms | **1.5 ms** | **1.5 ms** | after join | 3.3 ms |
+| Single join, p95 | 291 ms | 634 ms | 953 ms | **287 ms** | after join | 420 ms |
+| Repeat join, p50 | 2.6 ms | 303 ms | **1.5 ms** | **1.5 ms** | after join | 3.3 ms |
 | Lookups, 100 same-IP joins | **1** | 6 | 2 | **1** | 2 | 300 |
 | Players checked in the stress test | **1,000** | **1,000** | 735 | 47 | 631 | 500 |
-| Start-up | 6.5 s | 8.3 s | 17.2 s | **6.3 s** | **6.3 s** | 7.1 s |
+| Start-up | 6.9 s | 8.3 s | 17.2 s | **6.3 s** | **6.3 s** | 7.1 s |
 
 ## Load limit: joins a second until checks fail
 
@@ -147,7 +147,7 @@ Fixed VPN, Tor, home and mobile joins on every platform; counts are platforms pa
 
 ---
 
-Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45508280763, 45806957069, 45964374609, 45964383595, 46122343601, 46122345546, 46122349207, 46122800762, 46122807212, 46122809121, 46122811157, 46122813240 · commit 1ddbb66  
+Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45508280763, 45806957069, 45964374609, 45964383595, 46122343601, 46122345546, 46122349207, 46122800762, 46122805092, 46122807212, 46122809121, 46122811157, 46122813240 · commit 1ddbb66  
 Bold marks the best value in each row. Results describe this setup and dataset, not every server.  
 Conflict of interest: maintained by the author of Connection Guard.  
 Other plugin authors can contest adapters and results (METHODOLOGY 10).  
