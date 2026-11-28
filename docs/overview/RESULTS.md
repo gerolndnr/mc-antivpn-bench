@@ -76,14 +76,14 @@ Same simulated services, same delays and free-tier limits for every plugin.
 
 VPN and Tor still refused while every service fails this way.
 
-|   | Connection Guard v0.6.1 | FoxGate 1.2.0-pre12 | ProxyShield 3.1.0 | VPNGuard 1.2.0 | KauriVPN 1.10.1.1 | AdvancedAntiVPN 2.31.8 |
+|   | Connection Guard v0.6.2 | FoxGate 1.2.0-pre12 | ProxyShield 3.1.0 | VPNGuard 1.2.0 | KauriVPN 1.10.1.1 | AdvancedAntiVPN 2.31.8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Services healthy | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Services time out | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Rate limited (429) | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Broken answers | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Cut-off answers | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| **Home login while timing out** | 4.5 s | **2.3 s** | 6.5 s | 5 s | after join | 3 s |
+| **Home login while timing out** | **2.1 s** | 2.3 s | 6.5 s | 5 s | after join | 3 s |
 
 ## Redis outage
 
@@ -147,7 +147,7 @@ Fixed VPN, Tor, home and mobile joins on every platform; counts are platforms pa
 
 ---
 
-Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45508280763, 45806957069, 45964371515, 45964374609, 45964377849, 45964380759, 45964383595, 45964386570, 46122811157 · commit 1ddbb66  
+Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45508280763, 45806957069, 45964371515, 45964374609, 45964377849, 45964380759, 45964383595, 45964386570, 46122807212, 46122811157 · commit 1ddbb66  
 Bold marks the best value in each row. Results describe this setup and dataset, not every server.  
 Conflict of interest: maintained by the author of Connection Guard.  
 Other plugin authors can contest adapters and results (METHODOLOGY 10).  
