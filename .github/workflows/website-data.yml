@@ -1,0 +1,108 @@
+name: Website data
+
+on:
+  schedule:
+    # Leave time for the daily benchmark overview to publish its selected runs.
+    - cron: '37 20 * * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Deploy to connectionguard.net after the build
+        type: boolean
+        default: false
+  pull_request:
+    paths: ['.github/workflows/website-data.yml']
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: website-data-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      site_ref: ${{ steps.site.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/checkout@v4
+        with:
+          repository: gerolndnr/connection-guard-cloud
+          ref: main
+          path: website
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: website/package.json }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: website/pnpm-lock.yaml
+      - run: pnpm --dir website install --frozen-lockfile
+      - name: Read the published benchmark and Intel data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python website/apps/site/scripts/refresh-data.py --bench "$GITHUB_WORKSPACE"
+      - name: Build the website and refresh the download counts
+        id: site
+        run: |
+          pnpm --dir website --filter @cg/site build
+          for page in index.html download/index.html benchmark/index.html compare/index.html intel/index.html site-data.json; do
+            test -s "website/apps/site/dist/$page"
+          done
+          echo "ref=$(git -C website rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.publish)
+        with:
+          name: website-static
+          path: website/apps/site/dist/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.publish)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: website-production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: gerolndnr/connection-guard-cloud
+          ref: ${{ needs.build.outputs.site_ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with: { name: website-static, path: apps/site/dist }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Publish the static website to the existing Worker
+        id: deploy
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "::warning::Missing Cloudflare credentials in website-production; the site was built but not deployed."
+            exit 0
+          fi
+          pnpm --dir apps/api exec wrangler deploy --config ../site/wrangler.jsonc
+          echo "published=true" >> "$GITHUB_OUTPUT"
+      - name: Verify the published data snapshot
+        if: steps.deploy.outputs.published == 'true'
+        run: |
+          curl --fail --silent --show-error --retry 3 --max-time 30 \
+            "https://connectionguard.net/site-data.json?run=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/site-data.json"
+          cmp apps/site/dist/site-data.json "$RUNNER_TEMP/site-data.json"
