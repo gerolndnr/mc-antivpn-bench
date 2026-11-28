@@ -123,6 +123,7 @@ All outbound TCP of the product JVM is redirected by iptables to the **interpose
 - The performance family keeps drawing its join wave around v1's home addresses, so its numbers stay comparable while the detection dataset is renewed.
 - **Source gate.** A source list whose upstream file has not changed for more than 14 days is left out of the day's build, with the date in the manifest. vakhov's proxy list is left out for this reason; proxies then need to be on both monosans and proxifly.
 - `python3 -m bench.dataset build-day [date]` builds a version; `python3 -m bench.dataset materialize <version>` rebuilds its private file from the public one and the RIPE Atlas archive and checks the hash.
+- **Sealed versions.** Every day and core version is public before the runs that use it, so a service could add exactly those addresses. `python3 -m bench.dataset seal` draws a version from the same sources, cohorts and rules with a random seed that is kept back and writes only its manifest with the SHA-256 of the private file. The hash is posted before the run, the run uses `BENCH_DATASET=sealed-<stamp>`, and `python3 -m bench.dataset reveal sealed-<stamp>` publishes the items (volunteer addresses as rebuild references, as usual) and the seed afterwards, so anyone can check the file against the posted hash. The candidate pools stay public; only the draw is secret. A sealed run should start right after sealing, so the window in which anyone, the benchmark author included, could see the draw stays short.
 
 **v1** (5 October 2026, every run before 8 October):
 

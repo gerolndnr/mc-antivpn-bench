@@ -268,7 +268,7 @@ def main():
     run.add_argument('--run-id')
     sub.add_parser('pins')
     dataset_parser = sub.add_parser('dataset')
-    dataset_parser.add_argument('action', choices=['build-day', 'materialize'])
+    dataset_parser.add_argument('action', choices=['build-day', 'materialize', 'seal', 'reveal'])
     dataset_parser.add_argument('version', nargs='?')
     args = parser.parse_args()
     if args.command == 'run':
@@ -278,6 +278,12 @@ def main():
         pins.main()
     elif args.command == 'dataset' and args.action == 'build-day':
         dataset.build_day(datetime.date.fromisoformat(args.version) if args.version else None)
+    elif args.command == 'dataset' and args.action == 'seal':
+        from . import sealed
+        sealed.seal()
+    elif args.command == 'dataset' and args.action == 'reveal':
+        from . import sealed
+        sealed.reveal(args.version)
     elif args.command == 'dataset':
         dataset.materialize(args.version)
 
