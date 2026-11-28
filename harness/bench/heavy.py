@@ -18,7 +18,7 @@ import urllib.parse
 
 from . import mcclient, netguard, products
 from .engine import Backend, Instance, ProductNotLoaded, measurement_rules, product_errors
-from .interposer import CATCH_ALL_PORT
+from .interposer import CATCH_ALL_PORT, ip_literals
 from .scenarios import PRIVATE, blocked, player
 
 DETECTION_PLATFORM = 'velocity'
@@ -389,12 +389,12 @@ def template_rules(adapter, reference_ip, references=None):
     extra = []
     for host in hosts:
         rule = dict(name=f'template-{host}', hosts=[host], action='template', reference_ip=references.get(host, reference_ip),
-                    latency_ms=LATENCY_MODEL)
+                    latency_ms=LATENCY_MODEL, record_missing=True)
         if host in PROVIDER_QUOTAS:
             rule['quota'] = dict(limit=PROVIDER_QUOTAS[host]['limit'], window_s=PROVIDER_QUOTAS[host]['window_s'])
         extra.append(rule)
     extra.append(dict(name='template', hosts=hosts, action='template', reference_ip=reference_ip,
-                      latency_ms=LATENCY_MODEL))
+                      latency_ms=LATENCY_MODEL, record_missing=True))
     return measurement_rules(extra=extra, normalize_quota=False)
 
 
@@ -515,16 +515,37 @@ def summarize(results, events, lookup_hosts, subjects=None, after_join=False):
     refused = {r.get('subject_ip') for r in results if r.get('outcome') in ('DENY_LOGIN', 'DENY_PLAY')} & distinct
     # Requests the simulation could not answer (no template recorded for the host): the plugin saw a failing service,
     # which the other plugins did not. A round with any is not used for the overview (overview.performance).
-    misses = {}
+    # A request shape the reference join did not produce is recorded once, live, about the reference address
+    # (interposer.record_template); template_recorded counts those requests, template_miss_shapes shows what stayed
+    # unanswered, so a miss can be traced without the sealed logs.
+    misses, recorded, shapes = {}, {}, {}
     for event in calls:
         if event.get('source') == 'missing':
             misses[event['host']] = misses.get(event['host'], 0) + 1
+            by_shape = shapes.setdefault(event['host'], {})
+            shape = request_shape(event)
+            by_shape[shape] = by_shape.get(shape, 0) + 1
+        elif event.get('source') == 'template-recorded':
+            recorded[event['host']] = recorded.get(event['host'], 0) + 1
+    shapes = {host: dict(sorted(counts.items(), key=lambda kv: -kv[1])[:3]) for host, counts in shapes.items()}
     return dict(outcomes=outcomes, decision_ms=percentiles([decision_ms(r) for r in results]), template_misses=misses,
+                template_miss_shapes=shapes, template_recorded=recorded,
                 distinct_subjects=len(distinct), subjects_with_lookup=len(looked_up), subjects_checked=len(looked_up | refused),
                 late_lookups=late,
                 join_ms=percentiles([r.get('marks', {}).get('joined') for r in results]),
                 lookup_requests=len(calls), lookup_requests_per_host=per_host,
                 unlisted_lookups=unlisted_lookups(events, lookup_hosts, distinct))
+
+
+def request_shape(event):
+    """A logged request without addresses: the subject as {IP}, any other address as {ADDR} (secrets are already
+    redacted in the log)."""
+    target = urllib.parse.unquote(event.get('target') or '')
+    if event.get('subject_ip'):
+        target = target.replace(event['subject_ip'], '{IP}')
+    for address in sorted(set(ip_literals(target)), key=len, reverse=True):
+        target = target.replace(address, '{ADDR}')
+    return f"{event.get('method') or '?'} {event.get('scheme') or '?'}://{event.get('host')}{target}"[:200]
 
 
 def unlisted_lookups(events, lookup_hosts, subject_ips):
