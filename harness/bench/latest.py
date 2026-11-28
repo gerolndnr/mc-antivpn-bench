@@ -36,6 +36,9 @@ FOLDERS = {'functional': ['platform', 'clean-install', 'upgrade', 'invalid-reloa
            'redis': ['redis'], 'detection': ['detection'], 'performance': ['performance'], 'ramp': ['performance'], 'providers': ['providers']}
 HEADLINE = ['enforce']
 OPTIMAL = 'optimal'
+# The optimal series (each plugin's best configuration with free keys) is out of the overview and the nightly runs
+# from 28 Nov 2026 until the owner decides otherwise (METHODOLOGY, correction log). Its runs stay in the artifacts.
+OPTIMAL_SHOWN = False
 LICENCE_KEYS = ('jarvis',)  # engine.LICENCE_KEYS; latest stays importable without the harness packages  # each plugin's best configuration with free keys (METHODOLOGY 4)
 
 
@@ -211,7 +214,7 @@ def select(repo, base, limit=250, previous=None, dates=None):
         newest = set(overview.newest_only(list(chosen[family])))
         chosen[family] = {p: v for p, v in chosen[family].items() if p in newest}
     chosen['detection'], pick = table(HEADLINE, ('enforce', 'v1'))
-    chosen['detection-optimal'], _ = table([OPTIMAL], None)
+    chosen['detection-optimal'] = table([OPTIMAL], None)[0] if OPTIMAL_SHOWN else {}
     return chosen, providers, pick[0]
 
 
@@ -339,7 +342,7 @@ def stale(runs_used, dates, days=30, today=None):
     import datetime
     today = today or datetime.date.today()
     out = {}
-    for family in FAMILIES + ['detection-optimal']:
+    for family in FAMILIES + (['detection-optimal'] if OPTIMAL_SHOWN else []):
         shown = [dates.get(str(r)) for r in runs_used.get(family, [])]
         shown = [d for d in shown if d]
         if not runs_used.get(family):
