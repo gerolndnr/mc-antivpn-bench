@@ -1,0 +1,140 @@
+{
+  "id": "connection-guard-062",
+  "name": "Connection Guard 0.6.2",
+  "relationship": "Connection Guard 0.6.2 as released (tag 0.6.2 at 74f76c6, published 28 Nov 2026). Shown as \"Connection Guard v0.6.2\" in the README overview in place of 0.6.1. Same adapter as 0.6.1.",
+  "withheld": "Held back from the README overview until every family has measured 0.6.2, as for 0.6.1 on 7 Oct 2026 (owner decision); until then the overview keeps 0.6.1's newest results. Remove this field once the families and the five-night optimal series are complete.",
+  "license": "MIT",
+  "source": "https://github.com/gerolndnr/connection-guard",
+  "listing": "https://modrinth.com/plugin/connectionguard",
+  "pins": {
+    "paper": "connectionguard-0.6.2",
+    "folia": "connectionguard-0.6.2",
+    "velocity": "connectionguard-0.6.2",
+    "bungee": "connectionguard-0.6.2"
+  },
+  "previous_pins": {
+    "paper": "connectionguard-0.6.1",
+    "folia": "connectionguard-0.6.1",
+    "velocity": "connectionguard-0.6.1",
+    "bungee": "connectionguard-0.6.1"
+  },
+  "data_dir": {
+    "paper": "ConnectionGuard",
+    "folia": "ConnectionGuard",
+    "velocity": "connection-guard",
+    "bungee": "ConnectionGuard"
+  },
+  "config": "config.yml",
+  "ready_pattern": null,
+  "profiles": {
+    "shipped": {
+      "edits": [],
+      "note": "As downloaded. New files use operation.mode ENFORCE and block Intel relay, hosting and P2P exits (relay: VPN, hosting: BLOCK, p2p: VPN)."
+    },
+    "enforce": {
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "operation.mode": "ENFORCE"
+          }
+        }
+      ],
+      "note": "Shipped configuration with operation.mode ENFORCE set explicitly (already the new-install default since 0.6.0)."
+    },
+    "proxycheck_key": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}"
+          }
+        }
+      ],
+      "note": "enforce + the free ProxyCheck key through the product's documented key field (same key for every product)."
+    },
+    "free_keys": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn.proxycheck.api-key": "{canary:proxycheck}",
+            "provider.vpn.vpnapi.enabled": true,
+            "provider.vpn.vpnapi.api-key": "{canary:vpnapi}"
+          }
+        }
+      ],
+      "note": "Adds the free ProxyCheck and VPNAPI keys through the product's documented key fields."
+    },
+    "optimal": {
+      "extends": "enforce",
+      "edits": [
+        {
+          "file": "config.yml",
+          "set": {
+            "provider.vpn-failover.order": [
+              "zowi",
+              "blackbox",
+              "ipquery",
+              "proxycheck",
+              "ipcheck",
+              "ip-api"
+            ],
+            "provider.vpn.proxycheck.enabled": false,
+            "provider.vpn.blackbox.require-confirmation": true
+          }
+        }
+      ],
+      "note": "Same settings as for 0.6.1 (METHODOLOGY 4): failover order zowi, Blackbox (confirmed by Intel's hosting list), IPQuery; ProxyCheck off. These equal 0.6.2's new-install template, which adds hedge-ms 300 and the Intel relay/hosting/P2P blocks."
+    }
+  },
+  "redis": {
+    "edits": [
+      {
+        "file": "config.yml",
+        "set": {
+          "provider.cache.type": "Redis",
+          "provider.cache.redis.hostname": "127.0.0.1",
+          "provider.cache.redis.port": 6379,
+          "provider.cache.redis.password": ""
+        }
+      }
+    ],
+    "note": "provider.cache.type: Redis (documented for multi-server networks)."
+  },
+  "commands": {
+    "reload": "cg reload",
+    "inspect": [
+      "cg doctor",
+      "cg providers",
+      "cg stats"
+    ]
+  },
+  "lookup_hosts": [
+    "api.ipquery.io",
+    "api.zowi.gay",
+    "blackbox.ipinfo.app",
+    "ip-api.com",
+    "ip-check.net",
+    "iphub.info",
+    "ipqualityscore.com",
+    "proxycheck.io",
+    "vpnapi.io"
+  ],
+  "documented_failure_policy": "failure-policy.vpn: OPEN; FAILOVER zowi -> Blackbox (Intel hosting confirmation) -> IPQuery, with the next service joining after 300 ms (hedge-ms); ProxyCheck off, ip-check.net and IP-API off. Bundled Tor list and signed Connection Guard Intel lists are checked locally first; Intel relay, hosting and P2P hits count as VPN (config.yml, docs/PROVIDER_RESILIENCE.md, CHANGELOG 0.6.2).",
+  "telemetry": [
+    "bStats (fixture-wide off)",
+    "Connection Guard Cloud heartbeat to api.connectionguard.net (blocked at network level for every product's telemetry)"
+  ],
+  "list_sources": [
+    "https://intel.connectionguard.net/vpn.txt",
+    "https://intel.connectionguard.net/tor.txt",
+    "https://intel.connectionguard.net/proxy.txt",
+    "https://intel.connectionguard.net/relay.txt",
+    "https://intel.connectionguard.net/hosting.txt",
+    "https://intel.connectionguard.net/p2p.txt"
+  ],
+  "list_sources_note": "Connection Guard Intel lists the shipped configuration downloads; from 0.6.2 relay.txt, hosting.txt and p2p.txt decide too. Intel is built from the same operator server lists as this dataset's VPN labels and from two of the proxy cohort's lists: its coverage here is circular (see the circularity table)."
+}
