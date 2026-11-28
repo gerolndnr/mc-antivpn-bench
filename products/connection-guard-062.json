@@ -2,7 +2,6 @@
   "id": "connection-guard-062",
   "name": "Connection Guard 0.6.2",
   "relationship": "Connection Guard 0.6.2 as released (tag 0.6.2 at 74f76c6, published 28 Nov 2026). Shown as \"Connection Guard v0.6.2\" in the README overview in place of 0.6.1. Same adapter as 0.6.1.",
-  "withheld": "Held back from the README overview until every family has measured 0.6.2, as for 0.6.1 on 7 Oct 2026 (owner decision); until then the overview keeps 0.6.1's newest results. Remove this field once the families and the five-night optimal series are complete.",
   "license": "MIT",
   "source": "https://github.com/gerolndnr/connection-guard",
   "listing": "https://modrinth.com/plugin/connectionguard",
