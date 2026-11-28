@@ -48,27 +48,27 @@ Same simulated services, same delays and free-tier limits for every plugin.
 
 553 real addresses, as shipped, no API keys. Each number: addresses blocked.
 
-|   | Connection Guard v0.6.1 | FoxGate 1.2.0-pre12 | ProxyShield 3.1.0 | VPNGuard 1.2.0 | KauriVPN 1.10.1.1 | AdvancedAntiVPN 2.31.8 |
+|   | Connection Guard v0.6.2 | FoxGate 1.2.0-pre12 | ProxyShield 3.1.0 | VPNGuard 1.2.0 | KauriVPN 1.10.1.1 | AdvancedAntiVPN 2.31.8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | ***Should be blocked · higher is better*** | | | | | | |
-| Commercial VPNs (125) | **125** | **125** | **125** | 124 | 123 | 43 |
-| Newly added VPN servers (45) | **45** | **45** | **45** | 40 | **45** | 15 |
-| VPNs over IPv6 (40) | **40** | **40** | **40** | 34 | 4 | 16 |
-| Tor exits (28) | **28** | **28** | **28** | 26 | 27 | 8 |
-| Public proxies (8) | 7 | **8** | **8** | 6 | 3 | 3 |
-| **Blocked of 246** | 245 | **246** | **246** | 230 | 202 | 85 |
+| Commercial VPNs (125) | **125** | **125** | **125** | 124 | 123 | 44 |
+| Newly added VPN servers (45) | **45** | **45** | **45** | 40 | **45** | 16 |
+| VPNs over IPv6 (40) | **40** | **40** | **40** | 34 | 4 | 17 |
+| Tor exits (28) | **28** | **28** | **28** | 26 | 27 | 11 |
+| Public proxies (8) | **8** | **8** | **8** | 6 | 3 | 1 |
+| **Blocked of 246** | **246** | **246** | **246** | 230 | 202 | 89 |
 | ***Should get in · fewer refused is better*** | | | | | | |
 | Home connections (148) | **0** | 1 | 3 | 2 | 3 | 0 |
 | Home connections, IPv6 (60) | **0** | 1 | **0** | 1 | 1 | 0 |
-| Mobile networks (98) | **0** | 1 | 1 | 1 | 4 | 0 |
-| **Refused of 306** | **0** | 3 | 4 | 4 | 8 | 0 |
+| Mobile networks (98) | **1** | **1** | **1** | **1** | 4 | 0 |
+| **Refused of 306** | **1** | 3 | 4 | 4 | 8 | 0 |
 | ***Rates*** | | | | | | |
-| True flags · bad addresses blocked | 99.6 % | **100.0 %** | **100.0 %** | 93.5 % | 82.1 % | 34.6 % |
-| False flags · good players refused | **0.0 %** | 1.0 % | 1.3 % | 1.3 % | 2.6 % | 0.0 % |
+| True flags · bad addresses blocked | **100.0 %** | **100.0 %** | **100.0 %** | 93.5 % | 82.1 % | 36.2 % |
+| False flags · good players refused | **0.3 %** | 1.0 % | 1.3 % | 1.3 % | 2.6 % | 0.0 % |
 | ***Not graded · blocking these is a policy choice*** | | | | | | |
 | Not an access network (tunnel, hosting, campus) (1) | 0 blocked | 0 blocked | 0 blocked | 0 blocked | 0 blocked | 0 blocked |
 
-> Connection Guard v0.6.1, FoxGate 1.2.0-pre12, ProxyShield 3.1.0, VPNGuard 1.2.0, AdvancedAntiVPN 2.31.8 ask ProxyCheck without a key, as shipped. ProxyCheck answers 100 such lookups a day per server; each plugin ran on a server of its own, and after its 100 ProxyCheck answered it no more, as on a busy real server.  
+> Connection Guard v0.6.2, FoxGate 1.2.0-pre12, ProxyShield 3.1.0, VPNGuard 1.2.0, AdvancedAntiVPN 2.31.8 ask ProxyCheck without a key, as shipped. ProxyCheck answers 100 such lookups a day per server; each plugin ran on a server of its own, and after its 100 ProxyCheck answered it no more, as on a busy real server.  
 > Not counted: 1 contested address whose label was shown not to hold when measured (datasets/contested.json, with the evidence).  
 > KauriVPN 1.10.1.1 lets every player in and checks afterwards: its blocks are kicks of a player who is already on the server. Its join times are therefore shown as "after join".  
 
@@ -147,7 +147,7 @@ Fixed VPN, Tor, home and mobile joins on every platform; counts are platforms pa
 
 ---
 
-Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45508280763, 45806957069, 45964371515, 45964374609, 45964383595, 45964386570, 46122343601, 46122345546, 46122807212, 46122809121, 46122811157, 46122813240 · commit 1ddbb66  
+Method, raw data and every log: github.com/gerolndnr/mc-antivpn-bench · runs 45067206486, 45067209616, 45067212229, 45067215075, 45067217627, 45068357470, 45068359877, 45068362397, 45068364289, 45508280763, 45806957069, 45964374609, 45964383595, 46122343601, 46122345546, 46122349207, 46122800762, 46122807212, 46122809121, 46122811157, 46122813240 · commit 1ddbb66  
 Bold marks the best value in each row. Results describe this setup and dataset, not every server.  
 Conflict of interest: maintained by the author of Connection Guard.  
 Other plugin authors can contest adapters and results (METHODOLOGY 10).  
